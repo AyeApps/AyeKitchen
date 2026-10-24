@@ -6,6 +6,7 @@ from mongomock_motor import AsyncMongoMockClient
 from app.core.security import create_access_token
 from app.db.mongodb import DOCUMENT_MODELS
 from app.models.user import User
+from app.services.unit_service import seed_system_units
 from main import app
 
 
@@ -15,6 +16,7 @@ async def init_test_db():
     db = client["aye_kitchen_test_db"]
 
     await init_beanie(database=db, document_models=DOCUMENT_MODELS)
+    await seed_system_units()
     yield
     client.close()
 
@@ -23,6 +25,7 @@ async def init_test_db():
 async def clear_database():
     for model in DOCUMENT_MODELS:
         await model.delete_all()
+    await seed_system_units()
     yield
 
 

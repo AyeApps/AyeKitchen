@@ -12,6 +12,7 @@ from app.core.limiter import limiter
 from app.core.logging import logger, setup_logging
 from app.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.db.mongodb import close_db, init_db
+from app.services.unit_service import seed_system_units
 
 
 @asynccontextmanager
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info(f"Starting {settings.APP_NAME} in {settings.APP_ENV} mode...")
     await init_db()
+    await seed_system_units()
     yield
     logger.info(f"Shutting down {settings.APP_NAME}...")
     await close_db()

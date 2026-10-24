@@ -54,7 +54,7 @@ Implementado en el esqueleto.
 |---|---|---|---|
 | GET | `/units/` | — | Sin paginar. Unidades del sistema + las del workspace. Orden: base_unit, luego factor |
 | POST | `/units/` | `{name, abbreviation, base_unit, factor_to_base}` | Crea unidad del workspace. `factor_to_base > 0` |
-| PATCH | `/units/{id}` | parcial | Sistema → `SYSTEM_UNIT_READONLY` |
+| PATCH | `/units/{id}` | parcial | Sistema → `SYSTEM_UNIT_READONLY`. Cambiar `base_unit` si la unidad está usada en una receta activa o en una conversión de ingrediente activo → `IN_USE` (cambiar `factor_to_base` sí se permite: es corregir la medida) |
 | DELETE | `/units/{id}` | — | 204. Sistema → `SYSTEM_UNIT_READONLY`. Usada en receta o conversión de ingrediente → `IN_USE` |
 
 **Unidades del sistema** (`workspace_id = None`, sembradas al arrancar, idempotente):
@@ -85,7 +85,7 @@ Implementado en el esqueleto.
 | GET | `/ingredients/` | `?page&limit&q&group` | Paginado. `q` busca en name (case-insensitive). Orden por name |
 | POST | `/ingredients/` | `{name, base_unit, group?, notes?, conversions?: [{unit_id, quantity_in_base}]}` | `unit_id` debe existir (sistema o workspace) → si no `INVALID_REFERENCE`. Sin `unit_id` repetidos |
 | GET | `/ingredients/{id}` | — | |
-| PATCH | `/ingredients/{id}` | parcial; `conversions` reemplaza la lista completa | `base_unit` no se puede cambiar si tiene presentaciones activas → `IN_USE` |
+| PATCH | `/ingredients/{id}` | parcial; `conversions` reemplaza la lista completa | `base_unit` no se puede cambiar si tiene presentaciones activas o si una receta activa lo usa → `IN_USE` |
 | DELETE | `/ingredients/{id}` | — | 204. Usado en una receta activa → `IN_USE`. Borra (soft) sus presentaciones |
 
 ### Regla de conversión (servicio `convert_to_base`, la usan B3 y los clientes vía costo)
