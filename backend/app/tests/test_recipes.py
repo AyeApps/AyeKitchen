@@ -260,7 +260,42 @@ async def test_recipe_too_deep_11_levels(client: AsyncClient, auth_headers):
     assert resp_top.status_code == 422
     assert resp_top.json()["code"] == "RECIPE_TOO_DEEP"
 
-    # 2. Agregar subreceta bajo la hoja de una cadena de 10 responde RECIPE_TOO_DEEP y no guarda
+    # Verificar que no se guardó la receta nueva
+    get_top_list = await client.get("/api/v1/recipes/?q=Nivel 11 Encima de Raíz", headers=auth_headers)
+    assert get_top_list.status_code == 200
+    assert get_top_list.json()["total"] == 0
+
+    # 2. Hacer que una receta existente sin subrecetas pase a usar la raíz responde RECIPE_TOO_DEEP
+    rec_existente = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Receta Existente Aislada",
+            "yield_quantity": "100",
+            "yield_unit": "g",
+            "items": [],
+        },
+    )).json()
+    rec_existente_id = rec_existente["id"]
+
+    patch_existente = await client.patch(
+        f"/api/v1/recipes/{rec_existente_id}",
+        headers=auth_headers,
+        json={
+            "items": [
+                {"kind": "recipe", "ref_id": root_id, "quantity": "10"}
+            ]
+        },
+    )
+    assert patch_existente.status_code == 422
+    assert patch_existente.json()["code"] == "RECIPE_TOO_DEEP"
+
+    # Verificar que no se guardó y sigue sin items
+    get_existente = await client.get(f"/api/v1/recipes/{rec_existente_id}", headers=auth_headers)
+    assert get_existente.status_code == 200
+    assert len(get_existente.json()["items"]) == 0
+
+    # 3. Agregar subreceta bajo la hoja de una cadena de 10 responde RECIPE_TOO_DEEP y no guarda
     extra_resp = await client.post(
         "/api/v1/recipes/",
         headers=auth_headers,
@@ -290,6 +325,60 @@ async def test_recipe_too_deep_11_levels(client: AsyncClient, auth_headers):
     get_leaf = await client.get(f"/api/v1/recipes/{leaf_id}", headers=auth_headers)
     assert get_leaf.status_code == 200
     assert len(get_leaf.json()["items"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_recipe_create_with_corrupted_cycle_in_db_does_not_500(client: AsyncClient, auth_headers):
+    # Inserta directamente con el modelo Recipe un ciclo (A usa B y B usa A)
+    me_resp = await client.get("/api/v1/me/", headers=auth_headers)
+    ws_id = me_resp.json()["workspace"]["id"]
+
+    rec_a = Recipe(
+        workspace_id=ws_id,
+        name="Ciclo Corrupto A",
+        yield_quantity="100",
+        yield_unit=BaseUnit.g,
+        items=[],
+    )
+    await rec_a.insert()
+
+    rec_b = Recipe(
+        workspace_id=ws_id,
+        name="Ciclo Corrupto B",
+        yield_quantity="100",
+        yield_unit=BaseUnit.g,
+        items=[
+            RecipeItem(
+                kind=RecipeItemKind.recipe,
+                ref_id=str(rec_a.id),
+                quantity="50",
+            )
+        ],
+    )
+    await rec_b.insert()
+
+    rec_a.items = [
+        RecipeItem(
+            kind=RecipeItemKind.recipe,
+            ref_id=str(rec_b.id),
+            quantity="50",
+        )
+    ]
+    await rec_a.save()
+
+    # Intentar crear por la API una receta nueva sin subrecetas: debe responder 201 o 422, NUNCA 500
+    resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Receta Nueva Limpia",
+            "yield_quantity": "100",
+            "yield_unit": "g",
+            "items": [],
+        },
+    )
+    assert resp.status_code in (201, 422)
+    assert resp.status_code != 500
 
 
 @pytest.mark.asyncio

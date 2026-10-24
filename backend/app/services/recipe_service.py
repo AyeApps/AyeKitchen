@@ -231,7 +231,10 @@ async def validate_cycles_and_depth(
     # Cálculo de la cadena más larga de subrecetas en todo el workspace (recorrido con memoria)
     depth_memo: dict[str, int] = {}
 
-    def get_max_depth(node: str) -> int:
+    def get_max_depth(node: str, current_depth: int = 1) -> int:
+        if current_depth > 11:
+            return 11
+
         if node in depth_memo:
             return depth_memo[node]
 
@@ -240,7 +243,7 @@ async def validate_cycles_and_depth(
             depth_memo[node] = 1
             return 1
 
-        max_child = max(get_max_depth(child) for child in children)
+        max_child = max(get_max_depth(child, current_depth + 1) for child in children)
         res = 1 + max_child
         depth_memo[node] = res
         return res
