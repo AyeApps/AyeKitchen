@@ -28,7 +28,7 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 | `DUPLICATE_NAME` | 409 | Nombre repetido (case-insensitive) en el mismo workspace para unidades, ingredientes, proveedores o recetas |
 | `IN_USE` | 409 | Borrar algo que otra entidad activa referencia (ingrediente en receta, presentación fijada, subreceta usada, unidad usada) |
 | `RECIPE_CYCLE` | 422 | La receta se usaría a sí misma directa o indirectamente |
-| `RECIPE_TOO_DEEP` | 422 | Más de 10 niveles de subrecetas |
+| `RECIPE_TOO_DEEP` | 422 | Después de guardar, alguna cadena de subrecetas del workspace tendría más de 10 niveles (contando hacia arriba: recetas que usan a la que se guarda) |
 | `INVALID_REFERENCE` | 422 | Un id referenciado en el body no existe en el workspace (proveedor, ingrediente, receta, presentación de otro ingrediente) |
 | `PAYMENT_EXCEEDS_BALANCE` | 422 | El pago deja el saldo del pedido negativo |
 
@@ -85,7 +85,7 @@ Implementado en el esqueleto.
 | GET | `/ingredients/` | `?page&limit&q&group` | Paginado. `q` busca en name (case-insensitive). Orden por name |
 | POST | `/ingredients/` | `{name, base_unit, group?, notes?, conversions?: [{unit_id, quantity_in_base}]}` | `unit_id` debe existir (sistema o workspace) → si no `INVALID_REFERENCE`. Sin `unit_id` repetidos |
 | GET | `/ingredients/{id}` | — | |
-| PATCH | `/ingredients/{id}` | parcial; `conversions` reemplaza la lista completa | `base_unit` no se puede cambiar si tiene presentaciones activas o si una receta activa lo usa → `IN_USE` |
+| PATCH | `/ingredients/{id}` | parcial; `conversions` reemplaza la lista completa | `base_unit` no se puede cambiar si tiene presentaciones activas o si una receta activa lo usa → `IN_USE`. Quitar de `conversions` una unidad que una receta activa usa en una línea de este ingrediente → `IN_USE` (cambiar su `quantity_in_base` sí se permite) |
 | DELETE | `/ingredients/{id}` | — | 204. Usado en una receta activa → `IN_USE`. Borra (soft) sus presentaciones |
 
 ### Regla de conversión (servicio `convert_to_base`, la usan B3 y los clientes vía costo)
@@ -155,7 +155,7 @@ Servicios que B3 consume:
 
 | Método | Ruta | Body / Query | Notas |
 |---|---|---|---|
-| GET | `/recipes/` | `?page&limit&q` | Paginado, orden por name. Cada item de la lista incluye además `batch_cost_cents` y `complete` del costeo |
+| GET | `/recipes/` | `?page&limit&q` | Paginado, orden por name. Cada item de la lista incluye además `batch_cost_cents` y `complete` del costeo. Si el costo de una receta no se puede calcular (`AppError`), esa receta sale con `batch_cost_cents: null` y `complete: false`; la lista nunca falla por una receta |
 | GET | `/recipes/{id}/usable-as-subrecipe` | — | Lista `[{id, name, yield_unit}]` de recetas que se pueden agregar como subreceta de `{id}` sin crear ciclo (excluye `{id}` y a quien la usa) |
 | POST | `/recipes/` | campos de Recipe sin ids derivados | Valida referencias (`INVALID_REFERENCE`), que `pinned_presentation_id` pertenezca a ese ingrediente, que cada línea sea convertible (`UNIT_NOT_CONVERTIBLE`), ciclos (`RECIPE_CYCLE`) y profundidad (`RECIPE_TOO_DEEP`) |
 | GET | `/recipes/{id}` | — | |
@@ -186,6 +186,8 @@ Servicios que B3 consume:
 - Línea de subreceta: la cantidad se convierte a la `yield_unit` de la subreceta con la tabla general (misma `base_unit`; si no, `UNIT_NOT_CONVERTIBLE`). Costo = `cantidad × costo_total_sin_redondear_subreceta / yield_quantity`. Se calcula recursivamente; `missing_price` de la subreceta se propaga.
 - `batch_cost` = suma sin redondear de líneas + extras. Cada `*_cents` de la respuesta se redondea una vez desde su valor sin redondear.
 - Si una presentación fijada fue borrada, la línea usa la vigente y `pinned: false`.
+- Si la presentación fijada está activa pero no tiene ningún precio, **no** se usa la vigente: la línea queda `pinned: true`, `missing_price: true`, costo 0. Así la usuaria ve que le falta capturar el precio de la marca que eligió.
+- Defensa: si al calcular se llegara a más de 10 niveles de subrecetas (datos corruptos), se detiene la recursión y esa línea queda con `missing_price: true`; nunca un error 500.
 
 Ejemplo de verificación: Harina 1000 g a $23.50 (2350), línea de 300 g → `cost_cents` 705. Tres líneas de 0.4 centavos cada una muestran 0 cada una, pero suman 1.2 → `ingredients_cost_cents` 1.
 

@@ -357,3 +357,74 @@ async def test_update_ingredient_base_unit_in_use_recipe(client: AsyncClient, au
     get_resp = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
     assert get_resp.status_code == 200
     assert get_resp.json()["base_unit"] == "g"
+
+
+@pytest.mark.asyncio
+async def test_ingredient_patch_conversion_in_use_cannot_remove(client: AsyncClient, auth_headers):
+    # 1. Obtener unidad taza
+    units_resp = await client.get("/api/v1/units/", headers=auth_headers)
+    taza = next(u for u in units_resp.json() if u["abbreviation"] == "tz")
+
+    # 2. Crear ingrediente con conversión de taza = 125 g
+    create_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={
+            "name": "Harina Pastelera Especial",
+            "base_unit": "g",
+            "conversions": [
+                {"unit_id": taza["id"], "quantity_in_base": "125"}
+            ],
+        },
+    )
+    assert create_resp.status_code == 201
+    ing_id = create_resp.json()["id"]
+
+    # 3. Crear receta activa que usa Harina con unidad taza
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Panqué de Vainilla",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "items": [
+                {
+                    "kind": "ingredient",
+                    "ref_id": ing_id,
+                    "quantity": "2",
+                    "unit_id": taza["id"],
+                }
+            ],
+        },
+    )
+    assert rec_resp.status_code == 201
+
+    # 4. Intentar quitar la conversión de taza -> 409 IN_USE
+    patch_del_resp = await client.patch(
+        f"/api/v1/ingredients/{ing_id}",
+        headers=auth_headers,
+        json={"conversions": []},
+    )
+    assert patch_del_resp.status_code == 409
+    assert patch_del_resp.json()["code"] == "IN_USE"
+
+    # Verificar que la conversión sigue guardada
+    get_resp = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
+    assert len(get_resp.json()["conversions"]) == 1
+    assert get_resp.json()["conversions"][0]["quantity_in_base"] == "125"
+
+    # 5. Cambiar el quantity_in_base de esa conversión sí está permitido -> 200
+    patch_update_resp = await client.patch(
+        f"/api/v1/ingredients/{ing_id}",
+        headers=auth_headers,
+        json={
+            "conversions": [
+                {"unit_id": taza["id"], "quantity_in_base": "130"}
+            ]
+        },
+    )
+    assert patch_update_resp.status_code == 200
+    get_resp2 = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
+    assert len(get_resp2.json()["conversions"]) == 1
+    assert get_resp2.json()["conversions"][0]["quantity_in_base"] == "130"

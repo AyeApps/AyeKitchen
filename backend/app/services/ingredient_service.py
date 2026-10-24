@@ -176,6 +176,30 @@ async def update_ingredient(workspace_id: str, ingredient_id: str, data: Ingredi
         ingredient.base_unit = data.base_unit
 
     if data.conversions is not None:
+        current_unit_ids = {c.unit_id for c in ingredient.conversions}
+        new_unit_ids = {c.unit_id for c in data.conversions}
+        removed_unit_ids = current_unit_ids - new_unit_ids
+        if removed_unit_ids:
+            in_recipe = await Recipe.find_one(
+                Recipe.workspace_id == workspace_id,
+                Recipe.deleted_at == None,  # noqa: E711
+                {
+                    "items": {
+                        "$elemMatch": {
+                            "kind": "ingredient",
+                            "ref_id": str(ingredient.id),
+                            "unit_id": {"$in": list(removed_unit_ids)},
+                        }
+                    }
+                },
+            )
+            if in_recipe:
+                raise AppError(
+                    status_code=409,
+                    detail="La conversión está en uso en recetas activas",
+                    code="IN_USE",
+                )
+
         await validate_conversions(workspace_id, data.conversions)
         ingredient.conversions = [
             IngredientConversion(
