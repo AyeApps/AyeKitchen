@@ -26,6 +26,8 @@ class Workspace(SoftDeleteDocument):
     currency: str = settings.DEFAULT_CURRENCY
     timezone: str = "America/Mexico_City"  # Límites de mes en el resumen
     default_margin_percent: int = Field(default=settings.DEFAULT_MARGIN_PERCENT, ge=0, le=1000)
+    # Un precio con más días que esto se marca como viejo para pedir que se actualice
+    price_stale_days: int = Field(default=settings.DEFAULT_PRICE_STALE_DAYS, ge=1, le=3650)
 
     class Settings:
         name = "workspaces"

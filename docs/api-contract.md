@@ -30,7 +30,7 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 | `RECIPE_CYCLE` | 422 | La receta se usaría a sí misma directa o indirectamente |
 | `RECIPE_TOO_DEEP` | 422 | Después de guardar, alguna cadena de subrecetas del workspace tendría más de 10 niveles (contando hacia arriba: recetas que usan a la que se guarda) |
 | `INVALID_REFERENCE` | 422 | Un id referenciado en el body no existe en el workspace (proveedor, ingrediente, receta, presentación de otro ingrediente) |
-| `PAYMENT_EXCEEDS_BALANCE` | 422 | El pago deja el saldo del pedido negativo |
+| `PAYMENT_EXCEEDS_BALANCE` | 422 | El pago deja el saldo del pedido negativo, o un cambio de líneas dejaría el total por debajo de lo ya pagado |
 
 ---
 
@@ -38,7 +38,7 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 
 | Método | Ruta | Respuesta |
 |---|---|---|
-| GET | `/me/` | `{id, email, name, avatar_url, workspace: {id, name, currency, default_margin_percent}}` |
+| GET | `/me/` | `{id, email, name, avatar_url, workspace: {id, name, currency, default_margin_percent, price_stale_days}}` |
 
 Implementado en el esqueleto.
 
@@ -120,6 +120,8 @@ Ej.: Harina (g) con conversión taza=125 g: "2 taza" → 250 g. Leche (ml) sin c
  latest_price_cents: 2350 | null, latest_price_at: datetime | null,
  cost_per_base_unit: "2.350000" | null,   # centavos por g/ml/pz, 6 decimales, solo para mostrar (2350 / 1000 g)
  is_current: bool,                        # es la que usa el costeo por defecto para su ingrediente
+ price_age_days: int | null,              # días desde latest_price_at (fecha local del workspace); null sin precio
+ price_is_stale: bool,                    # price_age_days > workspace.price_stale_days
  created_at, updated_at}
 ```
 
@@ -132,6 +134,7 @@ Ej.: Harina (g) con conversión taza=125 g: "2 taza" → 250 g. Leche (ml) sin c
 | GET | `/presentations/{id}` | — | |
 | PATCH | `/presentations/{id}` | `{brand?, supplier_id?, package_quantity?, package_unit_id?, barcode?}` | El precio NO se cambia aquí: se agrega un registro |
 | DELETE | `/presentations/{id}` | — | 204. Fijada en una receta activa → `IN_USE` |
+| GET | `/presentations/stale` | `?page&limit` | **Precios por actualizar.** Paginado. Presentaciones activas con precio viejo (`price_is_stale`) que el costeo de verdad usa: son la vigente de su ingrediente y ese ingrediente aparece en una receta activa, o están fijadas en una receta activa. Orden: `latest_price_at` asc (la más vieja primero). Cada item es un `Presentation` más `used_in_recipes: int` (recetas activas distintas que la usan). Va declarada antes de `/presentations/{id}` en el router |
 | GET | `/presentations/{id}/prices` | — | Historial completo, `recorded_at` desc: `[{id, price_cents, recorded_at, note}]` |
 | POST | `/presentations/{id}/prices` | `{price_cents, recorded_at?, note?}` | 201. Agrega un precio; `recorded_at` por defecto ahora |
 
@@ -171,14 +174,16 @@ Servicios que B3 consume:
           quantity_in_base: "250", base_unit: "g",
           presentation_id, presentation_label: "Marca X · Walmart · 1000 g", pinned: bool,
           cost_cents: 588,              # redondeado solo para mostrar
-          missing_price: bool}],
+          missing_price: bool,
+          price_is_stale: bool}],         # ingrediente: la presentación usada tiene precio viejo; subreceta: alguna línea suya, a cualquier profundidad, lo tiene
  ingredients_cost_cents, extras_cost_cents,
  batch_cost_cents,                       # total de una tanda
  cost_per_yield_unit: "5.875000",        # centavos por g/ml/pz del rendimiento, 6 decimales (lo usa quien la tome como subreceta)
  cost_per_serving_cents | null,
  margin_percent,                          # el efectivo (receta o workspace)
  suggested_price_cents,                   # batch_cost × (1 + margin/100)
- complete: bool}                          # false si alguna línea, incluso dentro de una subreceta, no tiene precio
+ complete: bool,                          # false si alguna línea, incluso dentro de una subreceta, no tiene precio
+ has_stale_prices: bool}                  # true si alguna línea, incluso dentro de una subreceta, usa un precio viejo
 ```
 
 **Algoritmo** (todo en `Decimal` sin redondear hasta el final):
@@ -208,9 +213,9 @@ Ejemplo de verificación: Harina 1000 g a $23.50 (2350), línea de 300 g → `co
 | Método | Ruta | Body / Query | Notas |
 |---|---|---|---|
 | GET | `/orders/` | `?page&limit&status&from&to` | Paginado. `from`/`to` filtran `delivery_at`. Orden `delivery_at` asc |
-| POST | `/orders/` | `{customer_name, customer_phone?, delivery_at, items: [{recipe_id, quantity, unit_price_cents?}], notes?}` | `unit_price_cents` por defecto = `suggested_price_cents` de la receta. `unit_cost_cents_snapshot` = `batch_cost_cents` de la receta en ese momento (lo calcula el backend; el cliente no lo envía) |
+| POST | `/orders/` | `{customer_name, customer_phone?, delivery_at, items: [{recipe_id, quantity, unit_price_cents?}] (mínimo 1), notes?}` | `unit_price_cents` por defecto = `suggested_price_cents` de la receta. `unit_cost_cents_snapshot` = `batch_cost_cents` de la receta en ese momento (lo calcula el backend; el cliente no lo envía) |
 | GET | `/orders/{id}` | — | |
-| PATCH | `/orders/{id}` | parcial; `items` reemplaza la lista | Si cambia `items`, se recalcula el snapshot solo de las líneas nuevas o cuya receta cambió |
+| PATCH | `/orders/{id}` | parcial; `items` reemplaza la lista (mínimo 1 línea) | Una línea cuya `recipe_id` ya estaba en el pedido conserva su snapshot **y su `unit_price_cents` anterior** si no se envía uno nuevo: el precio acordado con el cliente nunca cambia solo. Solo las líneas nuevas toman `suggested_price_cents` por defecto y calculan snapshot. Si el nuevo `total_cents` quedaría por debajo de `paid_cents` → `PAYMENT_EXCEEDS_BALANCE` y no se guarda nada |
 | DELETE | `/orders/{id}` | — | 204 |
 | POST | `/orders/{id}/payments` | `{amount_cents, paid_at?, method?}` | 201, devuelve el Order. Saldo negativo → `PAYMENT_EXCEEDS_BALANCE` |
 | DELETE | `/orders/{id}/payments/{payment_id}` | — | Devuelve el Order |

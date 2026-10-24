@@ -18,5 +18,6 @@ async def get_me(current_user: CurrentUser, workspace: CurrentWorkspace):
             name=workspace.name,
             currency=workspace.currency,
             default_margin_percent=workspace.default_margin_percent,
+            price_stale_days=workspace.price_stale_days,
         ),
     )

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     # ==========================================
     DEFAULT_CURRENCY: str = "MXN"
     DEFAULT_MARGIN_PERCENT: int = 40
+    DEFAULT_PRICE_STALE_DAYS: int = 90
 
     # ==========================================
     # ⚙️ 3. CONFIGURACIÓN Y VALIDADORES ESTÁNDAR

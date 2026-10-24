@@ -6,6 +6,7 @@ class WorkspaceResponse(BaseModel):
     name: str
     currency: str
     default_margin_percent: int
+    price_stale_days: int
 
 
 class MeResponse(BaseModel):
