@@ -6,6 +6,7 @@ from app.core.errors import AppError
 from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation, PriceRecord
 from app.models.supplier import Supplier
+from app.models.workspace import Workspace
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.presentation import (
     PresentationCreate,
@@ -13,10 +14,12 @@ from app.schemas.presentation import (
     PresentationUpdate,
     PriceRecordCreate,
     PriceRecordResponse,
+    StalePresentationResponse,
 )
 from app.services.presentation_service import (
     add_price,
     compute_cost_per_base_unit,
+    compute_price_staleness,
     create_presentation,
     delete_presentation,
     get_current_presentation,
@@ -24,6 +27,7 @@ from app.services.presentation_service import (
     get_presentation,
     list_presentations,
     list_prices,
+    list_stale_presentations,
     update_presentation,
 )
 
@@ -36,10 +40,12 @@ def _serialize_presentation(
     supplier_name: str | None,
     latest_price: PriceRecord | None,
     is_current: bool,
+    workspace: Workspace,
 ) -> PresentationResponse:
     latest_cents = latest_price.price_cents if latest_price else None
     latest_at = latest_price.recorded_at if latest_price else None
     cost = compute_cost_per_base_unit(latest_cents, presentation.package_quantity)
+    price_age_days, price_is_stale = compute_price_staleness(workspace, latest_at)
 
     return PresentationResponse(
         id=str(presentation.id),
@@ -55,15 +61,18 @@ def _serialize_presentation(
         latest_price_at=latest_at,
         cost_per_base_unit=cost,
         is_current=is_current,
+        price_age_days=price_age_days,
+        price_is_stale=price_is_stale,
         created_at=presentation.created_at,
         updated_at=presentation.updated_at,
     )
 
 
 async def _build_single_presentation_response(
-    workspace_id: str,
+    workspace: Workspace,
     presentation: Presentation,
 ) -> PresentationResponse:
+    ws_id = str(workspace.id)
     ingredient = await Ingredient.get(presentation.ingredient_id)
     if not ingredient:
         raise AppError(status_code=404, detail="Ingrediente no encontrado", code="NOT_FOUND")
@@ -71,11 +80,11 @@ async def _build_single_presentation_response(
     supplier_name: str | None = None
     if presentation.supplier_id:
         supplier = await Supplier.get(presentation.supplier_id)
-        if supplier and supplier.deleted_at is None and supplier.workspace_id == workspace_id:
+        if supplier and supplier.deleted_at is None and supplier.workspace_id == ws_id:
             supplier_name = supplier.name
 
-    latest_price = await get_latest_price(workspace_id, str(presentation.id))
-    current_pres = await get_current_presentation(workspace_id, presentation.ingredient_id)
+    latest_price = await get_latest_price(ws_id, str(presentation.id))
+    current_pres = await get_current_presentation(ws_id, presentation.ingredient_id)
     is_current = current_pres is not None and str(current_pres.presentation.id) == str(presentation.id)
 
     return _serialize_presentation(
@@ -84,6 +93,7 @@ async def _build_single_presentation_response(
         supplier_name,
         latest_price,
         is_current,
+        workspace,
     )
 
 
@@ -131,6 +141,7 @@ async def list_presentations_endpoint(
                 supp_name,
                 latest_pr,
                 is_curr,
+                workspace,
             )
         )
 
@@ -150,7 +161,66 @@ async def create_presentation_endpoint(
 ):
     ws_id = str(workspace.id)
     presentation = await create_presentation(ws_id, data)
-    return await _build_single_presentation_response(ws_id, presentation)
+    return await _build_single_presentation_response(workspace, presentation)
+
+
+@router.get("/stale", response_model=PaginatedResponse[StalePresentationResponse])
+async def list_stale_presentations_endpoint(
+    workspace: CurrentWorkspace,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+):
+    ws_id = str(workspace.id)
+    items, latest_price_map, used_map, total, pages = await list_stale_presentations(
+        workspace,
+        page=page,
+        limit=limit,
+    )
+
+    ing_ids = [ObjectId(p.ingredient_id) for p in items if ObjectId.is_valid(p.ingredient_id)]
+    ingredients = await Ingredient.find({"_id": {"$in": ing_ids}}).to_list() if ing_ids else []
+    ing_map = {str(i.id): i for i in ingredients}
+
+    supp_ids = [ObjectId(p.supplier_id) for p in items if p.supplier_id and ObjectId.is_valid(p.supplier_id)]
+    suppliers = await Supplier.find({"_id": {"$in": supp_ids}}).to_list() if supp_ids else []
+    supp_map = {str(s.id): s.name for s in suppliers if s.deleted_at is None and s.workspace_id == ws_id}
+
+    unique_ing_ids = {p.ingredient_id for p in items}
+    current_pres_map: dict[str, str | None] = {}
+    for i_id in unique_ing_ids:
+        curr = await get_current_presentation(ws_id, i_id)
+        current_pres_map[i_id] = str(curr.presentation.id) if curr else None
+
+    serialized: list[StalePresentationResponse] = []
+    for p in items:
+        ing = ing_map.get(p.ingredient_id)
+        if not ing:
+            continue
+        supp_name = supp_map.get(p.supplier_id) if p.supplier_id else None
+        latest_pr = latest_price_map.get(str(p.id))
+        is_curr = current_pres_map.get(p.ingredient_id) == str(p.id)
+        base_resp = _serialize_presentation(
+            p,
+            ing,
+            supp_name,
+            latest_pr,
+            is_curr,
+            workspace,
+        )
+        serialized.append(
+            StalePresentationResponse(
+                **base_resp.model_dump(),
+                used_in_recipes=used_map.get(str(p.id), 0),
+            )
+        )
+
+    return PaginatedResponse(
+        items=serialized,
+        total=total,
+        page=page,
+        limit=limit,
+        pages=pages,
+    )
 
 
 @router.get("/{id}", response_model=PresentationResponse)
@@ -160,7 +230,7 @@ async def get_presentation_endpoint(
 ):
     ws_id = str(workspace.id)
     presentation = await get_presentation(ws_id, id)
-    return await _build_single_presentation_response(ws_id, presentation)
+    return await _build_single_presentation_response(workspace, presentation)
 
 
 @router.patch("/{id}", response_model=PresentationResponse)
@@ -171,7 +241,7 @@ async def update_presentation_endpoint(
 ):
     ws_id = str(workspace.id)
     presentation = await update_presentation(ws_id, id, data)
-    return await _build_single_presentation_response(ws_id, presentation)
+    return await _build_single_presentation_response(workspace, presentation)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -52,5 +52,11 @@ class PresentationResponse(BaseModel):
     latest_price_at: datetime | None = None
     cost_per_base_unit: str | None = None
     is_current: bool
+    price_age_days: int | None = None
+    price_is_stale: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class StalePresentationResponse(PresentationResponse):
+    used_in_recipes: int

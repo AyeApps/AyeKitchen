@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
@@ -545,3 +546,295 @@ async def test_get_latest_price_service(client: AsyncClient, auth_headers):
     )
     pr2 = await get_latest_price(ws_id, pres2_resp.json()["id"])
     assert pr2 is None
+
+
+@pytest.mark.asyncio
+async def test_price_age_days_and_staleness_calculation(client: AsyncClient, auth_headers):
+    # Workspace default price_stale_days es 90
+    tz = ZoneInfo("America/Mexico_City")
+    now_local = datetime.now(UTC).astimezone(tz)
+
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Canela en Polvo", "base_unit": "g"},
+    )
+    ing_id = ing_resp.json()["id"]
+
+    # 1. Precio registrado hace 91 días -> price_age_days 91 y price_is_stale True
+    t_91 = (now_local - timedelta(days=91)).astimezone(UTC)
+    p91_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={
+            "ingredient_id": ing_id,
+            "brand": "Canela 91",
+            "package_quantity": "100",
+        },
+    )
+    p91_id = p91_resp.json()["id"]
+    await client.post(
+        f"/api/v1/presentations/{p91_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 550, "recorded_at": t_91.isoformat()},
+    )
+
+    get_p91 = await client.get(f"/api/v1/presentations/{p91_id}", headers=auth_headers)
+    assert get_p91.status_code == 200
+    data_91 = get_p91.json()
+    assert data_91["price_age_days"] == 91
+    assert data_91["price_is_stale"] is True
+
+    # 2. Precio registrado hace 90 días -> price_age_days 90 y price_is_stale False
+    t_90 = (now_local - timedelta(days=90)).astimezone(UTC)
+    p90_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={
+            "ingredient_id": ing_id,
+            "brand": "Canela 90",
+            "package_quantity": "100",
+        },
+    )
+    p90_id = p90_resp.json()["id"]
+    await client.post(
+        f"/api/v1/presentations/{p90_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 550, "recorded_at": t_90.isoformat()},
+    )
+
+    get_p90 = await client.get(f"/api/v1/presentations/{p90_id}", headers=auth_headers)
+    assert get_p90.status_code == 200
+    data_90 = get_p90.json()
+    assert data_90["price_age_days"] == 90
+    assert data_90["price_is_stale"] is False
+
+    # 3. Presentación sin precio -> price_age_days None y price_is_stale False
+    p_noprice_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing_id, "brand": "Sin Precio", "package_quantity": "100"},
+    )
+    get_noprice = await client.get(
+        f"/api/v1/presentations/{p_noprice_resp.json()['id']}", headers=auth_headers
+    )
+    assert get_noprice.json()["price_age_days"] is None
+    assert get_noprice.json()["price_is_stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_price_recorded_at_2330_mexico_time_yesterday_counts_as_one_day(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Un precio de las 23:30 hora de México de ayer cuenta como de hace 1 día aunque en UTC ya sea hoy
+    tz = ZoneInfo("America/Mexico_City")
+    now_mex = datetime.now(UTC).astimezone(tz)
+    yesterday_mex = now_mex.date() - timedelta(days=1)
+    # 23:30 de ayer en horario de México
+    dt_mex_yesterday_2330 = datetime(
+        yesterday_mex.year,
+        yesterday_mex.month,
+        yesterday_mex.day,
+        23,
+        30,
+        0,
+        tzinfo=tz,
+    )
+    recorded_at_utc = dt_mex_yesterday_2330.astimezone(UTC)
+
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Vainilla Noche", "base_unit": "ml"},
+    )
+    ing_id = ing_resp.json()["id"]
+
+    pres_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing_id, "brand": "Papantla", "package_quantity": "250"},
+    )
+    pres_id = pres_resp.json()["id"]
+
+    await client.post(
+        f"/api/v1/presentations/{pres_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 1200, "recorded_at": recorded_at_utc.isoformat()},
+    )
+
+    get_resp = await client.get(f"/api/v1/presentations/{pres_id}", headers=auth_headers)
+    assert get_resp.status_code == 200
+    pres_data = get_resp.json()
+    assert pres_data["price_age_days"] == 1
+    assert pres_data["price_is_stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_presentations_stale_endpoint(
+    client: AsyncClient,
+    auth_headers,
+    auth_headers_user_2,
+):
+    tz = ZoneInfo("America/Mexico_City")
+    now_local = datetime.now(UTC).astimezone(tz)
+
+    # 1. Ingrediente Chocolate:
+    # Presentación 1A (vigente, vieja: 95 días): usada en 2 recetas activas.
+    # Presentación 1B (no vigente, vieja: 100 días): NO usada ni fijada.
+    ing1 = (await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Chocolate Amargo", "base_unit": "g"},
+    )).json()
+
+    # 1B: registrada hace 100 días
+    t_100 = (now_local - timedelta(days=100)).astimezone(UTC)
+    p1b = (await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing1["id"], "brand": "Choco Viejo No Vigente", "package_quantity": "1000"},
+    )).json()
+    await client.post(
+        f"/api/v1/presentations/{p1b['id']}/prices",
+        headers=auth_headers,
+        json={"price_cents": 900, "recorded_at": t_100.isoformat()},
+    )
+
+    # 1A: registrada hace 95 días (más reciente que 1B, por lo que 1A es la vigente)
+    t_95 = (now_local - timedelta(days=95)).astimezone(UTC)
+    p1a = (await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing1["id"], "brand": "Choco Vigente", "package_quantity": "1000"},
+    )).json()
+    await client.post(
+        f"/api/v1/presentations/{p1a['id']}/prices",
+        headers=auth_headers,
+        json={"price_cents": 1000, "recorded_at": t_95.isoformat()},
+    )
+
+    # Dos recetas activas que usan Chocolate Amargo sin fijar presentación (usan la vigente)
+    await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Pastel Selva Negra",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "items": [{"kind": "ingredient", "ref_id": ing1["id"], "quantity": "200"}],
+        },
+    )
+    await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Cupcake Trufa",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "items": [{"kind": "ingredient", "ref_id": ing1["id"], "quantity": "50"}],
+        },
+    )
+
+    # 2. Ingrediente Vainilla Rara: presentación vigente vieja (hace 95 días), pero NINGUNA receta la usa
+    ing2 = (await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Vainilla Rara", "base_unit": "ml"},
+    )).json()
+    p2 = (await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing2["id"], "brand": "Vainilla Sin Uso", "package_quantity": "100"},
+    )).json()
+    await client.post(
+        f"/api/v1/presentations/{p2['id']}/prices",
+        headers=auth_headers,
+        json={"price_cents": 800, "recorded_at": t_95.isoformat()},
+    )
+
+    # 3. Ingrediente Nuez:
+    # Presentación 3A: vigente fresca (hace 10 días)
+    # Presentación 3B: fijada en una receta activa, pero vieja (hace 92 días)
+    ing3 = (await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Nuez Pecana", "base_unit": "g"},
+    )).json()
+
+    t_92 = (now_local - timedelta(days=92)).astimezone(UTC)
+    p3b = (await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing3["id"], "brand": "Nuez Especial Fijada", "package_quantity": "500"},
+    )).json()
+    await client.post(
+        f"/api/v1/presentations/{p3b['id']}/prices",
+        headers=auth_headers,
+        json={"price_cents": 1500, "recorded_at": t_92.isoformat()},
+    )
+
+    t_10 = (now_local - timedelta(days=10)).astimezone(UTC)
+    p3a = (await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing3["id"], "brand": "Nuez Fresca Vigente", "package_quantity": "500"},
+    )).json()
+    await client.post(
+        f"/api/v1/presentations/{p3a['id']}/prices",
+        headers=auth_headers,
+        json={"price_cents": 1600, "recorded_at": t_10.isoformat()},
+    )
+
+    # Receta que fija p3b
+    await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Pay de Nuez",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "items": [
+                {
+                    "kind": "ingredient",
+                    "ref_id": ing3["id"],
+                    "quantity": "150",
+                    "pinned_presentation_id": p3b["id"],
+                }
+            ],
+        },
+    )
+
+    # Consulta a /presentations/stale
+    stale_resp = await client.get("/api/v1/presentations/stale", headers=auth_headers)
+    assert stale_resp.status_code == 200
+    stale_data = stale_resp.json()
+
+    # Deben listarse exactamente 2 presentaciones:
+    # 1. p1a (Choco Vigente, t_95): vigente de ingrediente usado en 2 recetas -> used_in_recipes=2
+    # 2. p3b (Nuez Fijada, t_92): fijada en 1 receta -> used_in_recipes=1
+    # NO debe estar p1b (no es vigente ni está fijada)
+    # NO debe estar p2 (ingrediente no usado en recetas)
+    # NO debe estar p3a (no es vieja)
+    items = stale_data["items"]
+    assert len(items) == 2
+    assert stale_data["total"] == 2
+
+    # Orden: la más vieja primero (95 días antes que 92 días)
+    assert items[0]["id"] == p1a["id"]
+    assert items[0]["brand"] == "Choco Vigente"
+    assert items[0]["used_in_recipes"] == 2
+    assert items[0]["price_is_stale"] is True
+    assert items[0]["price_age_days"] == 95
+
+    assert items[1]["id"] == p3b["id"]
+    assert items[1]["brand"] == "Nuez Especial Fijada"
+    assert items[1]["used_in_recipes"] == 1
+    assert items[1]["price_is_stale"] is True
+    assert items[1]["price_age_days"] == 92
+
+    # Aislamiento: usuario 2 no ve nada de usuario 1
+    stale_u2 = await client.get("/api/v1/presentations/stale", headers=auth_headers_user_2)
+    assert stale_u2.status_code == 200
+    assert stale_u2.json()["total"] == 0
+    assert len(stale_u2.json()["items"]) == 0

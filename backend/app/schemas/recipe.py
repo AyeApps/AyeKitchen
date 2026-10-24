@@ -96,6 +96,7 @@ class CostLineResponse(BaseModel):
     pinned: bool = False
     cost_cents: int
     missing_price: bool
+    price_is_stale: bool = False
 
 
 class RecipeCostResponse(BaseModel):
@@ -109,3 +110,4 @@ class RecipeCostResponse(BaseModel):
     margin_percent: int
     suggested_price_cents: int
     complete: bool
+    has_stale_prices: bool = False

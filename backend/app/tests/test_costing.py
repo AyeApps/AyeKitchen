@@ -1,4 +1,6 @@
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 import pytest
 from httpx import AsyncClient
@@ -6,6 +8,7 @@ from httpx import AsyncClient
 from app.models.base import round_to_cents
 from app.models.recipe import Recipe, RecipeItem, RecipeItemKind
 from app.models.unit import BaseUnit
+from app.models.workspace import Workspace
 
 
 @pytest.mark.asyncio
@@ -759,4 +762,122 @@ async def test_costing_cycle_in_database_does_not_500(client: AsyncClient, auth_
     assert data["complete"] is False
     assert len(data["lines"]) == 1
     assert data["lines"][0]["missing_price"] is True
+
+
+@pytest.mark.asyncio
+async def test_costing_subrecipe_with_stale_price_propagates_has_stale_prices(
+    client: AsyncClient,
+    auth_headers,
+):
+    tz = ZoneInfo("America/Mexico_City")
+    now_local = datetime.now(UTC).astimezone(tz)
+    t_95 = (now_local - timedelta(days=95)).astimezone(UTC)
+
+    # Ingrediente con precio viejo (hace 95 días)
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Fresa Silvestre", "base_unit": "g"},
+    )
+    ing_id = ing_resp.json()["id"]
+
+    pres_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing_id, "brand": "Campo", "package_quantity": "1000"},
+    )
+    pres_id = pres_resp.json()["id"]
+
+    await client.post(
+        f"/api/v1/presentations/{pres_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 5000, "recorded_at": t_95.isoformat()},
+    )
+
+    # Subreceta: Mermelada de Fresa (usa Fresa Silvestre con precio viejo)
+    sub_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Mermelada de Fresa",
+            "yield_quantity": "500",
+            "yield_unit": "g",
+            "items": [{"kind": "ingredient", "ref_id": ing_id, "quantity": "500"}],
+        },
+    )
+    sub_id = sub_resp.json()["id"]
+
+    # Receta principal: Pastel con Mermelada (usa la subreceta)
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Pastel Relleno de Fresa",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "items": [{"kind": "recipe", "ref_id": sub_id, "quantity": "250"}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    # Consultar costo de la receta principal
+    cost_resp = await client.get(f"/api/v1/recipes/{rec_id}/cost", headers=auth_headers)
+    assert cost_resp.status_code == 200
+    cost_data = cost_resp.json()
+
+    assert cost_data["has_stale_prices"] is True
+    assert len(cost_data["lines"]) == 1
+    sub_line = cost_data["lines"][0]
+    assert sub_line["kind"] == "recipe"
+    assert sub_line["ref_id"] == sub_id
+    assert sub_line["price_is_stale"] is True
+
+    # Cambiar price_stale_days del workspace directamente con el modelo (a 100 días)
+    me_resp = await client.get("/api/v1/me/", headers=auth_headers)
+    ws_id = me_resp.json()["workspace"]["id"]
+    ws = await Workspace.get(ws_id)
+    assert ws is not None
+    ws.price_stale_days = 100
+    await ws.save()
+
+    # Ahora el precio de hace 95 días ya no es viejo (95 <= 100)
+    cost_resp2 = await client.get(f"/api/v1/recipes/{rec_id}/cost", headers=auth_headers)
+    assert cost_resp2.status_code == 200
+    cost_data2 = cost_resp2.json()
+    assert cost_data2["has_stale_prices"] is False
+    assert cost_data2["lines"][0]["price_is_stale"] is False
+
+
+@pytest.mark.asyncio
+async def test_costing_line_missing_price_does_not_count_as_stale(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Una línea sin precio no cuenta como precio viejo
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Ingrediente Sin Precio", "base_unit": "g"},
+    )
+    ing_id = ing_resp.json()["id"]
+
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Receta Incompleta",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "items": [{"kind": "ingredient", "ref_id": ing_id, "quantity": "100"}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    cost_resp = await client.get(f"/api/v1/recipes/{rec_id}/cost", headers=auth_headers)
+    assert cost_resp.status_code == 200
+    cost_data = cost_resp.json()
+    assert cost_data["complete"] is False
+    assert cost_data["has_stale_prices"] is False
+    assert cost_data["lines"][0]["missing_price"] is True
+    assert cost_data["lines"][0]["price_is_stale"] is False
 

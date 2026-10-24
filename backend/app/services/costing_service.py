@@ -1,19 +1,22 @@
 from decimal import ROUND_HALF_UP, Decimal
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from bson import ObjectId
 
-from app.core.config import settings
 from app.models.base import parse_decimal, round_to_cents
 from app.models.ingredient import Ingredient
-from app.models.presentation import Presentation
+from app.models.presentation import Presentation, PriceRecord
 from app.models.recipe import Recipe, RecipeItem, RecipeItemKind
 from app.models.supplier import Supplier
 from app.models.unit import Unit
 from app.models.workspace import Workspace
 from app.schemas.recipe import CostLineResponse, RecipeCostResponse
 from app.services.conversion_service import convert_between_base_units, convert_to_base
-from app.services.presentation_service import get_current_presentation, get_latest_price
+from app.services.presentation_service import (
+    compute_price_staleness,
+    get_current_presentation,
+    get_latest_price,
+)
 
 
 class _IngredientCostResult(NamedTuple):
@@ -22,30 +25,36 @@ class _IngredientCostResult(NamedTuple):
     pinned: bool
     price_cents: int | None
     unrounded_cost: Decimal
+    price_is_stale: bool
 
 
-async def _get_workspace_default_margin(workspace_id: str) -> int:
-    if ObjectId.is_valid(workspace_id):
-        ws = await Workspace.get(ObjectId(workspace_id))
-        if ws:
-            return ws.default_margin_percent
-    ws = await Workspace.get(workspace_id)
+async def _resolve_workspace(workspace_or_id: Workspace | str) -> Workspace:
+    if isinstance(workspace_or_id, Workspace):
+        return workspace_or_id
+    ws = None
+    if ObjectId.is_valid(workspace_or_id):
+        ws = await Workspace.get(ObjectId(workspace_or_id))
+    if not ws:
+        ws = await Workspace.get(workspace_or_id)
     if ws:
-        return ws.default_margin_percent
-    return settings.DEFAULT_MARGIN_PERCENT
+        return ws
+    return Workspace(owner_id="unknown")
 
 
 async def _compute_ingredient_line_cost(
-    workspace_id: str,
+    workspace_or_id: Workspace | str,
     item: RecipeItem,
     ingredient: Ingredient,
 ) -> _IngredientCostResult:
     """Función interna única para calcular el costo de una línea de ingrediente.
 
-    Devuelve: (quantity_in_base, presentation, pinned, price_cents, unrounded_cost).
+    Devuelve: (quantity_in_base, presentation, pinned, price_cents, unrounded_cost, price_is_stale).
     Si la presentación fijada está activa pero no tiene precio, se mantiene pinned=True,
-    sin usar la vigente, con costo 0 y price_cents=None.
+    sin usar la vigente, con costo 0, price_cents=None y price_is_stale=False.
     """
+    workspace = await _resolve_workspace(workspace_or_id)
+    workspace_id = str(workspace.id) if workspace.id else str(workspace_or_id)
+
     qty_in_base = await convert_to_base(
         workspace_id,
         item.quantity,
@@ -55,6 +64,7 @@ async def _compute_ingredient_line_cost(
 
     pinned = False
     pres: Presentation | None = None
+    price_record: PriceRecord | None = None
     price_cents: int | None = None
 
     if item.pinned_presentation_id and ObjectId.is_valid(item.pinned_presentation_id):
@@ -68,6 +78,7 @@ async def _compute_ingredient_line_cost(
             pinned = True
             pr = await get_latest_price(workspace_id, str(pinned_p.id))
             if pr:
+                price_record = pr
                 price_cents = pr.price_cents
 
     if not pinned or pres is None:
@@ -75,9 +86,11 @@ async def _compute_ingredient_line_cost(
         curr = await get_current_presentation(workspace_id, str(ingredient.id))
         if curr:
             pres = curr.presentation
+            price_record = curr.price_record
             price_cents = curr.price_record.price_cents
         else:
             pres = None
+            price_record = None
             price_cents = None
 
     if pres is not None and price_cents is not None:
@@ -89,36 +102,48 @@ async def _compute_ingredient_line_cost(
     else:
         unrounded_cost = Decimal("0")
 
+    if pres is not None and price_record is not None and price_cents is not None:
+        _, price_is_stale = compute_price_staleness(workspace, price_record.recorded_at)
+    else:
+        price_is_stale = False
+
     return _IngredientCostResult(
         quantity_in_base=qty_in_base,
         presentation=pres,
         pinned=pinned,
         price_cents=price_cents,
         unrounded_cost=unrounded_cost,
+        price_is_stale=price_is_stale,
     )
 
 
 async def _compute_subrecipe_unrounded_cost(
-    workspace_id: str,
+    workspace_or_id: Workspace | str,
     recipe_id: str,
-    cache: dict[str, tuple[Decimal, bool]],
+    cache: dict[str, Any],
     depth: int = 1,
-) -> tuple[Decimal, bool]:
-    """Calcula recursivamente el costo total sin redondear de una subreceta y si está completa.
+) -> tuple[Decimal, bool, bool]:
+    """Calcula recursivamente el costo total sin redondear de una subreceta, si está completa y si tiene precios viejos.
 
     Utiliza una caché dentro de la llamada para evitar recalcular la misma subreceta múltiples veces.
     Si la profundidad supera 10 niveles (defensa contra ciclos en datos corruptos), detiene la
-    recursión devolviendo costo 0 y complete False.
+    recursión devolviendo costo 0, complete False y has_stale_prices False.
     """
     if depth > 10:
-        return Decimal("0"), False
+        return Decimal("0"), False, False
 
     if recipe_id in cache:
-        return cache[recipe_id]
+        cached = cache[recipe_id]
+        if len(cached) == 2:
+            return cached[0], cached[1], False
+        return cached[0], cached[1], cached[2]
 
     if not ObjectId.is_valid(recipe_id):
-        cache[recipe_id] = (Decimal("0"), False)
-        return Decimal("0"), False
+        cache[recipe_id] = (Decimal("0"), False, False)
+        return Decimal("0"), False, False
+
+    workspace = await _resolve_workspace(workspace_or_id)
+    workspace_id = str(workspace.id) if workspace.id else str(workspace_or_id)
 
     subrecipe = await Recipe.find_one(
         Recipe.id == ObjectId(recipe_id),
@@ -126,10 +151,11 @@ async def _compute_subrecipe_unrounded_cost(
         Recipe.deleted_at == None,  # noqa: E711
     )
     if not subrecipe:
-        cache[recipe_id] = (Decimal("0"), False)
-        return Decimal("0"), False
+        cache[recipe_id] = (Decimal("0"), False, False)
+        return Decimal("0"), False, False
 
     is_complete = True
+    has_stale_prices = False
     lines_unrounded_cost = Decimal("0")
 
     for item in subrecipe.items:
@@ -148,23 +174,27 @@ async def _compute_subrecipe_unrounded_cost(
                 continue
 
             cost_res = await _compute_ingredient_line_cost(
-                workspace_id,
+                workspace,
                 item,
                 ingredient,
             )
             lines_unrounded_cost += cost_res.unrounded_cost
             if cost_res.price_cents is None or cost_res.presentation is None:
                 is_complete = False
+            if cost_res.price_is_stale:
+                has_stale_prices = True
 
         elif item.kind == RecipeItemKind.recipe:
-            sub_cost, sub_comp = await _compute_subrecipe_unrounded_cost(
-                workspace_id,
+            sub_cost, sub_comp, sub_stale = await _compute_subrecipe_unrounded_cost(
+                workspace,
                 item.ref_id,
                 cache,
                 depth=depth + 1,
             )
             if not sub_comp:
                 is_complete = False
+            if sub_stale:
+                has_stale_prices = True
 
             if not ObjectId.is_valid(item.ref_id):
                 is_complete = False
@@ -196,14 +226,14 @@ async def _compute_subrecipe_unrounded_cost(
         start=Decimal("0"),
     )
     batch_cost = lines_unrounded_cost + extras_cost
-    cache[recipe_id] = (batch_cost, is_complete)
-    return batch_cost, is_complete
+    cache[recipe_id] = (batch_cost, is_complete, has_stale_prices)
+    return batch_cost, is_complete, has_stale_prices
 
 
 async def calculate_recipe_cost(
     workspace_id: str,
     recipe: Recipe,
-    cache: dict[str, tuple[Decimal, bool]] | None = None,
+    cache: dict[str, Any] | None = None,
 ) -> RecipeCostResponse:
     """Calcula el costo detallado de una receta según el contrato de la API.
 
@@ -212,6 +242,9 @@ async def calculate_recipe_cost(
     """
     if cache is None:
         cache = {}
+
+    workspace = await _resolve_workspace(workspace_id)
+    ws_id = str(workspace.id) if workspace.id else str(workspace_id)
 
     lines: list[CostLineResponse] = []
     unrounded_line_costs: list[Decimal] = []
@@ -226,7 +259,7 @@ async def calculate_recipe_cost(
         if item.kind == RecipeItemKind.ingredient:
             ingredient = await Ingredient.find_one(
                 Ingredient.id == ObjectId(item.ref_id),
-                Ingredient.workspace_id == workspace_id,
+                Ingredient.workspace_id == ws_id,
                 Ingredient.deleted_at == None,  # noqa: E711
             ) if ObjectId.is_valid(item.ref_id) else None
 
@@ -245,13 +278,14 @@ async def calculate_recipe_cost(
                         pinned=False,
                         cost_cents=0,
                         missing_price=True,
+                        price_is_stale=False,
                     )
                 )
                 unrounded_line_costs.append(Decimal("0"))
                 continue
 
             cost_res = await _compute_ingredient_line_cost(
-                workspace_id,
+                workspace,
                 item,
                 ingredient,
             )
@@ -267,7 +301,7 @@ async def calculate_recipe_cost(
                 ):
                     supp = await Supplier.find_one(
                         Supplier.id == ObjectId(cost_res.presentation.supplier_id),
-                        Supplier.workspace_id == workspace_id,
+                        Supplier.workspace_id == ws_id,
                         Supplier.deleted_at == None,  # noqa: E711
                     )
                     if supp:
@@ -307,13 +341,14 @@ async def calculate_recipe_cost(
                     pinned=cost_res.pinned,
                     cost_cents=round_to_cents(cost_res.unrounded_cost),
                     missing_price=missing_price,
+                    price_is_stale=cost_res.price_is_stale,
                 )
             )
 
         elif item.kind == RecipeItemKind.recipe:
             subrecipe = await Recipe.find_one(
                 Recipe.id == ObjectId(item.ref_id),
-                Recipe.workspace_id == workspace_id,
+                Recipe.workspace_id == ws_id,
                 Recipe.deleted_at == None,  # noqa: E711
             ) if ObjectId.is_valid(item.ref_id) else None
 
@@ -332,20 +367,21 @@ async def calculate_recipe_cost(
                         pinned=False,
                         cost_cents=0,
                         missing_price=True,
+                        price_is_stale=False,
                     )
                 )
                 unrounded_line_costs.append(Decimal("0"))
                 continue
 
             qty_in_yield = await convert_between_base_units(
-                workspace_id,
+                ws_id,
                 item.quantity,
                 item.unit_id,
                 subrecipe.yield_unit,
             )
 
-            sub_batch_cost, sub_complete = await _compute_subrecipe_unrounded_cost(
-                workspace_id,
+            sub_batch_cost, sub_complete, sub_stale = await _compute_subrecipe_unrounded_cost(
+                workspace,
                 item.ref_id,
                 cache,
                 depth=2,
@@ -374,6 +410,7 @@ async def calculate_recipe_cost(
                     pinned=False,
                     cost_cents=round_to_cents(line_unrounded_cost),
                     missing_price=missing_price,
+                    price_is_stale=sub_stale,
                 )
             )
 
@@ -405,7 +442,7 @@ async def calculate_recipe_cost(
             unrounded_batch_cost / Decimal(recipe.servings)
         )
 
-    default_margin = await _get_workspace_default_margin(workspace_id)
+    default_margin = workspace.default_margin_percent
     margin_percent = (
         recipe.margin_percent if recipe.margin_percent is not None else default_margin
     )
@@ -416,9 +453,10 @@ async def calculate_recipe_cost(
     suggested_price_cents = round_to_cents(unrounded_suggested_price)
 
     complete = all(not line.missing_price for line in lines)
+    has_stale_prices = any(line.price_is_stale for line in lines)
 
     if recipe.id:
-        cache[str(recipe.id)] = (unrounded_batch_cost, complete)
+        cache[str(recipe.id)] = (unrounded_batch_cost, complete, has_stale_prices)
 
     return RecipeCostResponse(
         recipe_id=str(recipe.id) if recipe.id else "",
@@ -431,4 +469,5 @@ async def calculate_recipe_cost(
         margin_percent=margin_percent,
         suggested_price_cents=suggested_price_cents,
         complete=complete,
+        has_stale_prices=has_stale_prices,
     )

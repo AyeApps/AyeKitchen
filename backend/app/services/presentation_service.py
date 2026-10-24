@@ -2,6 +2,7 @@ import math
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, NamedTuple
+from zoneinfo import ZoneInfo
 
 from bson import ObjectId
 
@@ -9,8 +10,9 @@ from app.core.errors import AppError
 from app.models.base import parse_decimal
 from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation, PriceRecord
-from app.models.recipe import Recipe
+from app.models.recipe import Recipe, RecipeItemKind
 from app.models.supplier import Supplier
+from app.models.workspace import Workspace
 from app.schemas.presentation import (
     PresentationCreate,
     PresentationUpdate,
@@ -22,6 +24,39 @@ from app.services.conversion_service import convert_to_base
 class CurrentPresentation(NamedTuple):
     presentation: Presentation
     price_record: PriceRecord
+
+
+def compute_price_staleness(
+    workspace: Workspace,
+    price_at: datetime | None,
+) -> tuple[int | None, bool]:
+    """Calcula (price_age_days, price_is_stale) en días calendario según la timezone del workspace.
+
+    Sin precio devuelve (None, False).
+    """
+    if price_at is None:
+        return None, False
+
+    tz_name = workspace.timezone or "America/Mexico_City"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("America/Mexico_City")
+
+    if price_at.tzinfo is None:
+        price_utc = price_at.replace(tzinfo=UTC)
+    else:
+        price_utc = price_at.astimezone(UTC)
+
+    price_local = price_utc.astimezone(tz)
+    now_local = datetime.now(UTC).astimezone(tz)
+
+    age_days = (now_local.date() - price_local.date()).days
+    if age_days < 0:
+        age_days = 0
+
+    is_stale = age_days > workspace.price_stale_days
+    return age_days, is_stale
 
 
 def compute_cost_per_base_unit(price_cents: int | None, package_quantity: Any) -> str | None:
@@ -139,6 +174,98 @@ async def list_presentations(
             latest_price_map[pr.presentation_id] = pr
 
     return page_items, latest_price_map, total, pages
+
+
+async def list_stale_presentations(
+    workspace: Workspace,
+    page: int = 1,
+    limit: int = 20,
+) -> tuple[list[Presentation], dict[str, PriceRecord], dict[str, int], int, int]:
+    limit = min(max(1, limit), 100)
+    page = max(1, page)
+    ws_id = str(workspace.id)
+
+    active_presentations = await Presentation.find(
+        Presentation.workspace_id == ws_id,
+        Presentation.deleted_at == None,  # noqa: E711
+    ).to_list()
+
+    if not active_presentations:
+        return [], {}, {}, 0, 0
+
+    pres_ids = [str(p.id) for p in active_presentations]
+    pres_map = {str(p.id): p for p in active_presentations}
+
+    price_records = await PriceRecord.find(
+        PriceRecord.workspace_id == ws_id,
+        PriceRecord.deleted_at == None,  # noqa: E711
+        {"presentation_id": {"$in": pres_ids}},
+    ).sort("-recorded_at", "-created_at").to_list()
+
+    latest_by_pres: dict[str, PriceRecord] = {}
+    for pr in price_records:
+        if pr.presentation_id not in latest_by_pres:
+            latest_by_pres[pr.presentation_id] = pr
+
+    candidates_by_ing: dict[str, list[tuple[Presentation, PriceRecord]]] = {}
+    for p in active_presentations:
+        pr = latest_by_pres.get(str(p.id))
+        if pr is not None:
+            candidates_by_ing.setdefault(p.ingredient_id, []).append((p, pr))
+
+    current_pres_id_by_ing: dict[str, str] = {}
+    for ing_id, cands in candidates_by_ing.items():
+        cands.sort(
+            key=lambda c: (c[1].recorded_at, c[0].created_at),
+            reverse=True,
+        )
+        current_pres_id_by_ing[ing_id] = str(cands[0][0].id)
+
+    recipes = await Recipe.find(
+        Recipe.workspace_id == ws_id,
+        Recipe.deleted_at == None,  # noqa: E711
+    ).to_list()
+
+    used_recipes: dict[str, set[str]] = {p_id: set() for p_id in pres_ids}
+    for r in recipes:
+        r_id = str(r.id)
+        for item in r.items:
+            if item.kind == RecipeItemKind.ingredient:
+                if item.pinned_presentation_id and item.pinned_presentation_id in pres_map:
+                    used_recipes[item.pinned_presentation_id].add(r_id)
+                else:
+                    curr_id = current_pres_id_by_ing.get(item.ref_id)
+                    if curr_id and curr_id in used_recipes:
+                        used_recipes[curr_id].add(r_id)
+
+    stale_presentations: list[Presentation] = []
+    for p in active_presentations:
+        p_id = str(p.id)
+        pr = latest_by_pres.get(p_id)
+        if not pr:
+            continue
+        _, is_stale = compute_price_staleness(workspace, pr.recorded_at)
+        if not is_stale:
+            continue
+        if len(used_recipes[p_id]) > 0:
+            stale_presentations.append(p)
+
+    def _sort_key(p: Presentation):
+        pr = latest_by_pres[str(p.id)]
+        rec_at = pr.recorded_at
+        if rec_at.tzinfo is None:
+            rec_at = rec_at.replace(tzinfo=UTC)
+        return (rec_at, p.created_at)
+
+    stale_presentations.sort(key=_sort_key)
+
+    total = len(stale_presentations)
+    pages = math.ceil(total / limit) if total > 0 else 0
+    skip = (page - 1) * limit
+    page_items = stale_presentations[skip : skip + limit]
+
+    used_in_recipes_map = {str(p.id): len(used_recipes[str(p.id)]) for p in page_items}
+    return page_items, latest_by_pres, used_in_recipes_map, total, pages
 
 
 async def get_presentation(workspace_id: str, presentation_id: str) -> Presentation:
