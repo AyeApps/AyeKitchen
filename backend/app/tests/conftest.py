@@ -1,7 +1,10 @@
+import os
+
 import pytest
 from beanie import init_beanie
 from httpx import ASGITransport, AsyncClient
 from mongomock_motor import AsyncMongoMockClient
+from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.security import create_access_token
 from app.db.mongodb import DOCUMENT_MODELS
@@ -9,15 +12,28 @@ from app.models.user import User
 from app.services.unit_service import seed_system_units
 from main import app
 
+# Sin variable: mongomock en memoria. Con TEST_MONGODB_URL=mongodb://localhost:27017 corre contra
+# un MongoDB real (índices, Decimal128 y fechas de verdad). Solo usa y borra TEST_DB_NAME.
+TEST_MONGODB_URL = os.getenv("TEST_MONGODB_URL", "").strip()
+TEST_DB_NAME = "aye_kitchen_test_db"
+
 
 @pytest.fixture(scope="session", autouse=True)
 async def init_test_db():
-    client = AsyncMongoMockClient()
-    db = client["aye_kitchen_test_db"]
+    if TEST_MONGODB_URL:
+        if TEST_MONGODB_URL.startswith("mongodb+srv://"):
+            pytest.exit("TEST_MONGODB_URL apunta a un clúster remoto; usa un Mongo local de pruebas.")
+        client = AsyncIOMotorClient(TEST_MONGODB_URL, serverSelectionTimeoutMS=3000)
+        await client.drop_database(TEST_DB_NAME)
+    else:
+        client = AsyncMongoMockClient()
+    db = client[TEST_DB_NAME]
 
     await init_beanie(database=db, document_models=DOCUMENT_MODELS)
     await seed_system_units()
     yield
+    if TEST_MONGODB_URL:
+        await client.drop_database(TEST_DB_NAME)
     client.close()
 
 

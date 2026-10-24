@@ -21,6 +21,6 @@ Costeo de recetas, ingredientes y pedidos para negocios de repostería. Parte de
 6. **Capas como en aye-finance:** `api/v1/endpoints/<recurso>.py` (solo HTTP y serialización) → `services/<recurso>_service.py` (lógica y queries) → `models/`. Schemas Pydantic de entrada/salida en `schemas/<recurso>.py`. Los routers ya están montados en `app/api/v1/router.py`; no agregues ni quites prefijos.
 7. **Soft delete** con `soft_delete()`. Nada se borra físicamente.
 8. **Tests obligatorios** por bloque en `backend/app/tests/test_<recurso>.py`, usando los fixtures de `conftest.py` (`client`, `auth_headers`, `auth_headers_user_2`). Cada bloque incluye al menos un test de aislamiento entre los dos usuarios.
-9. **Verificación antes de terminar**, desde `backend/`: `./venv/bin/python -m pytest -q` (todo pasa) y `./venv/bin/ruff check . --exclude venv` (sin errores).
+9. **Verificación antes de terminar**, desde `backend/`: `./venv/bin/python -m pytest -q` (todo pasa), la misma suite contra MongoDB real con `TEST_MONGODB_URL=mongodb://localhost:27018 ./venv/bin/python -m pytest -q` (contenedor `aye-kitchen-mongo-test`; si no responde, dilo en vez de saltarte el paso) y `./venv/bin/ruff check . --exclude venv` (sin errores).
 10. **No dejes scripts auxiliares** (`fix_*.py`, `update_*.sh`…) en el repo; si usas uno, bórralo al terminar.
 11. **Alcance cerrado.** Si algo choca con el alcance (un test, el linter, un tipo), detente y pregunta; no modifiques código fuera del alcance del prompt para satisfacerlo.

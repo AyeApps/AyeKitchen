@@ -18,6 +18,10 @@ python3.12 -m venv venv && ./venv/bin/pip install -r requirements.txt
 cp .env.example .env
 ./venv/bin/uvicorn main:app --reload --port 8006
 ./venv/bin/python -m pytest -q
+
+# Misma suite contra un MongoDB real (solo usa y borra aye_kitchen_test_db)
+docker run -d --name aye-kitchen-mongo-test --restart unless-stopped -p 27018:27017 mongo:7.0
+TEST_MONGODB_URL=mongodb://localhost:27018 ./venv/bin/python -m pytest -q
 ```
 
 Contrato de la API: [docs/api-contract.md](docs/api-contract.md).

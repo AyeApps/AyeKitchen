@@ -15,6 +15,9 @@ ignore = ["B008", "E501", "UP046"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# Un solo event loop: el cliente real de Motor (TEST_MONGODB_URL) queda atado al loop de la sesión
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["app/tests"]
 python_files = ["test_*.py"]
 pythonpath = ["."]

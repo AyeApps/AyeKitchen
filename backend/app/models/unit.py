@@ -1,7 +1,7 @@
 from enum import StrEnum
 
-from beanie import Indexed
 from pydantic import Field
+from pymongo import ASCENDING, IndexModel
 
 from app.models.base import AyeDecimal, SoftDeleteDocument
 
@@ -21,7 +21,7 @@ class Unit(SoftDeleteDocument):
     workspace_id None = unidad del sistema (sembrada, no editable por el usuario).
     """
 
-    workspace_id: Indexed(str) | None = None
+    workspace_id: str | None = None
     name: str = Field(..., min_length=1, max_length=50)
     abbreviation: str = Field(..., min_length=1, max_length=12)
     base_unit: BaseUnit
@@ -30,3 +30,5 @@ class Unit(SoftDeleteDocument):
     class Settings:
         name = "units"
         use_state_management = True
+        # Indexed(...) | None no crea índice en Beanie: se declara aquí
+        indexes = [IndexModel([("workspace_id", ASCENDING)])]
