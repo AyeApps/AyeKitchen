@@ -80,7 +80,7 @@ struct DraftOrderItem: Identifiable, Hashable {
         self.id = id
         self.recipeId = recipeId
         self.recipeName = recipeName
-        self.quantity = max(1, quantity)
+        self.quantity = quantity
         self.unitPriceText = unitPriceText
         self.suggestedPriceCents = suggestedPriceCents
         self.costCalculationFailed = costCalculationFailed
@@ -112,7 +112,7 @@ final class OrderFormModel {
             guard let cents = CurrencyMath.parseCents(from: item.unitPriceText), cents >= 0 else {
                 return false
             }
-            guard item.quantity >= 1 else { return false }
+            guard item.quantity > 0 else { return false }
         }
         return !isSaving
     }

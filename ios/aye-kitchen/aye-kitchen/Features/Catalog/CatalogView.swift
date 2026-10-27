@@ -6,6 +6,7 @@ struct CatalogView: View {
     @State private var searchText = ""
     @State private var searchTask: Task<Void, Never>?
     @State private var showingNewIngredient = false
+    @State private var showingSuppliers = false
     @State private var ingredientToDelete: Ingredient?
     @State private var showingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
@@ -30,11 +31,23 @@ struct CatalogView: View {
                     }
                 }
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showingSuppliers = true
+                        } label: {
+                            Image(systemName: "storefront")
+                        }
+                        .accessibilityLabel("Tiendas")
+                    }
+
                     ToolbarItem(placement: .topBarTrailing) {
                         AddToolbarButton(label: "Agregar ingrediente") {
                             showingNewIngredient = true
                         }
                     }
+                }
+                .sheet(isPresented: $showingSuppliers) {
+                    SuppliersView()
                 }
                 .sheet(isPresented: $showingNewIngredient) {
                     IngredientFormView(mode: .create) { created in

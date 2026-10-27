@@ -21,7 +21,11 @@ struct RecipesView: View {
                     }
                 }
                 .sheet(isPresented: $showingNewRecipe) {
-                    ComingSoonSheet(title: "Nueva receta")
+                    RecipeEditorView { _ in
+                        Task {
+                            await model.load()
+                        }
+                    }
                 }
                 .navigationDestination(for: String.self) { recipeId in
                     RecipeDetailView(recipeId: recipeId)

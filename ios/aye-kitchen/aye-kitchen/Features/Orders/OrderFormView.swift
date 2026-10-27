@@ -172,13 +172,15 @@ struct OrderFormView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.inkPrimary)
                 Spacer()
-                Stepper {
-                    EmptyView()
-                } onIncrement: {
-                    item.wrappedValue.quantity += 1
-                } onDecrement: {
-                    item.wrappedValue.quantity = max(1, item.wrappedValue.quantity - 1)
-                }
+                Stepper(
+                    "",
+                    onIncrement: {
+                        item.wrappedValue.quantity += 1
+                    },
+                    onDecrement: item.wrappedValue.quantity < 1 ? nil : {
+                        item.wrappedValue.quantity = max(1, item.wrappedValue.quantity - 1)
+                    }
+                )
                 .labelsHidden()
             }
 

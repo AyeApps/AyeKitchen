@@ -1,46 +1,15 @@
 import SwiftUI
 
-enum PaymentMethodOption: String, CaseIterable, Identifiable, Sendable {
-    case cash = "efectivo"
-    case transfer = "transferencia"
-    case card = "tarjeta"
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .cash: "Efectivo"
-        case .transfer: "Transferencia"
-        case .card: "Tarjeta"
-        }
-    }
-}
-
 /// Hoja para registrar un pago a un pedido según Bloque I2.
 struct RecordPaymentSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let order: Order
+    @State private var model: RecordPaymentModel
     let onPaymentSaved: (Order) -> Void
 
-    @State private var amountText: String
-    @State private var selectedMethod: PaymentMethodOption = .cash
-    @State private var isSaving = false
-    @State private var errorMessage: String?
-
     init(order: Order, onPaymentSaved: @escaping (Order) -> Void) {
-        self.order = order
+        _model = State(initialValue: RecordPaymentModel(order: order))
         self.onPaymentSaved = onPaymentSaved
-        _amountText = State(initialValue: CurrencyMath.formatForInput(cents: order.balanceCents))
-    }
-
-    private var parsedCents: Int? {
-        CurrencyMath.parseCents(from: amountText)
-    }
-
-    private var canSubmit: Bool {
-        guard let cents = parsedCents, cents > 0 else { return false }
-        return !isSaving
     }
 
     var body: some View {
@@ -52,7 +21,7 @@ struct RecordPaymentSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(.inkMuted)
 
-                        Text(Money.format(cents: order.balanceCents))
+                        Text(Money.format(cents: model.order.balanceCents))
                             .font(.largeTitle.weight(.heavy))
                             .monospacedDigit()
                             .foregroundStyle(.tint)
@@ -61,7 +30,7 @@ struct RecordPaymentSheet: View {
                     VStack(alignment: .leading, spacing: Spacing.lg) {
                         KitchenTextField(
                             label: "Monto del pago",
-                            text: $amountText,
+                            text: $model.amountText,
                             keyboard: .decimalPad
                         )
 
@@ -70,7 +39,7 @@ struct RecordPaymentSheet: View {
                                 .font(.subheadline.weight(.bold))
                                 .foregroundStyle(.inkPrimary)
 
-                            Picker("Método de pago", selection: $selectedMethod) {
+                            Picker("Método de pago", selection: $model.selectedMethod) {
                                 ForEach(PaymentMethodOption.allCases) { method in
                                     Text(method.label).tag(method)
                                 }
@@ -79,7 +48,7 @@ struct RecordPaymentSheet: View {
                         }
                     }
 
-                    if let errorMessage {
+                    if let errorMessage = model.errorMessage {
                         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.warningText)
@@ -89,9 +58,14 @@ struct RecordPaymentSheet: View {
                     }
 
                     Button {
-                        Task { await savePayment() }
+                        Task {
+                            if let updated = await model.savePayment() {
+                                onPaymentSaved(updated)
+                                dismiss()
+                            }
+                        }
                     } label: {
-                        if isSaving {
+                        if model.isSaving {
                             ProgressView()
                                 .tint(.accentInk)
                         } else {
@@ -99,7 +73,7 @@ struct RecordPaymentSheet: View {
                         }
                     }
                     .buttonStyle(.kitchenPrimary)
-                    .disabled(!canSubmit)
+                    .disabled(!model.canSubmit)
                 }
                 .padding(Spacing.xl)
             }
@@ -117,33 +91,6 @@ struct RecordPaymentSheet: View {
                 }
             }
         }
-    }
-
-    private func savePayment() async {
-        guard let cents = parsedCents else { return }
-        isSaving = true
-        errorMessage = nil
-
-        do {
-            let body = PaymentCreateBody(
-                amountCents: cents,
-                method: selectedMethod.rawValue
-            )
-            let updated: Order = try await NetworkService.shared.request(
-                .post,
-                "/orders/\(order.id)/payments",
-                body: body
-            )
-            onPaymentSaved(updated)
-            dismiss()
-        } catch {
-            if let apiError = error as? APIError, apiError.code == "PAYMENT_EXCEEDS_BALANCE" {
-                errorMessage = "Eso es más de lo que te falta cobrar."
-            } else {
-                errorMessage = error.localizedDescription
-            }
-        }
-        isSaving = false
     }
 }
 

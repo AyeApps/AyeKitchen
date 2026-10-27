@@ -29,7 +29,13 @@ struct RecipeDetailView: View {
                 }
             }
             .sheet(isPresented: $showingEditSheet) {
-                ComingSoonSheet(title: "Editar receta")
+                if let recipe = model.recipe {
+                    RecipeEditorView(recipe: recipe) { _ in
+                        Task {
+                            await model.load()
+                        }
+                    }
+                }
             }
             .task {
                 if model.state == .loading {
