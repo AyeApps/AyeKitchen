@@ -208,6 +208,12 @@ final class RecipeEditorModel {
     var isSaving: Bool = false
     var errorMessage: String? = nil
 
+    var isLoadingUnits: Bool = false
+    var unitsError: String? = nil
+
+    var isLoadingLineToEdit: Bool = false
+    var lineLoadErrorMessage: String? = nil
+
     var isEditing: Bool { recipe != nil }
 
     var canSave: Bool {
@@ -277,34 +283,71 @@ final class RecipeEditorModel {
     }
 
     func loadInitialData() async {
-        do {
-            if allUnits.isEmpty {
-                let units: [MeasureUnit] = try await NetworkService.shared.request(.get, "/units/")
-                self.allUnits = units
-            }
+        guard allUnits.isEmpty else {
+            await resolvePinnedBrandNames()
+            return
+        }
 
-            // Si hay líneas con pinnedPresentationId pero sin pinnedBrandName, resolver el nombre de la marca
-            for idx in items.indices {
-                if let pinnedId = items[idx].pinnedPresentationId,
-                   items[idx].pinnedBrandName == nil,
-                   items[idx].kind == .ingredient {
-                    let ingId = items[idx].refId
-                    if let presentations: Page<Presentation> = try? await NetworkService.shared.request(
-                        .get,
-                        "/presentations/",
-                        query: [
-                            URLQueryItem(name: "ingredient_id", value: ingId),
-                            URLQueryItem(name: "limit", value: "100")
-                        ]
-                    ) {
-                        if let pres = presentations.items.first(where: { $0.id == pinnedId }) {
-                            items[idx].pinnedBrandName = pres.brand
-                        }
+        isLoadingUnits = true
+        unitsError = nil
+        defer { isLoadingUnits = false }
+
+        do {
+            let units: [MeasureUnit] = try await NetworkService.shared.request(.get, "/units/")
+            self.allUnits = units
+            await resolvePinnedBrandNames()
+        } catch {
+            self.unitsError = error.localizedDescription
+        }
+    }
+
+    private func resolvePinnedBrandNames() async {
+        // Si hay líneas con pinnedPresentationId pero sin pinnedBrandName, resolver el nombre de la marca
+        for idx in items.indices {
+            if let pinnedId = items[idx].pinnedPresentationId,
+               items[idx].pinnedBrandName == nil,
+               items[idx].kind == .ingredient {
+                let ingId = items[idx].refId
+                if let presentations: Page<Presentation> = try? await NetworkService.shared.request(
+                    .get,
+                    "/presentations/",
+                    query: [
+                        URLQueryItem(name: "ingredient_id", value: ingId),
+                        URLQueryItem(name: "limit", value: "100")
+                    ]
+                ) {
+                    if let pres = presentations.items.first(where: { $0.id == pinnedId }) {
+                        items[idx].pinnedBrandName = pres.brand
                     }
                 }
             }
+        }
+    }
+
+    /// Carga el ingrediente o subreceta de una línea para editarla en la hoja.
+    /// Si falla la petición, no inventa datos y devuelve nil registrando el mensaje de error.
+    func loadTarget(for item: RecipeEditorLine) async -> LineTarget? {
+        isLoadingLineToEdit = true
+        lineLoadErrorMessage = nil
+        defer { isLoadingLineToEdit = false }
+
+        do {
+            if item.kind == .ingredient {
+                let ing: Ingredient = try await NetworkService.shared.request(
+                    .get,
+                    "/ingredients/\(item.refId)"
+                )
+                return .ingredient(ing)
+            } else {
+                let rec: Recipe = try await NetworkService.shared.request(
+                    .get,
+                    "/recipes/\(item.refId)"
+                )
+                return .subrecipe(id: rec.id, name: rec.name, yieldUnit: rec.yieldUnit)
+            }
         } catch {
-            // Error silencioso al cargar unidades; se reflejará si intentan guardar
+            self.lineLoadErrorMessage = "No pudimos abrir este ingrediente. Revisa tu conexión e intenta de nuevo."
+            return nil
         }
     }
 

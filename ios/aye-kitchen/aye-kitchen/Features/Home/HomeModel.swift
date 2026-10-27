@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Modelo de Inicio (Bloque I4)
 
-@Observable final class HomeModel: @unchecked Sendable {
+@Observable final class HomeModel {
     var pendingOrders: [Order] = []
     var inProgressOrders: [Order] = []
     var recipes: [RecipeListItem] = []

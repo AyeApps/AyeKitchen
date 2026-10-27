@@ -123,7 +123,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
 
 // MARK: - Modelo de Formulario
 
-@Observable final class BrandFormModel: @unchecked Sendable {
+@Observable final class BrandFormModel {
     let mode: BrandFormMode
 
     var brandText: String = ""

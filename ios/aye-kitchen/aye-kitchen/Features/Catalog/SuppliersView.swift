@@ -14,7 +14,7 @@ nonisolated struct SupplierUpdateRequest: Encodable, Sendable {
 
 // MARK: - Modelo de Tiendas
 
-@Observable final class SuppliersModel: @unchecked Sendable {
+@Observable final class SuppliersModel {
     var suppliers: [Supplier] = []
     var isLoading = false
     var errorMessage: String?

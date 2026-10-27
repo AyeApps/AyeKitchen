@@ -1,64 +1,5 @@
 import SwiftUI
 
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-
-nonisolated struct PriceRecordCreateRequest: Encodable, Sendable {
-    let priceCents: Int
-    let recordedAt: Date
-    let note: String?
-}
-
-// MARK: - Modelo de Detalle de Marca
-
-@Observable final class BrandDetailModel: @unchecked Sendable {
-    var presentation: Presentation
-    var prices: [PriceRecord] = []
-    var isLoadingPrices = false
-    var errorMessage: String?
-
-    init(presentation: Presentation, mockPrices: [PriceRecord]? = nil) {
-        self.presentation = presentation
-        if let mockPrices {
-            self.prices = mockPrices
-        }
-    }
-
-    func loadPrices() async {
-        isLoadingPrices = true
-        errorMessage = nil
-        do {
-            let list: [PriceRecord] = try await NetworkService.shared.request(
-                .get,
-                "/presentations/\(presentation.id)/prices"
-            )
-            self.prices = list
-            self.isLoadingPrices = false
-        } catch {
-            self.isLoadingPrices = false
-            self.errorMessage = error.localizedDescription
-        }
-    }
-
-    func reload() async {
-        do {
-            async let presTask: Presentation = NetworkService.shared.request(
-                .get,
-                "/presentations/\(presentation.id)"
-            )
-            async let pricesTask: [PriceRecord] = NetworkService.shared.request(
-                .get,
-                "/presentations/\(presentation.id)/prices"
-            )
-
-            let (updatedPres, updatedPrices) = try await (presTask, pricesTask)
-            self.presentation = updatedPres
-            self.prices = updatedPrices
-        } catch {
-            self.errorMessage = error.localizedDescription
-        }
-    }
-}
-
 // MARK: - Vista de Detalle de Marca
 
 /// Detalle de la marca con precio actual, tarjeta suave, registro de nuevo precio e historial.
@@ -330,23 +271,12 @@ struct RecordPriceSheet: View {
     var onSaved: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var priceText = ""
-    @State private var recordedAt = Date()
-    @State private var noteText = ""
-    @State private var isSaving = false
-    @State private var errorMessage: String?
+    @State private var model: RecordPriceModel
 
-    private var parsedPriceCents: Int? {
-        let normalized = priceText.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
-        guard !normalized.isEmpty,
-              let decimal = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")),
-              decimal >= 0 else {
-            return nil
-        }
-        var centsDecimal = decimal * 100
-        var rounded = Decimal()
-        NSDecimalRound(&rounded, &centsDecimal, 0, .plain)
-        return (rounded as NSDecimalNumber).intValue
+    init(presentationId: String, onSaved: @escaping () -> Void) {
+        self.presentationId = presentationId
+        self.onSaved = onSaved
+        self._model = State(initialValue: RecordPriceModel(presentationId: presentationId))
     }
 
     var body: some View {
@@ -355,7 +285,7 @@ struct RecordPriceSheet: View {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     KitchenTextField(
                         label: "Precio",
-                        text: $priceText,
+                        text: $model.priceText,
                         keyboard: .decimalPad
                     )
 
@@ -366,7 +296,7 @@ struct RecordPriceSheet: View {
 
                         DatePicker(
                             "¿Cuándo lo pagaste?",
-                            selection: $recordedAt,
+                            selection: $model.recordedAt,
                             in: ...Date(),
                             displayedComponents: .date
                         )
@@ -385,10 +315,10 @@ struct RecordPriceSheet: View {
 
                     KitchenTextField(
                         label: "Nota",
-                        text: $noteText
+                        text: $model.noteText
                     )
 
-                    if let errorMessage {
+                    if let errorMessage = model.errorMessage {
                         Text(errorMessage)
                             .font(.subheadline)
                             .foregroundStyle(.warningText)
@@ -399,11 +329,14 @@ struct RecordPriceSheet: View {
 
                     Button("Guardar precio") {
                         Task {
-                            await save()
+                            if await model.save() {
+                                onSaved()
+                                dismiss()
+                            }
                         }
                     }
                     .buttonStyle(.kitchenPrimary)
-                    .disabled(parsedPriceCents == nil || isSaving)
+                    .disabled(!model.canSave)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.top, Spacing.lg)
@@ -419,35 +352,6 @@ struct RecordPriceSheet: View {
                     }
                 }
             }
-        }
-    }
-
-    private func save() async {
-        guard let cents = parsedPriceCents else { return }
-        isSaving = true
-        errorMessage = nil
-
-        let trimmedNote = noteText.trimmingCharacters(in: .whitespaces)
-        let note = trimmedNote.isEmpty ? nil : trimmedNote
-
-        let body = PriceRecordCreateRequest(
-            priceCents: cents,
-            recordedAt: recordedAt,
-            note: note
-        )
-
-        do {
-            let _: PriceRecord = try await NetworkService.shared.request(
-                .post,
-                "/presentations/\(presentationId)/prices",
-                body: body
-            )
-            isSaving = false
-            onSaved()
-            dismiss()
-        } catch {
-            isSaving = false
-            errorMessage = error.localizedDescription
         }
     }
 }

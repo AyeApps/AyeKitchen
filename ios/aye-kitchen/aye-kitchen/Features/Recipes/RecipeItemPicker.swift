@@ -195,6 +195,7 @@ struct RecipeItemPicker: View {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview("Selector de ingredientes y recetas") {
     let mockIngredients = [
         Ingredient(
@@ -259,3 +260,4 @@ struct RecipeItemPicker: View {
     ) { _ in }
     .dynamicTypeSize(.accessibility3)
 }
+#endif

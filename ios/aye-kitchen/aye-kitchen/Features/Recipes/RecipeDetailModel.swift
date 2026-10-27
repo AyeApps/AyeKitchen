@@ -13,6 +13,19 @@ enum RecipeDetailLoadingState: Equatable, Sendable {
     case error(String)
 }
 
+/// Destino de navegación desde una línea de costo del desglose.
+enum RecipeDetailDestination: Hashable, Identifiable {
+    case presentation(Presentation)
+    case ingredient(Ingredient)
+
+    var id: String {
+        switch self {
+        case .presentation(let p): "presentation_\(p.id)"
+        case .ingredient(let i): "ingredient_\(i.id)"
+        }
+    }
+}
+
 /// Modelo de presentación para el detalle y desglose de costo de una receta (MVVM, Regla 5).
 @Observable
 final class RecipeDetailModel {
@@ -24,6 +37,10 @@ final class RecipeDetailModel {
     var optimisticMargin: Int?
     var isUpdatingMargin: Bool = false
     var actionErrorMessage: String?
+
+    var loadingLine: CostLine? = nil
+    var lineErrorMessage: String? = nil
+    var activeDestination: RecipeDetailDestination? = nil
 
     var effectiveMargin: Int {
         optimisticMargin ?? cost?.marginPercent ?? recipe?.marginPercent ?? 30
@@ -86,5 +103,35 @@ final class RecipeDetailModel {
             self.actionErrorMessage = error.localizedDescription
         }
         isUpdatingMargin = false
+    }
+
+    /// Abre una línea de ingrediente del desglose.
+    /// Si tiene presentation_id, pide GET /presentations/{id} y abre BrandDetailView con esa marca.
+    /// Si no tiene, pide GET /ingredients/{refId} y abre IngredientDetailView con ese ingrediente.
+    /// Mientras carga, loadingLine indica cuál fila debe mostrar ProgressView.
+    /// Si falla, registra el error en lineErrorMessage para mostrar una alerta.
+    func openIngredientLine(_ line: CostLine) async {
+        guard loadingLine == nil else { return }
+        loadingLine = line
+        lineErrorMessage = nil
+        defer { loadingLine = nil }
+
+        do {
+            if let presentationId = line.presentationId, !presentationId.isEmpty {
+                let presentation: Presentation = try await NetworkService.shared.request(
+                    .get,
+                    "/presentations/\(presentationId)"
+                )
+                self.activeDestination = .presentation(presentation)
+            } else {
+                let ingredient: Ingredient = try await NetworkService.shared.request(
+                    .get,
+                    "/ingredients/\(line.refId)"
+                )
+                self.activeDestination = .ingredient(ingredient)
+            }
+        } catch {
+            self.lineErrorMessage = error.localizedDescription
+        }
     }
 }

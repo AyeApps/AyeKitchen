@@ -173,7 +173,7 @@ struct OrderFormView: View {
                     .foregroundStyle(.inkPrimary)
                 Spacer()
                 Stepper(
-                    "",
+                    "Cantidad de \(item.wrappedValue.recipeName)",
                     onIncrement: {
                         item.wrappedValue.quantity += 1
                     },
@@ -182,6 +182,7 @@ struct OrderFormView: View {
                     }
                 )
                 .labelsHidden()
+                .accessibilityValue(Quantity.format(item.wrappedValue.quantityString))
             }
 
             VStack(alignment: .leading, spacing: Spacing.xs) {

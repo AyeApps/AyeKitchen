@@ -98,7 +98,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
 
 // MARK: - ViewModel
 
-@Observable final class IngredientFormModel: @unchecked Sendable {
+@Observable final class IngredientFormModel {
     let mode: IngredientFormMode
     var name: String = ""
     var baseUnit: BaseUnit = .g

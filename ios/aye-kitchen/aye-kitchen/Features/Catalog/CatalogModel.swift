@@ -31,7 +31,7 @@ enum CatalogLoadingState: Equatable, Sendable {
 }
 
 /// ViewModel para la lista de ingredientes (`CatalogView`).
-@Observable final class CatalogModel: @unchecked Sendable {
+@Observable final class CatalogModel {
     var ingredients: [Ingredient] = []
     var state: CatalogLoadingState = .idle
     var currentPage: Int = 1

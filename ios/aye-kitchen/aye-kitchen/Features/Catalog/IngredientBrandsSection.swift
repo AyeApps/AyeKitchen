@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Modelo de Sección de Marcas
 
-@Observable final class IngredientBrandsSectionModel: @unchecked Sendable {
+@Observable final class IngredientBrandsSectionModel {
     let ingredientId: String
     var presentations: [Presentation] = []
     var isLoading = false

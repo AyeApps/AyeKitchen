@@ -37,6 +37,46 @@ struct RecipeDetailView: View {
                     }
                 }
             }
+            .navigationDestination(item: $model.activeDestination) { destination in
+                switch destination {
+                case .presentation(let presentation):
+                    BrandDetailView(presentation: presentation) {
+                        Task {
+                            await model.load()
+                        }
+                    }
+                case .ingredient(let ingredient):
+                    IngredientDetailView(
+                        ingredient: ingredient,
+                        onUpdate: { _ in
+                            Task { await model.load() }
+                        },
+                        onDelete: { _ in
+                            Task { await model.load() }
+                        }
+                    )
+                }
+            }
+            .onChange(of: model.activeDestination) { oldValue, newValue in
+                if oldValue != nil && newValue == nil {
+                    Task {
+                        await model.load()
+                    }
+                }
+            }
+            .alert(
+                "No se pudo cargar",
+                isPresented: Binding(
+                    get: { model.lineErrorMessage != nil },
+                    set: { if !$0 { model.lineErrorMessage = nil } }
+                )
+            ) {
+                Button("Entendido", role: .cancel) {}
+            } message: {
+                if let message = model.lineErrorMessage {
+                    Text(message)
+                }
+            }
             .task {
                 if model.state == .loading {
                     await model.load()
@@ -286,7 +326,19 @@ struct RecipeDetailView: View {
                         }
                         .buttonStyle(.plain)
                     } else {
-                        CostLineRow(line: line, isNavigationLink: false)
+                        Button {
+                            Task {
+                                await model.openIngredientLine(line)
+                            }
+                        } label: {
+                            CostLineRow(
+                                line: line,
+                                isNavigationLink: true,
+                                isLoading: model.loadingLine == line
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(model.loadingLine != nil)
                     }
                 }
 
@@ -302,6 +354,7 @@ struct RecipeDetailView: View {
 struct CostLineRow: View {
     let line: CostLine
     let isNavigationLink: Bool
+    var isLoading: Bool = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var iconBoxSize: CGFloat = 40
@@ -409,7 +462,10 @@ struct CostLineRow: View {
                     .foregroundStyle(.inkPrimary)
             }
 
-            if isNavigationLink {
+            if isLoading {
+                ProgressView()
+                    .tint(Color.accentColor)
+            } else if isNavigationLink {
                 Image(systemName: "chevron.right")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.inkMuted)

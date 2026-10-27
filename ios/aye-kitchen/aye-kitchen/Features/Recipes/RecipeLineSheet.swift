@@ -328,6 +328,7 @@ struct RecipeLineSheet: View {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview("Harina con Pregunta de Equivalencia") {
     let mockHarina = Ingredient(
         id: "ing-harina-preview",
@@ -398,3 +399,4 @@ struct RecipeLineSheet: View {
     ) { _ in }
     .dynamicTypeSize(.accessibility3)
 }
+#endif

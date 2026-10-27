@@ -12,7 +12,6 @@ struct RecipeEditorView: View {
 
     @State private var editingTarget: LineTarget?
     @State private var editingExistingLine: RecipeEditorLine?
-    @State private var isLoadingLineToEdit = false
 
     let onSave: @MainActor @Sendable (Recipe) -> Void
 
@@ -27,27 +26,23 @@ struct RecipeEditorView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    nameAndDescriptionSection
-                    yieldSection
-                    ingredientsSection
-                    extraCostsSection
-
-                    if let errorMessage = model.errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.warningText)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(Spacing.md)
-                            .background(.warningSoft, in: .rect(cornerRadius: Radius.control))
+            Group {
+                if model.allUnits.isEmpty {
+                    if let error = model.unitsError {
+                        ErrorStateView(message: error) {
+                            Task {
+                                await model.loadInitialData()
+                            }
+                        }
+                    } else {
+                        ProgressView()
+                            .tint(Color.accentColor)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-
-                    saveButton
+                } else {
+                    editorContent
                 }
-                .padding(Spacing.xl)
             }
-            .scrollDismissesKeyboard(.interactively)
             .background(.canvasBackground)
             .navigationTitle(model.isEditing ? "Editar receta" : "Nueva receta")
             .navigationBarTitleDisplayMode(.inline)
@@ -75,6 +70,15 @@ struct RecipeEditorView: View {
                 Button("Seguir editando", role: .cancel) {}
             } message: {
                 Text("Si sales ahora, los cambios que hiciste no se guardarán.")
+            }
+            .alert(
+                model.lineLoadErrorMessage ?? "",
+                isPresented: Binding(
+                    get: { model.lineLoadErrorMessage != nil },
+                    set: { if !$0 { model.lineLoadErrorMessage = nil } }
+                )
+            ) {
+                Button("Entendido", role: .cancel) {}
             }
             .sheet(isPresented: $showingItemPicker) {
                 RecipeItemPicker(
@@ -104,6 +108,30 @@ struct RecipeEditorView: View {
                 await model.loadInitialData()
             }
         }
+    }
+
+    private var editorContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.section) {
+                nameAndDescriptionSection
+                yieldSection
+                ingredientsSection
+                extraCostsSection
+
+                if let errorMessage = model.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.warningText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(Spacing.md)
+                        .background(.warningSoft, in: .rect(cornerRadius: Radius.control))
+                }
+
+                saveButton
+            }
+            .padding(Spacing.xl)
+        }
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Secciones
@@ -303,50 +331,16 @@ struct RecipeEditorView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(model.isLoadingLineToEdit)
         }
         .padding(.horizontal, Spacing.sm)
     }
 
     private func openLineForEditing(_ item: RecipeEditorLine) {
         Task {
-            isLoadingLineToEdit = true
-            defer { isLoadingLineToEdit = false }
-
-            if item.kind == .ingredient {
-                do {
-                    let ing: Ingredient = try await NetworkService.shared.request(
-                        .get,
-                        "/ingredients/\(item.refId)"
-                    )
-                    editingExistingLine = item
-                    editingTarget = .ingredient(ing)
-                } catch {
-                    // Fallback con datos locales si la red falla
-                    let fallbackIng = Ingredient(
-                        id: item.refId,
-                        name: item.refName,
-                        baseUnit: .g,
-                        group: nil,
-                        notes: nil,
-                        conversions: [],
-                        createdAt: .now,
-                        updatedAt: .now
-                    )
-                    editingExistingLine = item
-                    editingTarget = .ingredient(fallbackIng)
-                }
-            } else {
-                do {
-                    let rec: Recipe = try await NetworkService.shared.request(
-                        .get,
-                        "/recipes/\(item.refId)"
-                    )
-                    editingExistingLine = item
-                    editingTarget = .subrecipe(id: rec.id, name: rec.name, yieldUnit: rec.yieldUnit)
-                } catch {
-                    editingExistingLine = item
-                    editingTarget = .subrecipe(id: item.refId, name: item.refName, yieldUnit: .pz)
-                }
+            if let target = await model.loadTarget(for: item) {
+                editingExistingLine = item
+                editingTarget = target
             }
         }
     }
@@ -434,6 +428,7 @@ struct RecipeEditorView: View {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview("Nueva Receta") {
     let mockUnits = [
         MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
@@ -451,3 +446,4 @@ struct RecipeEditorView: View {
     RecipeEditorView(recipe: .mockContractExample) { _ in }
         .dynamicTypeSize(.accessibility3)
 }
+#endif

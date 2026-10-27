@@ -283,32 +283,43 @@ struct HomeView: View {
                 }
 
                 ForEach(model.stalePresentations.prefix(3)) { stale in
-                    HStack(spacing: Spacing.md) {
-                        warningIconSquare
+                    NavigationLink {
+                        BrandDetailView(
+                            presentation: stale.presentation,
+                            onBrandChangedOrDeleted: {
+                                Task { await model.load() }
+                            }
+                        )
+                    } label: {
+                        HStack(spacing: Spacing.md) {
+                            warningIconSquare
 
-                        VStack(alignment: .leading, spacing: Spacing.xs) {
-                            Text("\(stale.presentation.ingredientName) · \(stale.presentation.brand)")
-                                .font(.headline)
-                                .foregroundStyle(.inkPrimary)
-                                .multilineTextAlignment(.leading)
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                Text("\(stale.presentation.ingredientName) · \(stale.presentation.brand)")
+                                    .font(.headline)
+                                    .foregroundStyle(.inkPrimary)
+                                    .multilineTextAlignment(.leading)
 
-                            let daysText: String = {
-                                if let days = stale.presentation.priceAgeDays {
-                                    return "Precio de hace \(days) días"
-                                } else {
-                                    return "Precio viejo"
-                                }
-                            }()
-                            Text(daysText)
-                                .font(.subheadline)
-                                .foregroundStyle(.inkMuted)
-                                .multilineTextAlignment(.leading)
+                                let daysText: String = {
+                                    if let days = stale.presentation.priceAgeDays {
+                                        return "Precio de hace \(days) días"
+                                    } else {
+                                        return "Precio viejo"
+                                    }
+                                }()
+                                Text(daysText)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.inkMuted)
+                                    .multilineTextAlignment(.leading)
+                            }
+
+                            Spacer()
                         }
-
-                        Spacer()
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .contentShape(Rectangle())
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    .buttonStyle(.plain)
                 }
 
                 if model.incompleteRecipes.count > 3 {
