@@ -112,7 +112,21 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
     var errorMessage: String? = nil
     private(set) var isMock: Bool = false
 
-    init(mode: IngredientFormMode, mockUnits: [MeasureUnit]? = nil) {
+    // Campos para la sección "¿Cuánto te costó?" en modo .create
+    var brandText: String = ""
+    var packageQuantityText: String = "1"
+    var selectedPackageUnit: MeasureUnit?
+    var priceText: String = ""
+    var isPackageQuantityInvalid: Bool = false
+    var isPriceInvalid: Bool = false
+    var hasSavedIngredientWithoutPrice: Bool = false
+
+    var isCreateMode: Bool {
+        if case .create = mode { return true }
+        return false
+    }
+
+    init(mode: IngredientFormMode, initialName: String = "", mockUnits: [MeasureUnit]? = nil) {
         self.mode = mode
         if let mockUnits {
             self.allUnits = mockUnits
@@ -122,6 +136,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
 
         switch mode {
         case .create:
+            self.name = initialName
             self.baseUnit = .g
         case .edit(let ingredient):
             self.name = ingredient.name
@@ -138,6 +153,10 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                 )
             }
         }
+
+        if unitsLoaded {
+            selectDefaultPackageUnit()
+        }
     }
 
     /// Solo unidades con baseUnit distinta a la del ingrediente y que aún no estén agregadas.
@@ -146,6 +165,11 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         return allUnits.filter { unit in
             unit.baseUnit != baseUnit && !usedIds.contains(unit.id)
         }
+    }
+
+    /// Unidades disponibles para el tamaño del paquete (con la misma unidad base que el ingrediente).
+    var packageAvailableUnits: [MeasureUnit] {
+        allUnits.filter { $0.baseUnit == baseUnit }
     }
 
     var baseUnitHelpText: String {
@@ -159,8 +183,30 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         }
     }
 
+    var saveButtonTitle: String {
+        if isSaving {
+            return "Guardando…"
+        }
+        if hasSavedIngredientWithoutPrice {
+            return "Listo"
+        }
+        return "Guardar"
+    }
+
     var isSaveDisabled: Bool {
-        name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving
+        if hasSavedIngredientWithoutPrice {
+            return false
+        }
+        return name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving
+    }
+
+    func selectDefaultPackageUnit() {
+        let matching = packageAvailableUnits
+        if let unit1 = matching.first(where: { $0.factorToBase == "1" }) {
+            selectedPackageUnit = unit1
+        } else {
+            selectedPackageUnit = matching.first
+        }
     }
 
     func onBaseUnitChanged(to newBaseUnit: BaseUnit) {
@@ -168,6 +214,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         // Se descartan equivalencias cuya unidad base ahora coincide con la nueva baseUnit
         let matchingIds = Set(allUnits.filter { $0.baseUnit == newBaseUnit }.map(\.id))
         conversions.removeAll { matchingIds.contains($0.unitId) }
+        selectDefaultPackageUnit()
     }
 
     func loadUnitsIfNeeded() async {
@@ -178,6 +225,9 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
             let units: [MeasureUnit] = try await NetworkService.shared.request(.get, "/units/")
             self.allUnits = units
             self.unitsLoaded = true
+            if selectedPackageUnit == nil {
+                selectDefaultPackageUnit()
+            }
         } catch {
             // Si falla la carga de unidades, no bloquea el formulario; se podrá reintentar al tocar agregar
         }
@@ -200,7 +250,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         conversions.removeAll { $0.id == id }
     }
 
-    func save() async -> Ingredient? {
+    func save(onIngredientCreated: ((Ingredient) -> Void)? = nil) async -> Ingredient? {
         errorMessage = nil
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -220,6 +270,34 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         if hasInvalidQuantity {
             errorMessage = "Revisa las cantidades marcadas en las equivalencias."
             return nil
+        }
+
+        let trimmedPrice = priceText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasPrice = !trimmedPrice.isEmpty
+        let shouldCreatePresentation = isCreateMode && hasPrice
+        var presentationPriceCents: Int? = nil
+        var presentationPackageQuantity: String = ""
+
+        if shouldCreatePresentation {
+            let parsedCents = BrandFormModel.parsePriceCents(priceText)
+            let parsedQty = Quantity.parse(packageQuantityText)
+
+            let priceValid = parsedCents != nil
+            let qtyValid = parsedQty != nil
+
+            isPriceInvalid = !priceValid
+            isPackageQuantityInvalid = !qtyValid
+
+            if !priceValid || !qtyValid {
+                errorMessage = "Revisa el precio y el tamaño del paquete."
+                return nil
+            }
+
+            presentationPriceCents = parsedCents
+            presentationPackageQuantity = parsedQty!
+        } else {
+            isPriceInvalid = false
+            isPackageQuantityInvalid = false
         }
 
         let trimmedGroup = group.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -271,12 +349,39 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                     notes: finalNotes,
                     conversions: conversionInputs
                 )
-                let response: Ingredient = try await NetworkService.shared.request(
+                let createdIngredient: Ingredient = try await NetworkService.shared.request(
                     .post,
                     "/ingredients/",
                     body: body
                 )
-                return response
+
+                if shouldCreatePresentation {
+                    let trimmedBrand = brandText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let finalBrand = trimmedBrand.isEmpty ? "Sin marca" : trimmedBrand
+                    let presBody = PresentationCreateRequest(
+                        ingredientId: createdIngredient.id,
+                        brand: finalBrand,
+                        supplierId: nil,
+                        packageQuantity: presentationPackageQuantity,
+                        packageUnitId: selectedPackageUnit?.id,
+                        priceCents: presentationPriceCents
+                    )
+                    do {
+                        let _: Presentation = try await NetworkService.shared.request(
+                            .post,
+                            "/presentations/",
+                            body: presBody
+                        )
+                        return createdIngredient
+                    } catch {
+                        hasSavedIngredientWithoutPrice = true
+                        onIngredientCreated?(createdIngredient)
+                        errorMessage = "Guardamos el ingrediente, pero no el precio. Agrégalo desde Marcas en el ingrediente."
+                        return nil
+                    }
+                } else {
+                    return createdIngredient
+                }
 
             case .edit(let existing):
                 let body = IngredientUpdateRequest(
@@ -331,8 +436,13 @@ struct IngredientFormView: View {
 
     @State private var showingUnitPicker = false
 
-    init(mode: IngredientFormMode, mockUnits: [MeasureUnit]? = nil, onSave: ((Ingredient) -> Void)? = nil) {
-        self._model = State(initialValue: IngredientFormModel(mode: mode, mockUnits: mockUnits))
+    init(
+        mode: IngredientFormMode,
+        initialName: String = "",
+        mockUnits: [MeasureUnit]? = nil,
+        onSave: ((Ingredient) -> Void)? = nil
+    ) {
+        self._model = State(initialValue: IngredientFormModel(mode: mode, initialName: initialName, mockUnits: mockUnits))
         self.onSave = onSave
     }
 
@@ -365,6 +475,29 @@ struct IngredientFormView: View {
                         .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                }
+
+                if model.isCreateMode {
+                    Section {
+                        brandField
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+
+                        packageSizeField
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+
+                        priceField
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    } header: {
+                        Text("¿Cuánto te costó?")
+                    } footer: {
+                        Text("Opcional. Puedes agregar más marcas después.")
+                    }
                 }
 
                 Section("Equivalencias") {
@@ -408,9 +541,13 @@ struct IngredientFormView: View {
                             .padding(.vertical, Spacing.xs)
                     }
 
-                    Button(model.isSaving ? "Guardando…" : "Guardar") {
+                    Button(model.saveButtonTitle) {
+                        if model.hasSavedIngredientWithoutPrice {
+                            dismiss()
+                            return
+                        }
                         Task {
-                            if let saved = await model.save() {
+                            if let saved = await model.save(onIngredientCreated: onSave) {
                                 onSave?(saved)
                                 dismiss()
                             }
@@ -568,6 +705,118 @@ struct IngredientFormView: View {
             .padding(.vertical, Spacing.xs)
         }
     }
+
+    private var brandField: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            KitchenTextField(
+                label: "Marca",
+                text: $model.brandText
+            )
+            Text("Ej. Selecta, Lala…")
+                .font(.footnote)
+                .foregroundStyle(.inkMuted)
+                .padding(.horizontal, Spacing.xs)
+        }
+    }
+
+    private var packageSizeField: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Tamaño del paquete")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.inkPrimary)
+
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: Spacing.sm) {
+                    quantityInput
+                    unitMenu
+                }
+            } else {
+                HStack(spacing: Spacing.sm) {
+                    quantityInput
+                    unitMenu
+                        .frame(minWidth: 100)
+                }
+            }
+        }
+    }
+
+    private var quantityInput: some View {
+        TextField("1", text: $model.packageQuantityText)
+            .keyboardType(.decimalPad)
+            .font(.body)
+            .foregroundStyle(.inkPrimary)
+            .padding(.horizontal, 18)
+            .frame(minHeight: 56)
+            .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.card)
+                    .strokeBorder(
+                        model.isPackageQuantityInvalid ? Color.warningText : Color.borderInput,
+                        lineWidth: model.isPackageQuantityInvalid ? 2 : 1.5
+                    )
+            }
+            .accessibilityLabel("Cantidad del paquete")
+    }
+
+    private var unitMenu: some View {
+        Menu {
+            ForEach(model.packageAvailableUnits) { unit in
+                Button("\(unit.name) (\(unit.abbreviation))") {
+                    model.selectedPackageUnit = unit
+                }
+            }
+        } label: {
+            HStack(spacing: Spacing.xs) {
+                Text(model.selectedPackageUnit?.abbreviation ?? "Unidad")
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(.inkPrimary)
+                Spacer()
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.inkMuted)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 56)
+            .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.card)
+                    .strokeBorder(Color.borderInput, lineWidth: 1.5)
+            }
+        }
+        .accessibilityLabel("Unidad: \(model.selectedPackageUnit?.abbreviation ?? "")")
+    }
+
+    private var priceField: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Precio")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.inkPrimary)
+                .accessibilityHidden(true)
+
+            HStack(spacing: Spacing.xs) {
+                Text("$")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.inkMuted)
+                    .accessibilityHidden(true)
+
+                TextField("", text: $model.priceText)
+                    .keyboardType(.decimalPad)
+                    .font(.body)
+                    .foregroundStyle(.inkPrimary)
+                    .accessibilityLabel("Precio")
+            }
+            .padding(.horizontal, 18)
+            .frame(minHeight: 56)
+            .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
+            .overlay {
+                RoundedRectangle(cornerRadius: Radius.card)
+                    .strokeBorder(
+                        model.isPriceInvalid ? Color.warningText : Color.borderInput,
+                        lineWidth: model.isPriceInvalid ? 2 : 1.5
+                    )
+            }
+        }
+    }
 }
 
 // MARK: - Hoja para elegir unidad
@@ -625,6 +874,8 @@ struct UnitPickerSheet: View {
 
 #if DEBUG
 private let previewUnits: [MeasureUnit] = [
+    MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
+    MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
     MeasureUnit(id: "u_tz", name: "taza", abbreviation: "tz", baseUnit: .ml, factorToBase: "240", isSystem: true),
     MeasureUnit(id: "u_cda", name: "cucharada", abbreviation: "cda", baseUnit: .ml, factorToBase: "15", isSystem: true),
     MeasureUnit(id: "u_cdta", name: "cucharadita", abbreviation: "cdta", baseUnit: .ml, factorToBase: "5", isSystem: true),
@@ -647,6 +898,11 @@ private let previewIngredient = Ingredient(
 
 #Preview("Nuevo ingrediente") {
     IngredientFormView(mode: .create, mockUnits: previewUnits)
+}
+
+#Preview("Nuevo ingrediente - AX3") {
+    IngredientFormView(mode: .create, mockUnits: previewUnits)
+        .dynamicTypeSize(.accessibility3)
 }
 
 #Preview("Editar ingrediente") {
