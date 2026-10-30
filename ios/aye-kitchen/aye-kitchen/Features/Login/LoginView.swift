@@ -98,7 +98,7 @@ struct LoginView: View {
             Button {
                 showingSignUp = true
             } label: {
-                Text("¿No tienes cuenta? Crear una")
+                Text("¿No tienes cuenta? **Crear una**")
                     .font(.subheadline)
                     .foregroundStyle(.accentInk)
             }
@@ -152,7 +152,6 @@ struct LoginView: View {
             // aye-auth pide verificación de Cloudflare al entrar con correo; en la app se entra con Apple.
             case 400: "Desde el iPhone entra con Apple."
             case 404: "No hay una cuenta con ese correo. Toca Crear una para hacerla."
-            case 423: error.localizedDescription
             default: error.localizedDescription
             }
         } catch {

@@ -114,11 +114,6 @@ final class RecipeItemPickerModel {
         ingredients.insert(ingredient, at: 0)
     }
 
-    /// Alias para conveniencia.
-    func addIngredient(_ ingredient: Ingredient) {
-        prependIngredient(ingredient)
-    }
-
     var filteredSubrecipes: [UsableSubrecipe] {
         let trimmed = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if trimmed.isEmpty { return usableSubrecipes }
