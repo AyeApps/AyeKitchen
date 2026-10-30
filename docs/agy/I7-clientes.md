@@ -58,7 +58,7 @@ Si algo choca con el alcance, detente y pregunta; no modifiques código fuera de
 
 **Bloque I7b de AyeKitchen iOS: elegir o crear el cliente al hacer un pedido.** I7a ya está hecho (`Features/Customers/`, con `CustomerFormView(customer:initialName:onSave:)` y `CustomersModel`). I8 también: la sección se llama "Productos". Relee "Reglas de iOS" en `GEMINI.md` y el párrafo "Cliente del pedido (B5)" de `/orders` en `docs/api-contract.md`. `Order.customerId` ya existe en `Core/Models/Orders.swift`.
 
-**Alcance, dentro de `ios/aye-kitchen/aye-kitchen/`:** `Features/Orders/OrderFormView.swift`, `Features/Orders/OrderFormModel.swift` y el archivo nuevo `Features/Orders/CustomerPickerSheet.swift`. Usa `CustomerFormView` y `CustomersModel` sin modificarlos.
+**Alcance, dentro de `ios/aye-kitchen/aye-kitchen/`:** `Features/Orders/OrderFormView.swift`, `Features/Orders/OrderFormModel.swift` y el archivo nuevo `Features/Orders/CustomerPickerSheet.swift`. Usa `CustomerFormView` sin modificarlo. De `Features/Customers/CustomersModel.swift` solo puedes borrar el método `addOrReplaceCustomer(_:)` y nada más: es un alias que nadie usa. Usa `upsertCustomer(_:)`.
 
 1. **Modelo del formulario.**
    - `OrderFormModel` gana `customerId: String?`. Al editar, se llena con `order.customerId`.
@@ -83,7 +83,7 @@ Si algo choca con el alcance, detente y pregunta; no modifiques código fuera de
 2. Toco "Cliente", busco "Luis", toco "Crear “Luis”" y guardo con teléfono. La fila del formulario muestra Luis y su teléfono. Guardo el pedido y el detalle muestra a Luis con su teléfono. En Clientes, el detalle de Luis lista ese pedido.
 3. Elijo un cliente existente y el pedido se guarda ligado: en la red, el body lleva `customer_id`.
 4. Un pedido viejo sin cliente abre con su nombre y "Sin guardar en Clientes". Lo puedo guardar sin cambiar el cliente, o elegir uno para ligarlo.
-5. El build de la regla 12 de iOS termina en `BUILD SUCCEEDED` sin advertencias nuevas, y `git status` solo muestra los tres archivos del alcance.
+5. El build de la regla 12 de iOS termina en `BUILD SUCCEEDED` sin advertencias nuevas, y `git status` solo muestra los archivos del alcance.
 
 Si algo choca con el alcance, detente y pregunta; no modifiques código fuera de alcance para satisfacerlo. No dejes scripts auxiliares en el repo; si usas uno, bórralo al terminar.
 
