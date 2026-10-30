@@ -294,7 +294,7 @@ struct RecipeEditorView: View {
             } label: {
                 HStack(spacing: Spacing.sm) {
                     if item.kind == .recipe {
-                        Image(systemName: "birthday.cake")
+                        Image(systemName: "fork.knife")
                             .font(.body.weight(.semibold))
                             .foregroundStyle(.accentTextDeep)
                     }

@@ -432,7 +432,7 @@ struct CostLineRow: View {
         case .ingredient:
             ("basket.fill", .warningSoft)
         case .recipe:
-            ("birthday.cake.fill", .accentSoftStrong)
+            ("fork.knife", .accentSoftStrong)
         }
     }
 

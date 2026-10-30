@@ -28,7 +28,7 @@ struct OrderDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
                 headerSection
-                cakesSection
+                productsSection
                 financialSummaryCard
                 paymentsSection
                 notesSection
@@ -202,11 +202,11 @@ struct OrderDetailView: View {
         .accessibilityLabel("Cambiar estado: \(model.order.status.label)")
     }
 
-    // MARK: - Pasteles
+    // MARK: - Productos
 
-    private var cakesSection: some View {
+    private var productsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Pasteles")
+            Text("Productos")
                 .sectionTitleStyle()
 
             RowGroup {

@@ -44,9 +44,10 @@ struct LoginView: View {
 
     private var header: some View {
         VStack(spacing: 18) {
-            Image(systemName: "birthday.cake")
-                .font(.system(size: logoSize * 0.5, weight: .semibold))
-                .foregroundStyle(.accentInk)
+            Image(.appLogo)
+                .resizable()
+                .scaledToFit()
+                .padding(logoSize * 0.14)
                 .frame(width: logoSize, height: logoSize)
                 .background(.accentFill, in: .rect(cornerRadius: 28))
                 .accessibilityHidden(true)
@@ -55,7 +56,7 @@ struct LoginView: View {
                 Text("¡Hola de nuevo!")
                     .font(.title.weight(.heavy))
                     .accessibilityAddTraits(.isHeader)
-                Text("Entra para ver tus pedidos y lo que cuesta cada pastel.")
+                Text("Entra para ver tus pedidos y lo que cuesta cada receta.")
                     .font(.body)
                     .foregroundStyle(.inkMuted)
                     .multilineTextAlignment(.center)

@@ -18,7 +18,7 @@ struct OrderFormView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: Spacing.section) {
                     inputFields
-                    cakesSection
+                    productsSection
 
                     if let errorMessage = model.errorMessage {
                         Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -115,19 +115,19 @@ struct OrderFormView: View {
         }
     }
 
-    private var cakesSection: some View {
+    private var productsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Pasteles")
+            Text("Productos")
                 .sectionTitleStyle()
 
             if model.items.isEmpty {
-                Text("Agrega al menos un pastel al pedido.")
+                Text("Agrega al menos un producto al pedido.")
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
             } else {
                 RowGroup {
                     ForEach($model.items) { $item in
-                        cakeItemRow(item: $item)
+                        productItemRow(item: $item)
                     }
                 }
             }
@@ -138,7 +138,7 @@ struct OrderFormView: View {
                 HStack(spacing: Spacing.xs) {
                     Image(systemName: "plus")
                         .font(.body.weight(.bold))
-                    Text("Agregar pastel")
+                    Text("Agregar producto")
                         .font(.body.weight(.bold))
                 }
                 .foregroundStyle(.tint)
@@ -147,7 +147,7 @@ struct OrderFormView: View {
         }
     }
 
-    private func cakeItemRow(item: Binding<DraftOrderItem>) -> some View {
+    private func productItemRow(item: Binding<DraftOrderItem>) -> some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             HStack(alignment: .center) {
                 Text(item.wrappedValue.recipeName)
@@ -234,7 +234,7 @@ struct RecipePickerSheet: View {
         NavigationStack {
             content
                 .background(.canvasBackground)
-                .navigationTitle("Pasteles")
+                .navigationTitle("Productos")
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $model.query, prompt: "Buscar receta")
                 .onChange(of: model.query) { _, _ in

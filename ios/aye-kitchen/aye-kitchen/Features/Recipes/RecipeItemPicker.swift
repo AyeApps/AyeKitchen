@@ -150,7 +150,7 @@ struct RecipeItemPicker: View {
                                     )
                                 } label: {
                                     HStack(spacing: Spacing.sm) {
-                                        Image(systemName: "birthday.cake")
+                                        Image(systemName: "fork.knife")
                                             .font(.body.weight(.semibold))
                                             .foregroundStyle(.accentTextDeep)
 
@@ -184,7 +184,7 @@ struct RecipeItemPicker: View {
                                     )
                                 } label: {
                                     HStack(spacing: Spacing.sm) {
-                                        Image(systemName: "birthday.cake")
+                                        Image(systemName: "fork.knife")
                                             .font(.body.weight(.semibold))
                                             .foregroundStyle(.accentTextDeep)
 

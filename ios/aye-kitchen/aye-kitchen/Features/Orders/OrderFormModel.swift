@@ -54,7 +54,7 @@ nonisolated struct OrderUpdateBody: Encodable, Sendable {
     }
 }
 
-/// Línea de pastel en el borrador del formulario.
+/// Línea de producto en el borrador del formulario.
 struct DraftOrderItem: Identifiable, Hashable {
     let id: UUID
     var recipeId: String
@@ -177,7 +177,7 @@ final class OrderFormModel {
         }
     }
 
-    /// Elimina una línea de pastel.
+    /// Elimina una línea de producto.
     func removeItem(id: UUID) {
         items.removeAll { $0.id == id }
     }
