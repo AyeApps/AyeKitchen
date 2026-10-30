@@ -22,7 +22,7 @@ App nativa de iPhone (SwiftUI) y panel web (Next.js) sobre la misma API. Android
 
 ## Product Purpose
 
-Que sepa cuánto le cuesta de verdad cada pastel y cuánto cobrar para que le quede ganancia, sin hacer cuentas a mano. Éxito: arma una receta con los precios reales de sus tiendas, ve el costo y el precio sugerido, y lleva sus pedidos de la semana en el mismo lugar.
+Que sepa cuánto le cuesta de verdad cada receta y cuánto cobrar para que le quede ganancia, sin hacer cuentas a mano. Éxito: arma una receta con los precios reales de sus tiendas, ve el costo y el precio sugerido, y lleva sus pedidos de la semana en el mismo lugar.
 
 ## Positioning
 

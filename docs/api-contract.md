@@ -25,11 +25,12 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 | `NOT_FOUND` | 404 | Recurso inexistente, borrado o de otro workspace |
 | `SYSTEM_UNIT_READONLY` | 403 | Intento de editar/borrar una unidad del sistema |
 | `UNIT_NOT_CONVERTIBLE` | 422 | La unidad no se puede llevar a la unidad base del ingrediente/subreceta |
-| `DUPLICATE_NAME` | 409 | Nombre repetido (case-insensitive) en el mismo workspace para unidades, ingredientes, proveedores o recetas |
+| `DUPLICATE_NAME` | 409 | Nombre repetido (case-insensitive) en el mismo workspace para unidades, ingredientes, proveedores, recetas o clientes |
 | `IN_USE` | 409 | Borrar algo que otra entidad activa referencia (ingrediente en receta, presentación fijada, subreceta usada, unidad usada) |
 | `RECIPE_CYCLE` | 422 | La receta se usaría a sí misma directa o indirectamente |
 | `RECIPE_TOO_DEEP` | 422 | Después de guardar, alguna cadena de subrecetas del workspace tendría más de 10 niveles (contando hacia arriba: recetas que usan a la que se guarda) |
-| `INVALID_REFERENCE` | 422 | Un id referenciado en el body no existe en el workspace (proveedor, ingrediente, receta, presentación de otro ingrediente) |
+| `INVALID_REFERENCE` | 422 | Un id referenciado en el body no existe en el workspace (proveedor, ingrediente, receta, cliente, presentación de otro ingrediente) |
+| `CUSTOMER_REQUIRED` | 422 | Un pedido nuevo sin `customer_id` ni `customer_name` |
 | `PAYMENT_EXCEEDS_BALANCE` | 422 | El pago deja el saldo del pedido negativo, o un cambio de líneas dejaría el total por debajo de lo ya pagado |
 
 ---
@@ -198,24 +199,43 @@ Ejemplo de verificación: Harina 1000 g a $23.50 (2350), línea de 300 g → `co
 
 ---
 
-## /orders — Pedidos y pagos (B4)
+## /customers — Clientes (B5)
+
+`Customer`: `{id, name, phone, notes, created_at, updated_at}` (`name` 1–120, `phone` ≤ 30, `notes` ≤ 500).
+
+| Método | Ruta | Body / Query | Notas |
+|---|---|---|---|
+| GET | `/customers/` | `?q` | Sin paginar, orden por `name`. `q` filtra por nombre o teléfono que lo contenga (sin distinguir mayúsculas) |
+| POST | `/customers/` | `{name, phone?, notes?}` | 201. Nombre repetido (case-insensitive) → `DUPLICATE_NAME` |
+| GET | `/customers/{id}` | — | |
+| PATCH | `/customers/{id}` | parcial | Si cambia `name` o `phone`, se copian a `customer_name`/`customer_phone` de todos los pedidos activos con ese `customer_id` |
+| DELETE | `/customers/{id}` | — | 204. Sus pedidos conservan `customer_name`/`customer_phone` y quedan con `customer_id = null` |
+
+Los pedidos de un cliente se piden con `GET /orders/?customer_id=<id>`.
+
+## /orders — Pedidos y pagos (B4, cliente en B5)
 
 `Order`:
 ```
-{id, customer_name, customer_phone, delivery_at, status: "pendiente"|"en_proceso"|"entregado"|"cancelado", notes,
+{id, customer_id, customer_name, customer_phone, delivery_at, status: "pendiente"|"en_proceso"|"entregado"|"cancelado", notes,
  items: [{recipe_id, recipe_name, quantity, unit_price_cents, unit_cost_cents_snapshot}],
  payments: [{id, amount_cents, paid_at, method}],
  total_cents, paid_cents, balance_cents, cost_cents, profit_cents,
  created_at, updated_at}
 ```
+**Cliente del pedido (B5).** `customer_name`/`customer_phone` son la copia que se muestra; `customer_id` liga el pedido a un `Customer`.
+- Con `customer_id` (POST, o PATCH que lo envía no nulo): debe existir en el workspace (`INVALID_REFERENCE`), y el backend copia `name`/`phone` del cliente a `customer_name`/`customer_phone`, ignorando los que vengan en el body. Mientras el pedido tenga `customer_id`, un PATCH que mande solo `customer_name`/`customer_phone` no los cambia.
+- Sin `customer_id`: funciona como en B4, con nombre y teléfono escritos a mano. En POST, si no viene `customer_id` ni `customer_name` → `CUSTOMER_REQUIRED`.
+- PATCH con `customer_id: null` desliga el pedido y conserva el nombre y teléfono actuales, salvo que el mismo body traiga otros.
+
 `total = Σ quantity × unit_price`, `cost = Σ quantity × unit_cost_snapshot`, `profit = total − cost`, `balance = total − paid`.
 
 | Método | Ruta | Body / Query | Notas |
 |---|---|---|---|
-| GET | `/orders/` | `?page&limit&status&from&to` | Paginado. `from`/`to` filtran `delivery_at`. Orden `delivery_at` asc |
-| POST | `/orders/` | `{customer_name, customer_phone?, delivery_at, items: [{recipe_id, quantity, unit_price_cents?}] (mínimo 1), notes?}` | `unit_price_cents` por defecto = `suggested_price_cents` de la receta. `unit_cost_cents_snapshot` = `batch_cost_cents` de la receta en ese momento (lo calcula el backend; el cliente no lo envía) |
+| GET | `/orders/` | `?page&limit&status&from&to&customer_id` | Paginado. `from`/`to` filtran `delivery_at`. Orden `delivery_at` asc |
+| POST | `/orders/` | `{customer_id?, customer_name?, customer_phone?, delivery_at, items: [{recipe_id, quantity, unit_price_cents?}] (mínimo 1), notes?}` | `unit_price_cents` por defecto = `suggested_price_cents` de la receta. `unit_cost_cents_snapshot` = `batch_cost_cents` de la receta en ese momento (lo calcula el backend; el cliente no lo envía) |
 | GET | `/orders/{id}` | — | |
-| PATCH | `/orders/{id}` | parcial; `items` reemplaza la lista (mínimo 1 línea) | Una línea cuya `recipe_id` ya estaba en el pedido conserva su snapshot **y su `unit_price_cents` anterior** si no se envía uno nuevo: el precio acordado con el cliente nunca cambia solo. Solo las líneas nuevas toman `suggested_price_cents` por defecto y calculan snapshot. Si el nuevo `total_cents` quedaría por debajo de `paid_cents` → `PAYMENT_EXCEEDS_BALANCE` y no se guarda nada |
+| PATCH | `/orders/{id}` | parcial; `items` reemplaza la lista (mínimo 1 línea); `customer_id` acepta `null` para desligar | Una línea cuya `recipe_id` ya estaba en el pedido conserva su snapshot **y su `unit_price_cents` anterior** si no se envía uno nuevo: el precio acordado con el cliente nunca cambia solo. Solo las líneas nuevas toman `suggested_price_cents` por defecto y calculan snapshot. Si el nuevo `total_cents` quedaría por debajo de `paid_cents` → `PAYMENT_EXCEEDS_BALANCE` y no se guarda nada |
 | DELETE | `/orders/{id}` | — | 204 |
 | POST | `/orders/{id}/payments` | `{amount_cents, paid_at?, method?}` | 201, devuelve el Order. Saldo negativo → `PAYMENT_EXCEEDS_BALANCE` |
 | DELETE | `/orders/{id}/payments/{payment_id}` | — | Devuelve el Order |

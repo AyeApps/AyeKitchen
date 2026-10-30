@@ -5,6 +5,8 @@ import Foundation
 /// `/orders/{id}`
 nonisolated struct Order: Decodable, Sendable, Hashable, Identifiable {
     let id: String
+    /// Cliente guardado al que está ligado el pedido (B5); `nil` si el nombre se escribió a mano.
+    var customerId: String? = nil
     let customerName: String
     let customerPhone: String?
     let deliveryAt: Date

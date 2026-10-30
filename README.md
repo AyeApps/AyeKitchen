@@ -1,6 +1,6 @@
 # AyeKitchen
 
-Costeo de recetas para negocios de repostería: ingredientes con sus marcas, proveedores y precios, conversiones de medidas (tazas, cucharadas), recetas con subrecetas, costo y precio sugerido por pastel, pedidos con anticipos y un resumen mensual.
+Costeo de recetas para negocios de comida (repostería, cocina, panadería, lo que se venda por receta): ingredientes con sus marcas, proveedores y precios, conversiones de medidas (tazas, cucharadas), recetas con subrecetas, costo y precio sugerido por receta, clientes, pedidos con anticipos y un resumen mensual.
 
 | Capa | Stack | Local |
 |---|---|---|

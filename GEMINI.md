@@ -1,6 +1,6 @@
 # Reglas del proyecto AyeKitchen
 
-Costeo de recetas, ingredientes y pedidos para negocios de repostería. Parte del ecosistema Aye.
+Costeo de recetas, ingredientes, clientes y pedidos para negocios de comida de cualquier tipo (no solo repostería: los textos hablan de recetas y productos, nunca de pasteles). Parte del ecosistema Aye.
 
 ## Estructura
 

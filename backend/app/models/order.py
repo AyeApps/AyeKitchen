@@ -4,6 +4,7 @@ from enum import StrEnum
 
 from beanie import Indexed
 from pydantic import BaseModel, Field
+from pymongo import ASCENDING, IndexModel
 
 from app.models.base import AyeDecimal, Cents, WorkspaceDocument
 
@@ -31,6 +32,8 @@ class Payment(BaseModel):
 
 
 class Order(WorkspaceDocument):
+    # Liga opcional a Customer (B5); customer_name/customer_phone son la copia que se muestra
+    customer_id: str | None = None
     customer_name: str = Field(..., min_length=1, max_length=120)
     customer_phone: str | None = Field(default=None, max_length=30)
     delivery_at: Indexed(datetime)
@@ -42,6 +45,7 @@ class Order(WorkspaceDocument):
     class Settings:
         name = "orders"
         use_state_management = True
+        indexes = [IndexModel([("workspace_id", ASCENDING), ("customer_id", ASCENDING)])]
 
 
 class Expense(WorkspaceDocument):

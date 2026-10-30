@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.models.customer import Customer
 from app.models.ingredient import Ingredient
 from app.models.order import Expense, Order
 from app.models.presentation import Presentation, PriceRecord
@@ -29,6 +30,7 @@ DOCUMENT_MODELS = [
     Presentation,
     PriceRecord,
     Recipe,
+    Customer,
     Order,
     Expense,
 ]
