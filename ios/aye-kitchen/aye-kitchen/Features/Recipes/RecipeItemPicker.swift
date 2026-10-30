@@ -6,6 +6,8 @@ struct RecipeItemPicker: View {
 
     @State private var model: RecipeItemPickerModel
     @State private var selectedTarget: LineTarget?
+    @State private var showingNewIngredientSheet = false
+    @State private var pendingTargetIngredient: Ingredient?
 
     let allUnits: [MeasureUnit]
     let onSelectLine: @MainActor @Sendable (RecipeEditorLine) -> Void
@@ -67,6 +69,21 @@ struct RecipeItemPicker: View {
                     dismiss()
                 }
             }
+            .sheet(isPresented: $showingNewIngredientSheet, onDismiss: {
+                if let pending = pendingTargetIngredient {
+                    pendingTargetIngredient = nil
+                    selectedTarget = .ingredient(pending)
+                }
+            }) {
+                IngredientFormView(
+                    mode: .create,
+                    initialName: model.searchText.trimmingCharacters(in: .whitespaces),
+                    mockUnits: model.isMock && !allUnits.isEmpty ? allUnits : nil
+                ) { savedIngredient in
+                    model.prependIngredient(savedIngredient)
+                    pendingTargetIngredient = savedIngredient
+                }
+            }
             .task {
                 await model.loadInitialData()
             }
@@ -83,6 +100,19 @@ struct RecipeItemPicker: View {
             List {
                 switch model.tab {
                 case .ingredients:
+                    Button {
+                        showingNewIngredientSheet = true
+                    } label: {
+                        HStack(spacing: Spacing.xs) {
+                            Image(systemName: "plus.circle.fill")
+                                .imageScale(.medium)
+                            Text(newIngredientButtonTitle)
+                        }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                    }
+                    .listRowBackground(Color.surfaceCard)
+
                     if model.ingredients.isEmpty {
                         emptyState(text: "No se encontraron ingredientes.")
                     } else {
@@ -183,6 +213,15 @@ struct RecipeItemPicker: View {
         }
     }
 
+    private var newIngredientButtonTitle: String {
+        let trimmed = model.searchText.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            return "Nuevo ingrediente"
+        } else {
+            return "Crear “\(trimmed)”"
+        }
+    }
+
     private func emptyState(text: String) -> some View {
         Text(text)
             .font(.subheadline)
@@ -196,6 +235,14 @@ struct RecipeItemPicker: View {
 // MARK: - Previews
 
 #if DEBUG
+private let previewUnits: [MeasureUnit] = [
+    MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
+    MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
+    MeasureUnit(id: "u_tz", name: "taza", abbreviation: "tz", baseUnit: .ml, factorToBase: "240", isSystem: true),
+    MeasureUnit(id: "u_cda", name: "cucharada", abbreviation: "cda", baseUnit: .ml, factorToBase: "15", isSystem: true),
+    MeasureUnit(id: "u_pz", name: "pieza", abbreviation: "pz", baseUnit: .pz, factorToBase: "1", isSystem: true)
+]
+
 #Preview("Selector de ingredientes y recetas") {
     let mockIngredients = [
         Ingredient(
@@ -234,7 +281,7 @@ struct RecipeItemPicker: View {
     ]
 
     RecipeItemPicker(
-        allUnits: [],
+        allUnits: previewUnits,
         mockIngredients: mockIngredients,
         mockSubrecipes: mockSubrecipes
     ) { _ in }
@@ -255,7 +302,7 @@ struct RecipeItemPicker: View {
     ]
 
     RecipeItemPicker(
-        allUnits: [],
+        allUnits: previewUnits,
         mockIngredients: mockIngredients
     ) { _ in }
     .dynamicTypeSize(.accessibility3)

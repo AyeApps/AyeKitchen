@@ -108,6 +108,17 @@ final class RecipeItemPickerModel {
         }
     }
 
+    /// Agrega un ingrediente al principio de la lista sin duplicar por id.
+    func prependIngredient(_ ingredient: Ingredient) {
+        ingredients.removeAll { $0.id == ingredient.id }
+        ingredients.insert(ingredient, at: 0)
+    }
+
+    /// Alias para conveniencia.
+    func addIngredient(_ ingredient: Ingredient) {
+        prependIngredient(ingredient)
+    }
+
     var filteredSubrecipes: [UsableSubrecipe] {
         let trimmed = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         if trimmed.isEmpty { return usableSubrecipes }
