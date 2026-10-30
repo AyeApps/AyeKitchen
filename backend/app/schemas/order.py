@@ -14,7 +14,8 @@ class OrderItemInput(BaseModel):
 
 
 class OrderCreate(BaseModel):
-    customer_name: str = Field(..., min_length=1, max_length=120)
+    customer_id: str | None = None
+    customer_name: str | None = Field(default=None, min_length=1, max_length=120)
     customer_phone: str | None = Field(default=None, max_length=30)
     delivery_at: datetime
     items: list[OrderItemInput] = Field(..., min_length=1)
@@ -22,6 +23,7 @@ class OrderCreate(BaseModel):
 
 
 class OrderUpdate(BaseModel):
+    customer_id: str | None = None
     customer_name: str | None = Field(default=None, min_length=1, max_length=120)
     customer_phone: str | None = Field(default=None, max_length=30)
     delivery_at: datetime | None = None
@@ -53,6 +55,7 @@ class OrderItemResponse(BaseModel):
 
 class OrderResponse(BaseModel):
     id: str
+    customer_id: str | None = None
     customer_name: str
     customer_phone: str | None = None
     delivery_at: datetime

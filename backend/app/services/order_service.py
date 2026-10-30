@@ -18,6 +18,7 @@ from app.schemas.order import (
     PaymentResponse,
 )
 from app.services.costing_service import calculate_recipe_cost
+from app.services.customer_service import get_customer
 
 
 def compute_order_totals(
@@ -86,6 +87,7 @@ async def serialize_order(
 
     return OrderResponse(
         id=str(order.id),
+        customer_id=order.customer_id,
         customer_name=order.customer_name,
         customer_phone=order.customer_phone,
         delivery_at=order.delivery_at,
@@ -125,6 +127,7 @@ async def list_orders(
     status: OrderStatus | None = None,
     from_dt: datetime | None = None,
     to_dt: datetime | None = None,
+    customer_id: str | None = None,
 ) -> tuple[list[Order], dict[str, str], int, int]:
     limit = min(max(1, limit), 100)
     page = max(1, page)
@@ -133,6 +136,8 @@ async def list_orders(
         "workspace_id": workspace_id,
         "deleted_at": None,
     }
+    if customer_id is not None:
+        filters["customer_id"] = customer_id
     if status is not None:
         filters["status"] = status
 
@@ -231,10 +236,34 @@ async def create_order(workspace_id: str, data: OrderCreate) -> Order:
     if delivery_at.tzinfo is None:
         delivery_at = delivery_at.replace(tzinfo=UTC)
 
+    if data.customer_id is not None:
+        try:
+            customer = await get_customer(workspace_id, data.customer_id)
+        except AppError:
+            raise AppError(
+                status_code=422,
+                detail="Cliente no encontrado",
+                code="INVALID_REFERENCE",
+            ) from None
+        order_customer_id = str(customer.id)
+        order_customer_name = customer.name
+        order_customer_phone = customer.phone
+    else:
+        if not data.customer_name or not data.customer_name.strip():
+            raise AppError(
+                status_code=422,
+                detail="Elige un cliente o escribe su nombre",
+                code="CUSTOMER_REQUIRED",
+            )
+        order_customer_id = None
+        order_customer_name = data.customer_name.strip()
+        order_customer_phone = data.customer_phone.strip() if data.customer_phone else None
+
     order = Order(
         workspace_id=workspace_id,
-        customer_name=data.customer_name.strip(),
-        customer_phone=data.customer_phone.strip() if data.customer_phone else None,
+        customer_id=order_customer_id,
+        customer_name=order_customer_name,
+        customer_phone=order_customer_phone,
         delivery_at=delivery_at,
         items=order_items,
         notes=data.notes.strip() if data.notes else None,
@@ -251,11 +280,31 @@ async def update_order(
 ) -> Order:
     order = await get_order(workspace_id, order_id)
 
-    if "customer_name" in data.model_fields_set and data.customer_name is not None:
-        order.customer_name = data.customer_name.strip()
-
-    if "customer_phone" in data.model_fields_set:
-        order.customer_phone = data.customer_phone.strip() if data.customer_phone else None
+    if "customer_id" in data.model_fields_set:
+        if data.customer_id is not None:
+            try:
+                customer = await get_customer(workspace_id, data.customer_id)
+            except AppError:
+                raise AppError(
+                    status_code=422,
+                    detail="Cliente no encontrado",
+                    code="INVALID_REFERENCE",
+                ) from None
+            order.customer_id = str(customer.id)
+            order.customer_name = customer.name
+            order.customer_phone = customer.phone
+        else:
+            order.customer_id = None
+            if "customer_name" in data.model_fields_set and data.customer_name is not None:
+                order.customer_name = data.customer_name.strip()
+            if "customer_phone" in data.model_fields_set:
+                order.customer_phone = data.customer_phone.strip() if data.customer_phone else None
+    else:
+        if order.customer_id is None:
+            if "customer_name" in data.model_fields_set and data.customer_name is not None:
+                order.customer_name = data.customer_name.strip()
+            if "customer_phone" in data.model_fields_set:
+                order.customer_phone = data.customer_phone.strip() if data.customer_phone else None
 
     if "delivery_at" in data.model_fields_set and data.delivery_at is not None:
         delivery_at = data.delivery_at

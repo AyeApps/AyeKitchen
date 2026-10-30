@@ -33,6 +33,7 @@ async def list_orders_endpoint(
     status: OrderStatus | None = None,
     from_date: datetime | None = Query(None, alias="from"),
     to_date: datetime | None = Query(None, alias="to"),
+    customer_id: str | None = None,
 ):
     ws_id = str(workspace.id)
     orders, recipe_map, total, pages = await list_orders(
@@ -42,6 +43,7 @@ async def list_orders_endpoint(
         status=status,
         from_dt=from_date,
         to_dt=to_date,
+        customer_id=customer_id,
     )
     items = [await serialize_order(o, recipe_map) for o in orders]
     return PaginatedResponse(

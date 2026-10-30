@@ -568,3 +568,278 @@ async def test_order_items_cannot_be_empty(
         json={"items": []},
     )
     assert patch_empty.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_order_with_customer_id_copies_name_and_phone(
+    client: AsyncClient,
+    auth_headers,
+):
+    cust = (await client.post(
+        "/api/v1/customers/",
+        headers=auth_headers,
+        json={"name": "Laura Cruz", "phone": "5550000"},
+    )).json()
+
+    rec = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={"name": "Cheesecake", "yield_quantity": "1", "yield_unit": "pz"},
+    )).json()
+
+    # Creación con customer_id ignora customer_name y customer_phone enviados en el body
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_id": cust["id"],
+            "customer_name": "Nombre Que Debe Ignorarse",
+            "customer_phone": "9999999",
+            "delivery_at": "2026-11-15T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 1500}],
+        },
+    )
+    assert order_resp.status_code == 201
+    order_data = order_resp.json()
+    assert order_data["customer_id"] == cust["id"]
+    assert order_data["customer_name"] == "Laura Cruz"
+    assert order_data["customer_phone"] == "5550000"
+
+
+@pytest.mark.asyncio
+async def test_create_order_with_invalid_or_nonexistent_customer_id(
+    client: AsyncClient,
+    auth_headers,
+):
+    rec = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={"name": "Muffin", "yield_quantity": "1", "yield_unit": "pz"},
+    )).json()
+
+    # ObjectId válido pero inexistente en workspace -> 422 INVALID_REFERENCE
+    resp_nonexistent = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_id": "507f1f77bcf86cd799439011",
+            "delivery_at": "2026-11-15T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 200}],
+        },
+    )
+    assert resp_nonexistent.status_code == 422
+    assert resp_nonexistent.json()["code"] == "INVALID_REFERENCE"
+
+    # ID malformado -> 422 INVALID_REFERENCE
+    resp_invalid = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_id": "bad-id",
+            "delivery_at": "2026-11-15T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 200}],
+        },
+    )
+    assert resp_invalid.status_code == 422
+    assert resp_invalid.json()["code"] == "INVALID_REFERENCE"
+
+
+@pytest.mark.asyncio
+async def test_create_order_without_customer_or_name_fails_customer_required(
+    client: AsyncClient,
+    auth_headers,
+):
+    rec = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={"name": "Panqué", "yield_quantity": "1", "yield_unit": "pz"},
+    )).json()
+
+    # Sin customer_id ni customer_name
+    resp_none = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "delivery_at": "2026-11-15T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 200}],
+        },
+    )
+    assert resp_none.status_code == 422
+    assert resp_none.json()["code"] == "CUSTOMER_REQUIRED"
+    assert resp_none.json()["detail"] == "Elige un cliente o escribe su nombre"
+
+    # Con customer_name vacío o solo espacios
+    resp_spaces = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "    ",
+            "delivery_at": "2026-11-15T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 200}],
+        },
+    )
+    assert resp_spaces.status_code == 422
+    assert resp_spaces.json()["code"] == "CUSTOMER_REQUIRED"
+    assert resp_spaces.json()["detail"] == "Elige un cliente o escribe su nombre"
+
+
+@pytest.mark.asyncio
+async def test_filter_orders_by_customer_id(
+    client: AsyncClient,
+    auth_headers,
+):
+    c1 = (await client.post("/api/v1/customers/", headers=auth_headers, json={"name": "Cliente 1"})).json()
+    c2 = (await client.post("/api/v1/customers/", headers=auth_headers, json={"name": "Cliente 2"})).json()
+
+    rec = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={"name": "Galletas", "yield_quantity": "1", "yield_unit": "pz"},
+    )).json()
+
+    # Pedido 1 con c1
+    o1 = (await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_id": c1["id"],
+            "delivery_at": "2026-11-15T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 100}],
+        },
+    )).json()
+
+    # Pedido 2 con c2
+    o2 = (await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_id": c2["id"],
+            "delivery_at": "2026-11-15T11:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 100}],
+        },
+    )).json()
+
+    # Pedido 3 sin cliente
+    (await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Sin Cliente Ligado",
+            "delivery_at": "2026-11-15T12:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 100}],
+        },
+    )).json()
+
+    # Filtrar por c1
+    filter_c1 = await client.get(f"/api/v1/orders/?customer_id={c1['id']}", headers=auth_headers)
+    assert filter_c1.status_code == 200
+    items_c1 = filter_c1.json()["items"]
+    assert len(items_c1) == 1
+    assert items_c1[0]["id"] == o1["id"]
+
+    # Filtrar por c2
+    filter_c2 = await client.get(f"/api/v1/orders/?customer_id={c2['id']}", headers=auth_headers)
+    assert filter_c2.status_code == 200
+    items_c2 = filter_c2.json()["items"]
+    assert len(items_c2) == 1
+    assert items_c2[0]["id"] == o2["id"]
+
+
+@pytest.mark.asyncio
+async def test_patch_order_customer_id_null_unlinks_and_preserves_name(
+    client: AsyncClient,
+    auth_headers,
+):
+    cust = (await client.post(
+        "/api/v1/customers/",
+        headers=auth_headers,
+        json={"name": "Pedro Picapiedra", "phone": "555-ROCA"},
+    )).json()
+
+    rec = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={"name": "Tartaleta", "yield_quantity": "1", "yield_unit": "pz"},
+    )).json()
+
+    order = (await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_id": cust["id"],
+            "delivery_at": "2026-11-20T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "1", "unit_price_cents": 500}],
+        },
+    )).json()
+    order_id = order["id"]
+
+    # Mientras esté ligado a un cliente, un PATCH con solo customer_name se ignora
+    patch_ignored = await client.patch(
+        f"/api/v1/orders/{order_id}",
+        headers=auth_headers,
+        json={"customer_name": "Nombre Ignorado"},
+    )
+    assert patch_ignored.status_code == 200
+    assert patch_ignored.json()["customer_name"] == "Pedro Picapiedra"
+
+    # PATCH con customer_id: null desliga y conserva el nombre y teléfono
+    patch_unlink = await client.patch(
+        f"/api/v1/orders/{order_id}",
+        headers=auth_headers,
+        json={"customer_id": None},
+    )
+    assert patch_unlink.status_code == 200
+    unlinked_data = patch_unlink.json()
+    assert unlinked_data["customer_id"] is None
+    assert unlinked_data["customer_name"] == "Pedro Picapiedra"
+    assert unlinked_data["customer_phone"] == "555-ROCA"
+
+    # Ahora que no está ligado, PATCH con customer_name sí lo cambia
+    patch_manual = await client.patch(
+        f"/api/v1/orders/{order_id}",
+        headers=auth_headers,
+        json={"customer_name": "Pablo Mármol"},
+    )
+    assert patch_manual.status_code == 200
+    assert patch_manual.json()["customer_name"] == "Pablo Mármol"
+
+
+@pytest.mark.asyncio
+async def test_order_without_customer_continues_working_as_before(
+    client: AsyncClient,
+    auth_headers,
+):
+    rec = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={"name": "Cupcake", "yield_quantity": "1", "yield_unit": "pz"},
+    )).json()
+
+    # Crear sin customer_id pero con customer_name
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Cliente Ocasional",
+            "customer_phone": "555-0011",
+            "delivery_at": "2026-11-20T10:00:00Z",
+            "items": [{"recipe_id": rec["id"], "quantity": "2", "unit_price_cents": 150}],
+        },
+    )
+    assert order_resp.status_code == 201
+    order_data = order_resp.json()
+    assert order_data["customer_id"] is None
+    assert order_data["customer_name"] == "Cliente Ocasional"
+    assert order_data["customer_phone"] == "555-0011"
+
+    # Editar datos del pedido manual
+    patch_resp = await client.patch(
+        f"/api/v1/orders/{order_data['id']}",
+        headers=auth_headers,
+        json={"customer_name": "Cliente Ocasional VIP", "customer_phone": "555-9988"},
+    )
+    assert patch_resp.status_code == 200
+    patched_data = patch_resp.json()
+    assert patched_data["customer_id"] is None
+    assert patched_data["customer_name"] == "Cliente Ocasional VIP"
+    assert patched_data["customer_phone"] == "555-9988"
