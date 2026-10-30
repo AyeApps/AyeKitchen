@@ -4,6 +4,7 @@ import SwiftUI
 struct OrdersView: View {
     @State private var model = OrdersModel()
     @State private var showingNewOrder = false
+    @State private var showingCustomers = false
 
     var body: some View {
         NavigationStack {
@@ -11,6 +12,15 @@ struct OrdersView: View {
                 .background(.canvasBackground)
                 .navigationTitle("Pedidos")
                 .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            showingCustomers = true
+                        } label: {
+                            Image(systemName: "person.2")
+                        }
+                        .accessibilityLabel("Clientes")
+                    }
+
                     ToolbarItem(placement: .topBarTrailing) {
                         AddToolbarButton(label: "Nuevo pedido") {
                             showingNewOrder = true
@@ -27,6 +37,9 @@ struct OrdersView: View {
                             model.removeOrder(id: id)
                         }
                     )
+                }
+                .sheet(isPresented: $showingCustomers) {
+                    CustomersView()
                 }
                 .sheet(isPresented: $showingNewOrder) {
                     OrderFormView(order: nil) { newOrder in
