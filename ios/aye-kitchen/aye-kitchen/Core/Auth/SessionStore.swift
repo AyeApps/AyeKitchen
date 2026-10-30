@@ -35,6 +35,11 @@ final class SessionStore {
         await loadMe()
     }
 
+    func signUp(name: String, email: String, password: String) async throws {
+        try await NetworkService.shared.register(name: name, email: email, password: password)
+        await loadMe()
+    }
+
     func signInWithApple(_ authorization: ASAuthorization) async throws {
         guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
               let tokenData = credential.identityToken,

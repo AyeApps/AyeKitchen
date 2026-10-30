@@ -10,6 +10,7 @@ struct LoginView: View {
     @State private var password = ""
     @State private var isWorking = false
     @State private var errorMessage: String?
+    @State private var showingSignUp = false
 
     @ScaledMetric(relativeTo: .largeTitle) private var logoSize: CGFloat = 88
     @ScaledMetric(relativeTo: .body) private var appleButtonHeight: CGFloat = 54
@@ -25,7 +26,7 @@ struct LoginView: View {
                 form
                 separator
                 appleButton
-                Text("Usas la misma cuenta Aye de las demás apps.")
+                Text("Si ya usas otra app Aye, entra con esa misma cuenta.")
                     .font(.footnote)
                     .foregroundStyle(.inkMuted)
                     .multilineTextAlignment(.center)
@@ -36,6 +37,9 @@ struct LoginView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .background(.canvasBackground)
+        .sheet(isPresented: $showingSignUp) {
+            SignUpView(initialEmail: email)
+        }
     }
 
     private var header: some View {
@@ -90,6 +94,15 @@ struct LoginView: View {
             }
             .buttonStyle(.kitchenPrimary)
             .disabled(!canSubmit)
+
+            Button {
+                showingSignUp = true
+            } label: {
+                Text("¿No tienes cuenta? Crear una")
+                    .font(.subheadline)
+                    .foregroundStyle(.accentInk)
+            }
+            .disabled(isWorking)
         }
         .onSubmit {
             if canSubmit { Task { await submit() } }
@@ -138,6 +151,8 @@ struct LoginView: View {
             case 401: "Ese correo y esa contraseña no coinciden."
             // aye-auth pide verificación de Cloudflare al entrar con correo; en la app se entra con Apple.
             case 400: "Desde el iPhone entra con Apple."
+            case 404: "No hay una cuenta con ese correo. Toca Crear una para hacerla."
+            case 423: error.localizedDescription
             default: error.localizedDescription
             }
         } catch {

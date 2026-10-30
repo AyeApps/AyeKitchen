@@ -49,6 +49,12 @@ actor NetworkService {
 
     // MARK: Cuenta Aye (aye-auth)
 
+    func register(name: String, email: String, password: String) async throws {
+        let body = RegisterBody(name: name, email: email, password: password, appClient: AppConfig.appClient)
+        let data = try await perform(.post, AppConfig.authBaseURL, "/register", body: body, authorized: false)
+        try store(JSONCoding.decode(TokenResponse.self, from: data))
+    }
+
     func login(email: String, password: String) async throws {
         let body = LoginBody(email: email, password: password, appClient: AppConfig.appClient)
         let data = try await perform(.post, AppConfig.authBaseURL, "/login", body: body, authorized: false)
@@ -170,6 +176,13 @@ actor NetworkService {
         }
         return .unauthorized
     }
+}
+
+private nonisolated struct RegisterBody: Encodable, Sendable {
+    let name: String
+    let email: String
+    let password: String
+    let appClient: String
 }
 
 private nonisolated struct LoginBody: Encodable, Sendable {
