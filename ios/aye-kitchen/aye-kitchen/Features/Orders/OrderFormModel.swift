@@ -10,6 +10,7 @@ nonisolated struct OrderItemInput: Encodable, Sendable {
 
 /// Cuerpo de la petición para crear un pedido (POST /orders/).
 nonisolated struct OrderCreateBody: Encodable, Sendable {
+    let customerId: String?
     let customerName: String
     let customerPhone: String?
     let deliveryAt: Date
@@ -19,6 +20,7 @@ nonisolated struct OrderCreateBody: Encodable, Sendable {
 
 /// Cuerpo de la petición para editar un pedido (PATCH /orders/{id}).
 nonisolated struct OrderUpdateBody: Encodable, Sendable {
+    let customerId: String?
     let customerName: String?
     let customerPhone: String?
     let deliveryAt: Date?
@@ -27,6 +29,7 @@ nonisolated struct OrderUpdateBody: Encodable, Sendable {
     let items: [OrderItemInput]?
 
     enum CodingKeys: String, CodingKey {
+        case customerId
         case customerName
         case customerPhone
         case deliveryAt
@@ -37,6 +40,7 @@ nonisolated struct OrderUpdateBody: Encodable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(customerId, forKey: .customerId)
         try container.encodeIfPresent(customerName, forKey: .customerName)
         if let customerPhone {
             try container.encode(customerPhone, forKey: .customerPhone)
@@ -92,6 +96,7 @@ struct DraftOrderItem: Identifiable, Hashable {
 final class OrderFormModel {
     let editingOrder: Order?
 
+    var customerId: String? = nil
     var customerName: String = ""
     var customerPhone: String = ""
     var deliveryAt: Date
@@ -106,7 +111,8 @@ final class OrderFormModel {
     }
 
     var canSave: Bool {
-        guard !customerName.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        let hasValidCustomer = (customerId != nil) || (isEditing && !customerName.trimmingCharacters(in: .whitespaces).isEmpty)
+        guard hasValidCustomer else { return false }
         guard !items.isEmpty else { return false }
         for item in items {
             guard let cents = CurrencyMath.parseCents(from: item.unitPriceText), cents >= 0 else {
@@ -121,6 +127,7 @@ final class OrderFormModel {
         self.editingOrder = order
 
         if let order {
+            self.customerId = order.customerId
             self.customerName = order.customerName
             self.customerPhone = order.customerPhone ?? ""
             self.deliveryAt = order.deliveryAt
@@ -137,12 +144,20 @@ final class OrderFormModel {
                 )
             }
         } else {
+            self.customerId = nil
             // Para uno nuevo: mañana a las 4:00 pm
             let calendar = Calendar.current
             let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date.now) ?? Date.now
             self.deliveryAt = calendar.date(bySettingHour: 16, minute: 0, second: 0, of: tomorrow) ?? tomorrow
             self.items = []
         }
+    }
+
+    /// Selecciona un cliente del catálogo (Bloque I7b).
+    func selectCustomer(_ customer: Customer) {
+        self.customerId = customer.id
+        self.customerName = customer.name
+        self.customerPhone = customer.phone ?? ""
     }
 
     /// Agrega una receta seleccionada:
@@ -207,6 +222,7 @@ final class OrderFormModel {
             if let order = editingOrder {
                 // Editar pedido
                 let body = OrderUpdateBody(
+                    customerId: customerId,
                     customerName: trimmedName,
                     customerPhone: phoneValue,
                     deliveryAt: deliveryAt,
@@ -223,6 +239,7 @@ final class OrderFormModel {
             } else {
                 // Crear pedido
                 let body = OrderCreateBody(
+                    customerId: customerId,
                     customerName: trimmedName,
                     customerPhone: phoneValue,
                     deliveryAt: deliveryAt,

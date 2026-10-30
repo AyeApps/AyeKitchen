@@ -101,10 +101,6 @@ enum CustomersLoadingState: Equatable, Sendable {
         }
     }
 
-    func addOrReplaceCustomer(_ customer: Customer) {
-        upsertCustomer(customer)
-    }
-
     func removeCustomer(id: String) {
         customers.removeAll { $0.id == id }
         if isMock {

@@ -6,6 +6,7 @@ struct OrderFormView: View {
 
     @State private var model: OrderFormModel
     @State private var showingRecipePicker = false
+    @State private var showingCustomerPicker = false
     let onSave: @MainActor @Sendable (Order) -> Void
 
     init(order: Order? = nil, onSave: @escaping @MainActor @Sendable (Order) -> Void) {
@@ -64,21 +65,17 @@ struct OrderFormView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showingCustomerPicker) {
+                CustomerPickerSheet { selectedCustomer in
+                    model.selectCustomer(selectedCustomer)
+                }
+            }
         }
     }
 
     private var inputFields: some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
-            KitchenTextField(
-                label: "Cliente",
-                text: $model.customerName
-            )
-
-            KitchenTextField(
-                label: "Teléfono",
-                text: $model.customerPhone,
-                keyboard: .phonePad
-            )
+            customerPickerField
 
             deliveryDatePicker
 
@@ -86,6 +83,75 @@ struct OrderFormView: View {
                 label: "Notas",
                 text: $model.notes
             )
+        }
+    }
+
+    private var customerPickerField: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            Text("Cliente")
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.inkPrimary)
+
+            Button {
+                showingCustomerPicker = true
+            } label: {
+                HStack(spacing: Spacing.sm) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if model.customerId != nil {
+                            Text(model.customerName)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.inkPrimary)
+                            if !model.customerPhone.trimmingCharacters(in: .whitespaces).isEmpty {
+                                Text(model.customerPhone)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.inkMuted)
+                            }
+                        } else if !model.customerName.trimmingCharacters(in: .whitespaces).isEmpty {
+                            Text(model.customerName)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.inkPrimary)
+                            Text("Sin guardar en Clientes")
+                                .font(.subheadline)
+                                .foregroundStyle(.inkMuted)
+                        } else {
+                            Text("Elige un cliente")
+                                .font(.body)
+                                .foregroundStyle(.inkMuted)
+                        }
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.inkMuted)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, Spacing.sm)
+                .frame(minHeight: 56)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
+                .overlay {
+                    RoundedRectangle(cornerRadius: Radius.card)
+                        .strokeBorder(Color.borderInput, lineWidth: 1.5)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(customerFieldAccessibilityLabel)
+        }
+    }
+
+    private var customerFieldAccessibilityLabel: String {
+        if model.customerId != nil {
+            if !model.customerPhone.trimmingCharacters(in: .whitespaces).isEmpty {
+                return "Cliente: \(model.customerName), teléfono: \(model.customerPhone)"
+            }
+            return "Cliente: \(model.customerName)"
+        } else if !model.customerName.trimmingCharacters(in: .whitespaces).isEmpty {
+            return "Cliente: \(model.customerName), sin guardar en Clientes"
+        } else {
+            return "Elige un cliente"
         }
     }
 
@@ -333,6 +399,12 @@ struct RecipePickerSheet: View {
 
 #Preview("Editar pedido — Claro") {
     OrderFormView(order: .mockPendingToday) { _ in }
+}
+
+#Preview("Editar pedido con cliente — Claro") {
+    var order = Order.mockPendingToday
+    order.customerId = "c-1"
+    return OrderFormView(order: order) { _ in }
 }
 
 #Preview("Selector de receta") {
