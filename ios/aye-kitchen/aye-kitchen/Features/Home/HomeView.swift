@@ -357,6 +357,11 @@ private struct AccountMenu: View {
             if let me = session.me {
                 Text(me.email)
             }
+            #if DEBUG
+            Button("Copiar sesión (DEBUG)", systemImage: "doc.on.clipboard") {
+                copySessionForScripts()
+            }
+            #endif
             Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                 Task { await session.signOut() }
             }
@@ -366,6 +371,19 @@ private struct AccountMenu: View {
         }
         .accessibilityLabel("Tu cuenta")
     }
+
+    #if DEBUG
+    /// Solo desarrollo: copia los tokens de la sesión como JSON (`access_token`, `refresh_token`)
+    /// para que los scripts de prueba llamen a la API con esta cuenta. Con el portapapeles
+    /// universal llega directo a la Mac (`pbpaste`). Nunca existe en builds de release.
+    private func copySessionForScripts() {
+        guard let tokens = KeychainStore.load() else { return }
+        let payload = ["access_token": tokens.accessToken, "refresh_token": tokens.refreshToken]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload),
+              let json = String(data: data, encoding: .utf8) else { return }
+        UIPasteboard.general.string = json
+    }
+    #endif
 }
 
 // MARK: - Previews
