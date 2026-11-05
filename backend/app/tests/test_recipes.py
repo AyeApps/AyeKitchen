@@ -1,8 +1,9 @@
 import pytest
 from httpx import AsyncClient
 
+from app.models.ingredient import Ingredient
 from app.models.recipe import Recipe, RecipeItem, RecipeItemKind
-from app.models.unit import BaseUnit
+from app.models.unit import BaseUnit, Unit
 
 
 @pytest.mark.asyncio
@@ -718,3 +719,142 @@ async def test_list_recipes_with_failing_cost_recipe(client: AsyncClient, auth_h
     )
     assert cost_broken_resp.status_code == 422
     assert cost_broken_resp.json()["code"] == "UNIT_NOT_CONVERTIBLE"
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_preserves_ref_name_and_unit_name_with_subrecipe(
+    client: AsyncClient,
+    auth_headers,
+):
+    # 1. Crear ingrediente
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Azúcar Glass", "base_unit": "g"},
+    )
+    assert ing_resp.status_code == 201
+    ing_id = ing_resp.json()["id"]
+
+    # 2. Obtener unidad de kg
+    kg_unit = await Unit.find_one({"abbreviation": "kg"})
+    assert kg_unit is not None
+    kg_id = str(kg_unit.id)
+    kg_name = kg_unit.name
+
+    # 3. Crear subreceta usando el ingrediente y la unidad
+    subrec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Glaseado Real",
+            "yield_quantity": "500",
+            "yield_unit": "g",
+            "items": [
+                {
+                    "kind": "ingredient",
+                    "ref_id": ing_id,
+                    "quantity": "0.5",
+                    "unit_id": kg_id,
+                }
+            ],
+        },
+    )
+    assert subrec_resp.status_code == 201
+    subrec_id = subrec_resp.json()["id"]
+
+    # 4. Crear receta principal usando el ingrediente y la subreceta con unidades
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Donas Glaseadas",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "items": [
+                {
+                    "kind": "ingredient",
+                    "ref_id": ing_id,
+                    "quantity": "0.1",
+                    "unit_id": kg_id,
+                },
+                {
+                    "kind": "recipe",
+                    "ref_id": subrec_id,
+                    "quantity": "0.5",
+                    "unit_id": kg_id,
+                },
+            ],
+        },
+    )
+    assert rec_resp.status_code == 201
+    rec_id = rec_resp.json()["id"]
+
+    # 5. Listar recetas y verificar que Donas Glaseadas traiga ref_name y unit_name correctos
+    list_resp = await client.get("/api/v1/recipes/", headers=auth_headers)
+    assert list_resp.status_code == 200
+    items_map = {item["id"]: item for item in list_resp.json()["items"]}
+    assert rec_id in items_map
+
+    donas = items_map[rec_id]
+    items_by_kind = {it["kind"]: it for it in donas["items"]}
+
+    ing_line = items_by_kind["ingredient"]
+    assert ing_line["ref_id"] == ing_id
+    assert ing_line["ref_name"] == "Azúcar Glass"
+    assert ing_line["unit_name"] == kg_name
+
+    rec_line = items_by_kind["recipe"]
+    assert rec_line["ref_id"] == subrec_id
+    assert rec_line["ref_name"] == "Glaseado Real"
+    assert rec_line["unit_name"] == kg_name
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_shows_ref_name_for_soft_deleted_ingredient(
+    client: AsyncClient,
+    auth_headers,
+):
+    # 1. Crear ingrediente
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Vainilla Especial", "base_unit": "ml"},
+    )
+    assert ing_resp.status_code == 201
+    ing_id = ing_resp.json()["id"]
+
+    # 2. Crear receta que usa ese ingrediente
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Galletas de Vainilla",
+            "yield_quantity": "24",
+            "yield_unit": "pz",
+            "items": [
+                {
+                    "kind": "ingredient",
+                    "ref_id": ing_id,
+                    "quantity": "10",
+                }
+            ],
+        },
+    )
+    assert rec_resp.status_code == 201
+    rec_id = rec_resp.json()["id"]
+
+    # 3. Soft delete directo en la base de datos
+    ing = await Ingredient.get(ing_id)
+    assert ing is not None
+    await ing.soft_delete()
+
+    # 4. Listar recetas con GET /recipes/
+    # La receta debe seguir mostrando el nombre del ingrediente borrado
+    list_resp = await client.get("/api/v1/recipes/", headers=auth_headers)
+    assert list_resp.status_code == 200
+    items_map = {item["id"]: item for item in list_resp.json()["items"]}
+    assert rec_id in items_map
+
+    rec_item = items_map[rec_id]["items"][0]
+    assert rec_item["ref_id"] == ing_id
+    assert rec_item["ref_name"] == "Vainilla Especial"

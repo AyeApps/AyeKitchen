@@ -1,3 +1,4 @@
+import asyncio
 import math
 import re
 from collections import defaultdict
@@ -14,6 +15,7 @@ from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation
 from app.models.recipe import ExtraCost, Recipe, RecipeItem, RecipeItemKind
 from app.models.unit import Unit
+from app.models.workspace import Workspace
 from app.schemas.recipe import (
     ExtraCostResponse,
     RecipeCreate,
@@ -347,6 +349,7 @@ async def list_recipes(
     page: int = 1,
     limit: int = 20,
     q: str | None = None,
+    workspace: Workspace | None = None,
 ) -> tuple[list[RecipeListItemResponse], int, int]:
     limit = min(max(1, limit), 100)
     page = max(1, page)
@@ -358,7 +361,12 @@ async def list_recipes(
     if q and q.strip():
         filters["name"] = {"$regex": re.escape(q.strip()), "$options": "i"}
 
-    recipes = await Recipe.find(filters).to_list()
+    ws_target: Workspace | str = workspace if workspace is not None else workspace_id
+
+    recipes_task = Recipe.find(filters).to_list()
+    snapshot_task = load_costing_snapshot(ws_target)
+
+    recipes, snapshot = await asyncio.gather(recipes_task, snapshot_task)
     recipes.sort(key=lambda r: r.name.lower())
 
     total = len(recipes)
@@ -366,40 +374,81 @@ async def list_recipes(
     skip = (page - 1) * limit
     page_items = recipes[skip : skip + limit]
 
-    all_ing_ids: list[ObjectId] = []
-    all_rec_ids: list[ObjectId] = []
-    all_unit_ids: list[ObjectId] = []
+    if not page_items:
+        return [], total, pages
+
+    ing_map: dict[str, Ingredient] = dict(snapshot.ingredients_by_id)
+    rec_map: dict[str, Recipe] = dict(snapshot.recipes_by_id)
+    unit_map: dict[str, Unit] = dict(snapshot.units_by_id)
+
+    missing_ing_ids: set[ObjectId] = set()
+    missing_rec_ids: set[ObjectId] = set()
+    missing_unit_ids: set[ObjectId] = set()
 
     for r in page_items:
         for it in r.items:
-            if it.kind == RecipeItemKind.ingredient and ObjectId.is_valid(it.ref_id):
-                all_ing_ids.append(ObjectId(it.ref_id))
-            elif it.kind == RecipeItemKind.recipe and ObjectId.is_valid(it.ref_id):
-                all_rec_ids.append(ObjectId(it.ref_id))
-            if it.unit_id and ObjectId.is_valid(it.unit_id):
-                all_unit_ids.append(ObjectId(it.unit_id))
+            if (
+                it.kind == RecipeItemKind.ingredient
+                and it.ref_id not in ing_map
+                and ObjectId.is_valid(it.ref_id)
+            ):
+                missing_ing_ids.add(ObjectId(it.ref_id))
+            elif (
+                it.kind == RecipeItemKind.recipe
+                and it.ref_id not in rec_map
+                and ObjectId.is_valid(it.ref_id)
+            ):
+                missing_rec_ids.add(ObjectId(it.ref_id))
+            if (
+                it.unit_id
+                and it.unit_id not in unit_map
+                and ObjectId.is_valid(it.unit_id)
+            ):
+                missing_unit_ids.add(ObjectId(it.unit_id))
 
-    ingredients = (
-        await Ingredient.find({"_id": {"$in": all_ing_ids}}).to_list()
-        if all_ing_ids
-        else []
-    )
-    all_recipes = (
-        await Recipe.find({"_id": {"$in": all_rec_ids}}).to_list()
-        if all_rec_ids
-        else []
-    )
-    units = (
-        await Unit.find({"_id": {"$in": all_unit_ids}}).to_list()
-        if all_unit_ids
-        else []
-    )
+    backup_tasks = []
+    backup_types = []
 
-    ing_map = {str(i.id): i for i in ingredients}
-    rec_map = {str(r.id): r for r in all_recipes}
-    unit_map = {str(u.id): u for u in units}
+    if missing_ing_ids:
+        backup_tasks.append(
+            Ingredient.find({
+                "_id": {"$in": list(missing_ing_ids)},
+                "workspace_id": workspace_id,
+            }).to_list()
+        )
+        backup_types.append("ingredient")
 
-    snapshot = await load_costing_snapshot(workspace_id) if page_items else None
+    if missing_rec_ids:
+        backup_tasks.append(
+            Recipe.find({
+                "_id": {"$in": list(missing_rec_ids)},
+                "workspace_id": workspace_id,
+            }).to_list()
+        )
+        backup_types.append("recipe")
+
+    if missing_unit_ids:
+        backup_tasks.append(
+            Unit.find({
+                "_id": {"$in": list(missing_unit_ids)},
+                "$or": [{"workspace_id": None}, {"workspace_id": workspace_id}],
+            }).to_list()
+        )
+        backup_types.append("unit")
+
+    if backup_tasks:
+        results = await asyncio.gather(*backup_tasks)
+        for b_type, b_items in zip(backup_types, results, strict=True):
+            if b_type == "ingredient":
+                for ing in b_items:
+                    ing_map[str(ing.id)] = ing
+            elif b_type == "recipe":
+                for rec in b_items:
+                    rec_map[str(rec.id)] = rec
+            elif b_type == "unit":
+                for u in b_items:
+                    unit_map[str(u.id)] = u
+
     cost_cache: dict[str, Any] = {}
     items: list[RecipeListItemResponse] = []
 

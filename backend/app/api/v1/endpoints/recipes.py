@@ -51,6 +51,7 @@ async def list_recipes_endpoint(
         page=page,
         limit=limit,
         q=q,
+        workspace=workspace,
     )
     return PaginatedResponse(
         items=items,
@@ -91,7 +92,7 @@ async def get_recipe_cost_endpoint(
     version = None
     if version_id is not None:
         version = await get_cost_version(ws_id, id, version_id)
-    return await calculate_recipe_cost(ws_id, recipe, version=version)
+    return await calculate_recipe_cost(workspace, recipe, version=version)
 
 
 @router.get("/{id}/versions/", response_model=list[CostVersionResponse])
