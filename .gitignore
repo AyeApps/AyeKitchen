@@ -18,3 +18,7 @@ ios/**/DerivedData/
 *.xcuserstate
 
 .DS_Store
+
+# Swift Package Manager
+ios/KitchenKit/.build/
+ios/KitchenKit/.swiftpm/

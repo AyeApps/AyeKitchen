@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import (
+    backup,
     customers,
     expenses,
     ingredients,
@@ -26,3 +27,4 @@ api_router.include_router(orders.router, prefix="/orders", tags=["Orders"])  # B
 api_router.include_router(customers.router, prefix="/customers", tags=["Customers"])  # B5
 api_router.include_router(expenses.router, prefix="/expenses", tags=["Expenses"])  # B4
 api_router.include_router(summary.router, prefix="/summary", tags=["Summary"])  # B4
+api_router.include_router(backup.router, prefix="/backup", tags=["Backup"])  # B11: la app es local, el servidor guarda respaldos

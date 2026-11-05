@@ -1,5 +1,7 @@
 # AyeKitchen — Contrato de la API v1
 
+> **Desde 2026-11-05 la app es local** (docs/backup-format.md): guarda y calcula todo en el teléfono. El servidor solo autentica y guarda respaldos (`/backup`). Las rutas de negocio de abajo (B1–B10) se mantienen mientras se migra y después se retiran.
+
 Fuente de verdad entre `backend/`, `web/` e `ios/`. Si un cliente necesita algo que no está aquí, se cambia **este archivo primero** y luego el código.
 
 Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com/api/v1` (prod).
@@ -32,6 +34,9 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 | `INVALID_REFERENCE` | 422 | Un id referenciado en el body no existe en el workspace (proveedor, ingrediente, receta, cliente, presentación de otro ingrediente) |
 | `CUSTOMER_REQUIRED` | 422 | Un pedido nuevo sin `customer_id` ni `customer_name` |
 | `PAYMENT_EXCEEDS_BALANCE` | 422 | El pago deja el saldo del pedido negativo, o un cambio de líneas dejaría el total por debajo de lo ya pagado |
+| `BACKUP_CONFLICT` | 409 | Subir un respaldo cuando el último del servidor no es el que este teléfono conoce (otro dispositivo subió después) y no se mandó `force` |
+| `BACKUP_TOO_LARGE` | 413 | El respaldo pasa de 10 MB sin comprimir |
+| `INVALID_BACKUP` | 422 | El cuerpo no es un documento de respaldo válido (`schema_version` falta, no es entero, o es mayor que la que el servidor conoce) |
 
 ---
 
@@ -319,3 +324,23 @@ Los pedidos de un cliente se piden con `GET /orders/?customer_id=<id>`.
  estimated_profit_cents,  # profit de pedidos entregados en el mes (con snapshot)
  receivable_cents}        # saldo pendiente de pedidos no cancelados con entrega en el mes
 ```
+
+---
+
+## /backup — Respaldo del teléfono (B11)
+
+El teléfono sube su documento completo (`docs/backup-format.md`) y lo puede bajar para restaurar. El servidor **no interpreta** los datos: solo valida lo mínimo, lo guarda comprimido y lo devuelve igual. Un dispositivo por cuenta.
+
+`BackupInfo`: `{id, schema_version, device_id, exported_at, created_at, size_bytes}` (`size_bytes` = tamaño del JSON sin comprimir).
+
+| Método | Ruta | Body / Query | Notas |
+|---|---|---|---|
+| GET | `/backup/` | — | Lista de `BackupInfo` del workspace, `created_at` desc (máximo 5) |
+| GET | `/backup/latest` | — | El documento más reciente tal cual se subió (JSON). Sin respaldos → 404 `NOT_FOUND` |
+| PUT | `/backup/` | el documento; query `?base_backup_id=&force=` | 201 `BackupInfo`. Valida `schema_version` (entero ≤ 1) y que `device_id` y `exported_at` existan → si no, `INVALID_BACKUP`. Más de 10 MB → `BACKUP_TOO_LARGE`. **Conflicto:** si ya hay un respaldo y su `id` no es `base_backup_id` y su `device_id` es distinto al del cuerpo, → `BACKUP_CONFLICT` con `detail` que incluye la fecha del otro respaldo; `force=true` lo salta. Guarda gzip del JSON y conserva los 5 más recientes del workspace (borra físicamente los demás: son copias) |
+| GET | `/backup/export-current` | — | Arma el documento con los datos actuales de las colecciones del workspace (sección "Migración" de `backup-format.md`). No guarda nada. Para la primera vez que la app pasa a local |
+
+Notas:
+- `base_backup_id` es el `id` del último respaldo que el teléfono subió o restauró. El primero no lo manda.
+- El servidor guarda el JSON tal cual lo recibe (no lo reescribe), para que `/backup/latest` devuelva exactamente lo que el teléfono subió.
+

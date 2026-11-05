@@ -6,6 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.core.config import settings
 from app.core.logging import logger
+from app.models.backup import Backup
 from app.models.cost_version import CostVersion
 from app.models.customer import Customer
 from app.models.ingredient import Ingredient
@@ -35,6 +36,7 @@ DOCUMENT_MODELS = [
     Customer,
     Order,
     Expense,
+    Backup,
 ]
 
 
