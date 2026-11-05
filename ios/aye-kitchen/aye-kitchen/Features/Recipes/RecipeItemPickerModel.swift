@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import KitchenDomain
+import Observation
 
 enum RecipeItemPickerTab: String, CaseIterable, Identifiable, Sendable {
     case ingredients = "Ingredientes"
@@ -10,129 +12,48 @@ enum RecipeItemPickerTab: String, CaseIterable, Identifiable, Sendable {
 
 @Observable
 final class RecipeItemPickerModel {
+    private let store: LocalStore
     var tab: RecipeItemPickerTab = .ingredients
     var searchText: String = ""
-
-    var ingredients: [RemoteIngredient] = []
-    var usableSubrecipes: [UsableSubrecipe] = []
-    var allRecipes: [RemoteRecipeListItem] = []
-
-    var isLoading: Bool = false
-    var errorMessage: String? = nil
-
     let editingRecipeId: String?
-    private(set) var isMock: Bool = false
-    private var searchTask: Task<Void, Never>?
 
     init(
         editingRecipeId: String? = nil,
-        mockIngredients: [RemoteIngredient]? = nil,
-        mockSubrecipes: [UsableSubrecipe]? = nil,
-        mockAllRecipes: [RemoteRecipeListItem]? = nil
+        store: LocalStore = .shared
     ) {
         self.editingRecipeId = editingRecipeId
-        if let mockIngredients {
-            self.ingredients = mockIngredients
-            self.isMock = true
-        }
-        if let mockSubrecipes {
-            self.usableSubrecipes = mockSubrecipes
-            self.isMock = true
-        }
-        if let mockAllRecipes {
-            self.allRecipes = mockAllRecipes
-            self.isMock = true
-        }
+        self.store = store
     }
 
-    func loadInitialData() async {
-        guard !isMock else { return }
-        isLoading = true
-        defer { isLoading = false }
+    var ingredients: [Ingredient] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        let active = store.data.ingredients.filter { $0.isActive }
+        if trimmed.isEmpty {
+            return active.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }
+        return active
+            .filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
 
-        await loadIngredients(query: "")
-
+    var usableSubrecipes: [RecipeUsableSubrecipe] {
+        let trimmed = searchText.trimmingCharacters(in: .whitespaces)
+        let list: [RecipeUsableSubrecipe]
         if let editingRecipeId {
-            do {
-                let subrecipes: [UsableSubrecipe] = try await NetworkService.shared.request(
-                    .get,
-                    "/recipes/\(editingRecipeId)/usable-as-subrecipe"
-                )
-                self.usableSubrecipes = subrecipes
-            } catch where error.isCancellation {
-                // Cancelado: no mostrar error ni cambiar datos existentes
-            } catch {
-                self.errorMessage = error.localizedDescription
-            }
+            list = (try? store.data.usableSubrecipes(for: editingRecipeId)) ?? []
         } else {
-            do {
-                let page: Page<RemoteRecipeListItem> = try await NetworkService.shared.request(
-                    .get,
-                    "/recipes/",
-                    query: [URLQueryItem(name: "limit", value: "100")]
-                )
-                self.allRecipes = page.items
-            } catch where error.isCancellation {
-                // Cancelado: no mostrar error ni cambiar datos existentes
-            } catch {
-                self.errorMessage = error.localizedDescription
-            }
+            list = store.data.recipes
+                .filter { $0.isActive }
+                .map { RecipeUsableSubrecipe(id: $0.id, name: $0.name, yieldUnit: $0.yieldUnit) }
+                .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         }
-    }
-
-    func onSearchTextChanged(_ newText: String) {
-        searchText = newText
-        guard !isMock else { return }
-
-        searchTask?.cancel()
-        searchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            await loadIngredients(query: newText)
+        if trimmed.isEmpty {
+            return list
         }
+        return list.filter { $0.name.localizedCaseInsensitiveContains(trimmed) }
     }
 
-    private func loadIngredients(query: String) async {
-        do {
-            var queryItems = [URLQueryItem(name: "limit", value: "50")]
-            let trimmed = query.trimmingCharacters(in: .whitespaces)
-            if !trimmed.isEmpty {
-                queryItems.append(URLQueryItem(name: "q", value: trimmed))
-            }
-            let page: Page<RemoteIngredient> = try await NetworkService.shared.request(
-                .get,
-                "/ingredients/",
-                query: queryItems
-            )
-            self.ingredients = page.items
-        } catch where error.isCancellation {
-            // Cancelado: no mostrar error ni cambiar datos existentes
-        } catch {
-            if !Task.isCancelled {
-                self.errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    /// Agrega un ingrediente al principio de la lista sin duplicar por id.
-    func prependIngredient(_ ingredient: RemoteIngredient) {
-        ingredients.removeAll { $0.id == ingredient.id }
-        ingredients.insert(ingredient, at: 0)
-    }
-
-    var filteredSubrecipes: [UsableSubrecipe] {
-        let trimmed = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if trimmed.isEmpty { return usableSubrecipes }
-        return usableSubrecipes.filter { $0.name.lowercased().contains(trimmed) }
-    }
-
-    var filteredAllRecipes: [RemoteRecipeListItem] {
-        let trimmed = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        if trimmed.isEmpty { return allRecipes }
-        return allRecipes.filter { $0.recipe.name.lowercased().contains(trimmed) }
-    }
-
-    static func ingredientSubtitle(for baseUnit: RemoteBaseUnit) -> String {
+    static func ingredientSubtitle(for baseUnit: BaseUnit) -> String {
         switch baseUnit {
         case .g: "Por peso (g)"
         case .ml: "Por volumen (ml)"
@@ -140,7 +61,7 @@ final class RecipeItemPickerModel {
         }
     }
 
-    static func recipeSubtitle(for yieldUnit: RemoteBaseUnit) -> String {
+    static func recipeSubtitle(for yieldUnit: BaseUnit) -> String {
         switch yieldUnit {
         case .g: "Rinde en gramos"
         case .ml: "Rinde en mililitros"

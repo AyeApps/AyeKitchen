@@ -1,4 +1,5 @@
 import SwiftUI
+import KitchenDomain
 
 /// Modo de operación para la hoja de nombre de versión.
 enum CostVersionNameMode: Sendable {
@@ -20,7 +21,7 @@ enum CostVersionNameMode: Sendable {
     }
 }
 
-/// Hoja para crear o renombrar una versión de costeo (Bloque I10).
+/// Hoja para crear o renombrar una versión de costeo (Bloque I10 / I17 local-first).
 struct CostVersionNameSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -123,11 +124,11 @@ struct CostVersionNameSheet: View {
             do {
                 try await onSave(trimmedName)
                 dismiss()
-            } catch let apiError as APIError {
-                if apiError.code == "DUPLICATE_NAME" {
+            } catch let domainError as DomainError {
+                if case .duplicateName = domainError {
                     errorMessage = "Ya tienes una versión con ese nombre"
                 } else {
-                    errorMessage = apiError.localizedDescription
+                    errorMessage = domainError.localizedDescription
                 }
             } catch {
                 errorMessage = error.localizedDescription

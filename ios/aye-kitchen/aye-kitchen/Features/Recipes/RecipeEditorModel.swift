@@ -1,10 +1,18 @@
 import Foundation
 import SwiftUI
+import KitchenDomain
+import Observation
+
+/// Modo del editor de receta.
+enum RecipeEditorMode: Sendable, Hashable {
+    case create
+    case edit(recipeId: String)
+}
 
 /// Línea de ingrediente o subreceta dentro del editor de receta.
 struct RecipeEditorLine: Identifiable, Hashable, Sendable {
     let id: UUID
-    var kind: RemoteRecipeItemKind
+    var kind: RecipeItemKind
     var refId: String
     var refName: String
     var quantity: String
@@ -15,7 +23,7 @@ struct RecipeEditorLine: Identifiable, Hashable, Sendable {
 
     init(
         id: UUID = UUID(),
-        kind: RemoteRecipeItemKind,
+        kind: RecipeItemKind,
         refId: String,
         refName: String,
         quantity: String,
@@ -36,129 +44,23 @@ struct RecipeEditorLine: Identifiable, Hashable, Sendable {
     }
 }
 
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-
-nonisolated struct RecipeItemInput: Encodable, Sendable {
-    let kind: RemoteRecipeItemKind
-    let refId: String
-    let quantity: String
-    let unitId: String?
-    let pinnedPresentationId: String?
-
-    enum CodingKeys: String, CodingKey {
-        case kind
-        case refId
-        case quantity
-        case unitId
-        case pinnedPresentationId
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(kind, forKey: .kind)
-        try container.encode(refId, forKey: .refId)
-        try container.encode(quantity, forKey: .quantity)
-        if let unitId {
-            try container.encode(unitId, forKey: .unitId)
-        } else {
-            try container.encodeNil(forKey: .unitId)
-        }
-        if let pinnedPresentationId {
-            try container.encode(pinnedPresentationId, forKey: .pinnedPresentationId)
-        } else {
-            try container.encodeNil(forKey: .pinnedPresentationId)
-        }
-    }
-}
-
-nonisolated struct ExtraCostInput: Encodable, Sendable {
-    let name: String
-    let costCents: Int
-}
-
-nonisolated struct RecipeCreateRequest: Encodable, Sendable {
-    let name: String
-    let description: String?
-    let items: [RecipeItemInput]
-    let extraCosts: [ExtraCostInput]
-    let yieldQuantity: String
-    let yieldUnit: RemoteBaseUnit
-    let servings: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case name, description, items, extraCosts, yieldQuantity, yieldUnit, servings
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(name, forKey: .name)
-        if let description = description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
-            try container.encode(description, forKey: .description)
-        } else {
-            try container.encodeNil(forKey: .description)
-        }
-        try container.encode(items, forKey: .items)
-        try container.encode(extraCosts, forKey: .extraCosts)
-        try container.encode(yieldQuantity, forKey: .yieldQuantity)
-        try container.encode(yieldUnit, forKey: .yieldUnit)
-        if let servings {
-            try container.encode(servings, forKey: .servings)
-        } else {
-            try container.encodeNil(forKey: .servings)
-        }
-    }
-}
-
-nonisolated struct RecipePatchRequest: Encodable, Sendable {
-    let name: String
-    let description: String?
-    let items: [RecipeItemInput]
-    let extraCosts: [ExtraCostInput]
-    let yieldQuantity: String
-    let yieldUnit: RemoteBaseUnit
-    let servings: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case name, description, items, extraCosts, yieldQuantity, yieldUnit, servings
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(name, forKey: .name)
-        if let description = description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
-            try container.encode(description, forKey: .description)
-        } else {
-            try container.encodeNil(forKey: .description)
-        }
-        try container.encode(items, forKey: .items)
-        try container.encode(extraCosts, forKey: .extraCosts)
-        try container.encode(yieldQuantity, forKey: .yieldQuantity)
-        try container.encode(yieldUnit, forKey: .yieldUnit)
-        if let servings {
-            try container.encode(servings, forKey: .servings)
-        } else {
-            try container.encodeNil(forKey: .servings)
-        }
-    }
-}
-
 // MARK: - Mapeo de errores
 
 func userFacingRecipeError(_ error: Error) -> String {
-    if let apiError = error as? APIError {
-        switch apiError.code {
-        case "DUPLICATE_NAME":
+    if let domainError = error as? DomainError {
+        switch domainError {
+        case .duplicateName:
             return "Ya tienes una receta con ese nombre."
-        case "UNIT_NOT_CONVERTIBLE":
-            return apiError.errorDescription ?? "Esa unidad no se puede convertir."
-        case "RECIPE_CYCLE":
+        case .unitNotConvertible(let detail):
+            return detail.isEmpty ? "Esa unidad no se puede convertir." : detail
+        case .recipeCycle:
             return "Esa receta ya usa a esta. Una receta no puede llevarse a sí misma."
-        case "RECIPE_TOO_DEEP":
+        case .recipeTooDeep:
             return "Hay demasiadas recetas una dentro de otra (máximo 10)."
-        case "INVALID_REFERENCE":
-            return "Uno de los ingredientes o marcas ya no existe."
+        case .invalidReference(let detail):
+            return detail.isEmpty ? "Uno de los ingredientes o marcas ya no existe." : detail
         default:
-            return apiError.errorDescription ?? error.localizedDescription
+            return domainError.localizedDescription
         }
     }
     return error.localizedDescription
@@ -194,27 +96,34 @@ func formatQuantityAndUnit(quantity: String, unitName: String?) -> String {
 
 @Observable
 final class RecipeEditorModel {
-    let recipe: RemoteRecipe?
+    let mode: RecipeEditorMode
+    private let store: LocalStore
 
     var name: String = ""
     var descriptionText: String = ""
     var yieldQuantity: String = "1"
-    var yieldUnit: RemoteBaseUnit = .pz
+    var yieldUnit: BaseUnit = .pz
     var servings: Int? = nil
     var items: [RecipeEditorLine] = []
-    var extraCosts: [RemoteExtraCost] = []
-    var allUnits: [MeasureUnit] = []
+    var extraCosts: [ExtraCost] = []
+    var allUnits: [KitchenUnit] = []
 
     var isSaving: Bool = false
     var errorMessage: String? = nil
 
-    var isLoadingUnits: Bool = false
-    var unitsError: String? = nil
+    // Snapshots para hasUnsavedChanges
+    private var initialName: String = ""
+    private var initialDescription: String = ""
+    private var initialYieldQuantity: String = "1"
+    private var initialYieldUnit: BaseUnit = .pz
+    private var initialServings: Int? = nil
+    private var initialItems: [RecipeEditorLine] = []
+    private var initialExtraCosts: [ExtraCost] = []
 
-    var isLoadingLineToEdit: Bool = false
-    var lineLoadErrorMessage: String? = nil
-
-    var isEditing: Bool { recipe != nil }
+    var isEditing: Bool {
+        if case .edit = mode { return true }
+        return false
+    }
 
     var canSave: Bool {
         let cleanName = name.trimmingCharacters(in: .whitespaces)
@@ -224,17 +133,17 @@ final class RecipeEditorModel {
     }
 
     var hasUnsavedChanges: Bool {
-        if let initial = recipe {
-            if name != initial.name { return true }
-            if descriptionText != (initial.description ?? "") { return true }
-            if yieldQuantity != initial.yieldQuantity { return true }
-            if yieldUnit != initial.yieldUnit { return true }
-            if servings != initial.servings { return true }
-            if extraCosts != initial.extraCosts { return true }
+        if isEditing {
+            if name != initialName { return true }
+            if descriptionText != initialDescription { return true }
+            if yieldQuantity != initialYieldQuantity { return true }
+            if yieldUnit != initialYieldUnit { return true }
+            if servings != initialServings { return true }
+            if extraCosts != initialExtraCosts { return true }
 
-            if items.count != initial.items.count { return true }
+            if items.count != initialItems.count { return true }
             for (idx, item) in items.enumerated() {
-                let initItem = initial.items[idx]
+                let initItem = initialItems[idx]
                 if item.kind != initItem.kind ||
                     item.refId != initItem.refId ||
                     item.quantity != initItem.quantity ||
@@ -256,103 +165,69 @@ final class RecipeEditorModel {
         }
     }
 
-    init(recipe: RemoteRecipe? = nil, mockUnits: [MeasureUnit]? = nil) {
-        self.recipe = recipe
-        if let mockUnits {
-            self.allUnits = mockUnits
-        }
-        if let recipe {
+    init(mode: RecipeEditorMode = .create, store: LocalStore = .shared) {
+        self.mode = mode
+        self.store = store
+        let units = store.data.availableKitchenUnits()
+        self.allUnits = units
+
+        if case .edit(let recipeId) = mode, let recipe = store.data.recipe(id: recipeId) {
             self.name = recipe.name
             self.descriptionText = recipe.description ?? ""
             self.yieldQuantity = recipe.yieldQuantity
             self.yieldUnit = recipe.yieldUnit
             self.servings = recipe.servings
-            self.items = recipe.items.map {
-                RecipeEditorLine(
-                    kind: $0.kind,
-                    refId: $0.refId,
-                    refName: $0.refName,
-                    quantity: $0.quantity,
-                    unitId: $0.unitId,
-                    unitName: $0.unitName,
-                    pinnedPresentationId: $0.pinnedPresentationId
-                )
-            }
             self.extraCosts = recipe.extraCosts
-        }
-    }
 
-    func loadInitialData() async {
-        guard allUnits.isEmpty else {
-            await resolvePinnedBrandNames()
-            return
-        }
-
-        isLoadingUnits = true
-        unitsError = nil
-        defer { isLoadingUnits = false }
-
-        do {
-            let units: [MeasureUnit] = try await NetworkService.shared.request(.get, "/units/")
-            self.allUnits = units
-            await resolvePinnedBrandNames()
-        } catch where error.isCancellation {
-            // Ignorar cancelación: no mostrar error
-        } catch {
-            self.unitsError = error.localizedDescription
-        }
-    }
-
-    private func resolvePinnedBrandNames() async {
-        // Si hay líneas con pinnedPresentationId pero sin pinnedBrandName, resolver el nombre de la marca
-        for idx in items.indices {
-            if let pinnedId = items[idx].pinnedPresentationId,
-               items[idx].pinnedBrandName == nil,
-               items[idx].kind == .ingredient {
-                let ingId = items[idx].refId
-                if let presentations: Page<RemotePresentation> = try? await NetworkService.shared.request(
-                    .get,
-                    "/presentations/",
-                    query: [
-                        URLQueryItem(name: "ingredient_id", value: ingId),
-                        URLQueryItem(name: "limit", value: "100")
-                    ]
-                ) {
-                    if let pres = presentations.items.first(where: { $0.id == pinnedId }) {
-                        items[idx].pinnedBrandName = pres.brand
-                    }
+            var mappedLines: [RecipeEditorLine] = []
+            for it in recipe.items {
+                let refName: String
+                switch it.kind {
+                case .ingredient:
+                    refName = store.data.ingredients.first(where: { $0.id == it.refId })?.name ?? ""
+                case .recipe:
+                    refName = store.data.recipes.first(where: { $0.id == it.refId })?.name ?? ""
                 }
+                let unitName = it.unitId.flatMap { uid in units.first(where: { $0.id == uid })?.name }
+                let brandName = it.pinnedPresentationId.flatMap { pid in
+                    store.data.presentations.first(where: { $0.id == pid })?.brand
+                }
+
+                mappedLines.append(RecipeEditorLine(
+                    kind: it.kind,
+                    refId: it.refId,
+                    refName: refName,
+                    quantity: it.quantity,
+                    unitId: it.unitId,
+                    unitName: unitName,
+                    pinnedPresentationId: it.pinnedPresentationId,
+                    pinnedBrandName: brandName
+                ))
             }
+            self.items = mappedLines
+
+            // Guardar snapshot inicial
+            self.initialName = recipe.name
+            self.initialDescription = recipe.description ?? ""
+            self.initialYieldQuantity = recipe.yieldQuantity
+            self.initialYieldUnit = recipe.yieldUnit
+            self.initialServings = recipe.servings
+            self.initialExtraCosts = recipe.extraCosts
+            self.initialItems = mappedLines
         }
     }
 
-    /// Carga el ingrediente o subreceta de una línea para editarla en la hoja.
-    /// Si falla la petición, no inventa datos y devuelve nil registrando el mensaje de error.
-    func loadTarget(for item: RecipeEditorLine) async -> LineTarget? {
-        isLoadingLineToEdit = true
-        lineLoadErrorMessage = nil
-        defer { isLoadingLineToEdit = false }
-
-        do {
-            if item.kind == .ingredient {
-                let ing: RemoteIngredient = try await NetworkService.shared.request(
-                    .get,
-                    "/ingredients/\(item.refId)"
-                )
+    func loadTarget(for item: RecipeEditorLine) -> LineTarget? {
+        if item.kind == .ingredient {
+            if let ing = store.data.ingredients.first(where: { $0.id == item.refId && $0.isActive }) {
                 return .ingredient(ing)
-            } else {
-                let rec: RemoteRecipe = try await NetworkService.shared.request(
-                    .get,
-                    "/recipes/\(item.refId)"
-                )
+            }
+        } else {
+            if let rec = store.data.recipes.first(where: { $0.id == item.refId && $0.isActive }) {
                 return .subrecipe(id: rec.id, name: rec.name, yieldUnit: rec.yieldUnit)
             }
-        } catch where error.isCancellation {
-            return nil
-        } catch {
-            self.lineLoadErrorMessage = "No pudimos abrir este ingrediente. Revisa tu conexión e intenta de nuevo."
-            return nil
         }
+        return nil
     }
 
     func addLine(_ line: RecipeEditorLine) {
@@ -369,28 +244,29 @@ final class RecipeEditorModel {
         items.removeAll(where: { $0.id == line.id })
     }
 
-    func addExtraCost(_ cost: RemoteExtraCost) {
+    func addExtraCost(_ cost: ExtraCost) {
         extraCosts.append(cost)
     }
 
-    func removeExtraCost(_ cost: RemoteExtraCost) {
+    func removeExtraCost(_ cost: ExtraCost) {
         extraCosts.removeAll(where: { $0.name == cost.name && $0.costCents == cost.costCents })
     }
 
-    func save() async throws -> RemoteRecipe {
+    func save() throws -> Recipe {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
 
-        guard let cleanName = name.trimmingCharacters(in: .whitespaces).nilIfEmpty else {
-            throw APIError.server(status: 400, code: nil, message: "El nombre es obligatorio")
+        let cleanName = name.trimmingCharacters(in: .whitespaces)
+        guard !cleanName.isEmpty else {
+            throw DomainError.invalidValue(detail: "El nombre es obligatorio")
         }
         guard let parsedYield = Quantity.parse(yieldQuantity) else {
-            throw APIError.server(status: 400, code: nil, message: "El rendimiento debe ser un número mayor a 0")
+            throw DomainError.invalidValue(detail: "El rendimiento debe ser un número mayor a 0")
         }
 
-        let itemInputs = items.map {
-            RecipeItemInput(
+        let domainItems = items.map {
+            RecipeItem(
                 kind: $0.kind,
                 refId: $0.refId,
                 quantity: $0.quantity,
@@ -399,48 +275,34 @@ final class RecipeEditorModel {
             )
         }
 
-        let extraCostInputs = extraCosts.map {
-            ExtraCostInput(name: $0.name, costCents: $0.costCents)
+        switch mode {
+        case .create:
+            return try store.mutate { data, ctx in
+                try data.createRecipe(
+                    name: cleanName,
+                    description: descriptionText.isEmpty ? nil : descriptionText,
+                    items: domainItems,
+                    extraCosts: extraCosts,
+                    yieldQuantity: parsedYield,
+                    yieldUnit: yieldUnit,
+                    servings: servings,
+                    ctx: ctx
+                )
+            }
+        case .edit(let recipeId):
+            return try store.mutate { data, ctx in
+                try data.updateRecipe(
+                    id: recipeId,
+                    name: cleanName,
+                    description: descriptionText.isEmpty ? nil : descriptionText,
+                    items: domainItems,
+                    extraCosts: extraCosts,
+                    yieldQuantity: parsedYield,
+                    yieldUnit: yieldUnit,
+                    servings: servings,
+                    ctx: ctx
+                )
+            }
         }
-
-        if let recipe {
-            let body = RecipePatchRequest(
-                name: cleanName,
-                description: descriptionText,
-                items: itemInputs,
-                extraCosts: extraCostInputs,
-                yieldQuantity: parsedYield,
-                yieldUnit: yieldUnit,
-                servings: servings
-            )
-            let updated: RemoteRecipe = try await NetworkService.shared.request(
-                .patch,
-                "/recipes/\(recipe.id)",
-                body: body
-            )
-            return updated
-        } else {
-            let body = RecipeCreateRequest(
-                name: cleanName,
-                description: descriptionText,
-                items: itemInputs,
-                extraCosts: extraCostInputs,
-                yieldQuantity: parsedYield,
-                yieldUnit: yieldUnit,
-                servings: servings
-            )
-            let created: RemoteRecipe = try await NetworkService.shared.request(
-                .post,
-                "/recipes/",
-                body: body
-            )
-            return created
-        }
-    }
-}
-
-private extension String {
-    var nilIfEmpty: String? {
-        isEmpty ? nil : self
     }
 }

@@ -1,10 +1,12 @@
 import Foundation
 import SwiftUI
+import KitchenDomain
+import Observation
 
 /// Destino de la línea: ingrediente o subreceta.
 enum LineTarget: Hashable, Sendable, Identifiable {
-    case ingredient(RemoteIngredient)
-    case subrecipe(id: String, name: String, yieldUnit: RemoteBaseUnit)
+    case ingredient(Ingredient)
+    case subrecipe(id: String, name: String, yieldUnit: BaseUnit)
 
     var id: String {
         switch self {
@@ -20,14 +22,14 @@ enum LineTarget: Hashable, Sendable, Identifiable {
         }
     }
 
-    var baseUnit: RemoteBaseUnit {
+    var baseUnit: BaseUnit {
         switch self {
         case .ingredient(let ing): ing.baseUnit
         case .subrecipe(_, _, let yieldUnit): yieldUnit
         }
     }
 
-    var kind: RemoteRecipeItemKind {
+    var kind: RecipeItemKind {
         switch self {
         case .ingredient: .ingredient
         case .subrecipe: .recipe
@@ -42,27 +44,16 @@ enum LineTarget: Hashable, Sendable, Identifiable {
     }
 }
 
-// MARK: - Cuerpos de petición para equivalencias (PATCH /ingredients/{id})
-
-nonisolated struct RecipeLineConversionInput: Encodable, Sendable {
-    let unitId: String
-    let quantityInBase: String
-}
-
-nonisolated struct IngredientConversionsPatchRequest: Encodable, Sendable {
-    let conversions: [RecipeLineConversionInput]
-}
-
 // MARK: - Helpers de texto y unidades
 
-func unitDisplayLabel(for unit: MeasureUnit) -> String {
+func unitDisplayLabel(for unit: KitchenUnit) -> String {
     if unit.abbreviation == "tz" {
         return "taza"
     }
     return unit.abbreviation
 }
 
-func unitDisplayPlural(for unit: MeasureUnit, qty: String) -> String {
+func unitDisplayPlural(for unit: KitchenUnit, qty: String) -> String {
     let isSingle = (Quantity.parse(qty) == "1")
     let lower = unit.abbreviation.lowercased()
     if lower == "tz" {
@@ -79,7 +70,7 @@ func unitDisplayPlural(for unit: MeasureUnit, qty: String) -> String {
     return unit.abbreviation
 }
 
-func equivalenceQuestionText(ingredientName: String, baseUnit: RemoteBaseUnit, unitName: String) -> String {
+func equivalenceQuestionText(ingredientName: String, baseUnit: BaseUnit, unitName: String) -> String {
     let lowerName = ingredientName.lowercased()
     let basePlural: String = switch baseUnit {
     case .g: "gramos"
@@ -106,30 +97,28 @@ func equivalenceQuestionText(ingredientName: String, baseUnit: RemoteBaseUnit, u
 @Observable
 final class RecipeLineModel {
     var target: LineTarget
-    var allUnits: [MeasureUnit]
+    var allUnits: [KitchenUnit]
     var existingLine: RecipeEditorLine?
+    private let store: LocalStore
 
     var quantityText: String = "1"
     var selectedUnitId: String = ""
     var pinnedPresentationId: String? = nil
-    var presentations: [RemotePresentation] = []
-    var isLoadingPresentations: Bool = false
 
     var equivalenceQuantity: String = ""
     var isSavingEquivalence: Bool = false
     var errorMessage: String? = nil
 
-    private(set) var isMock: Bool = false
-
     init(
         target: LineTarget,
         existingLine: RecipeEditorLine? = nil,
-        allUnits: [MeasureUnit],
-        mockPresentations: [RemotePresentation]? = nil
+        allUnits: [KitchenUnit],
+        store: LocalStore = .shared
     ) {
         self.target = target
         self.existingLine = existingLine
         self.allUnits = allUnits
+        self.store = store
 
         if let existingLine {
             self.quantityText = existingLine.quantity
@@ -139,18 +128,12 @@ final class RecipeLineModel {
             }
         }
 
-        if let mockPresentations {
-            self.presentations = mockPresentations
-            self.isMock = true
-        }
-
-        // Si selectedUnitId sigue vacío, asignar la por defecto
         if selectedUnitId.isEmpty {
             self.selectedUnitId = defaultUnitId(for: target, allUnits: allUnits)
         }
     }
 
-    private func defaultUnitId(for target: LineTarget, allUnits: [MeasureUnit]) -> String {
+    private func defaultUnitId(for target: LineTarget, allUnits: [KitchenUnit]) -> String {
         let base = target.baseUnit
         let targetAbbr: String = switch base {
         case .g: "g"
@@ -160,7 +143,6 @@ final class RecipeLineModel {
         if let match = allUnits.first(where: { $0.abbreviation == targetAbbr }) {
             return match.id
         }
-        // Fallback al primer match con la misma base
         if let matchBase = allUnits.first(where: { $0.baseUnit == base }) {
             return matchBase.id
         }
@@ -169,7 +151,7 @@ final class RecipeLineModel {
 
     // MARK: - Unidades disponibles y filtros
 
-    var availableUnits: [MeasureUnit] {
+    var availableUnits: [KitchenUnit] {
         switch target {
         case .ingredient:
             return allUnits
@@ -178,7 +160,7 @@ final class RecipeLineModel {
         }
     }
 
-    var primaryUnits: [MeasureUnit] {
+    var primaryUnits: [KitchenUnit] {
         let abbreviations: [String] = switch target.baseUnit {
         case .g: ["g", "kg", "tz", "cda", "cdta"]
         case .ml: ["ml", "l", "tz", "cda", "cdta"]
@@ -197,12 +179,12 @@ final class RecipeLineModel {
         }
     }
 
-    var moreUnits: [MeasureUnit] {
+    var moreUnits: [KitchenUnit] {
         let primaryIds = Set(primaryUnits.map(\.id))
         return availableUnits.filter { !primaryIds.contains($0.id) }
     }
 
-    var selectedUnit: MeasureUnit? {
+    var selectedUnit: KitchenUnit? {
         allUnits.first(where: { $0.id == selectedUnitId })
     }
 
@@ -263,27 +245,12 @@ final class RecipeLineModel {
 
     // MARK: - Presentaciones / Marcas
 
-    func loadPresentations() async {
-        guard case .ingredient(let ing) = target, !isMock else { return }
-        isLoadingPresentations = true
-        defer { isLoadingPresentations = false }
-
-        do {
-            let page: Page<RemotePresentation> = try await NetworkService.shared.request(
-                .get,
-                "/presentations/",
-                query: [
-                    URLQueryItem(name: "ingredient_id", value: ing.id),
-                    URLQueryItem(name: "limit", value: "100")
-                ]
-            )
-            self.presentations = page.items
-        } catch {
-            // Se muestra estado de error o aviso sin marcas
-        }
+    var presentations: [CatalogPresentation] {
+        guard case .ingredient(let ing) = target else { return [] }
+        return (try? store.data.presentations(ingredientId: ing.id)) ?? []
     }
 
-    var currentOrPinnedPresentation: RemotePresentation? {
+    var currentOrPinnedPresentation: CatalogPresentation? {
         if let pinnedId = pinnedPresentationId,
            let match = presentations.first(where: { $0.id == pinnedId }) {
             return match
@@ -293,14 +260,14 @@ final class RecipeLineModel {
                presentations.first
     }
 
-    func presentationTitle(_ p: RemotePresentation) -> String {
+    func presentationTitle(_ p: CatalogPresentation) -> String {
         if let sup = p.supplierName, !sup.isEmpty {
             return "\(p.brand) · \(sup)"
         }
         return p.brand
     }
 
-    func presentationSubtitle(_ p: RemotePresentation) -> String {
+    func presentationSubtitle(_ p: CatalogPresentation) -> String {
         if let cents = p.latestPriceCents {
             let priceFormatted = Money.format(cents: cents)
             let qtyFormatted = Quantity.format(p.packageQuantity)
@@ -381,33 +348,26 @@ final class RecipeLineModel {
 
     // MARK: - Guardar la línea
 
-    func saveLine() async throws -> RecipeEditorLine {
+    func saveLine() throws -> RecipeEditorLine {
         guard let parsedQty = Quantity.parse(quantityText) else {
-            throw APIError.server(status: 400, code: nil, message: "Cantidad no válida")
+            throw DomainError.invalidValue(detail: "Cantidad no válida")
         }
         guard let selectedUnit else {
-            throw APIError.server(status: 400, code: nil, message: "Unidad no válida")
+            throw DomainError.invalidValue(detail: "Unidad no válida")
         }
 
-        // Si falta equivalencia, guardarla en el ingrediente primero
         if case .ingredient(let ing) = target, !isUnitConvertible {
             guard let eqQty = Quantity.parse(equivalenceQuantity) else {
-                throw APIError.server(status: 400, code: nil, message: "Falta responder la pregunta de equivalencia")
+                throw DomainError.invalidValue(detail: "Falta responder la pregunta de equivalencia")
             }
             isSavingEquivalence = true
             defer { isSavingEquivalence = false }
 
-            let existingInputs = ing.conversions.map {
-                RecipeLineConversionInput(unitId: $0.unitId, quantityInBase: $0.quantityInBase)
+            let newConv = IngredientConversion(unitId: selectedUnitId, quantityInBase: eqQty)
+            let updatedConversions = ing.conversions + [newConv]
+            let updated = try store.mutate { data, ctx in
+                try data.updateIngredient(id: ing.id, conversions: updatedConversions, ctx: ctx)
             }
-            let newConv = RecipeLineConversionInput(unitId: selectedUnitId, quantityInBase: eqQty)
-            let patchBody = IngredientConversionsPatchRequest(conversions: existingInputs + [newConv])
-
-            let updated: RemoteIngredient = try await NetworkService.shared.request(
-                .patch,
-                "/ingredients/\(ing.id)",
-                body: patchBody
-            )
             target = .ingredient(updated)
         }
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import KitchenDomain
 
 /// Hoja de línea según el artboard "Agregar ingrediente — iPhone".
 /// Permite capturar cantidad, unidad, pregunta de equivalencia si aplica, y marca/precio.
@@ -14,15 +15,15 @@ struct RecipeLineSheet: View {
     init(
         target: LineTarget,
         existingLine: RecipeEditorLine? = nil,
-        allUnits: [MeasureUnit],
-        mockPresentations: [RemotePresentation]? = nil,
+        allUnits: [KitchenUnit],
+        store: LocalStore = .shared,
         onSave: @escaping @MainActor @Sendable (RecipeEditorLine) -> Void
     ) {
         _model = State(initialValue: RecipeLineModel(
             target: target,
             existingLine: existingLine,
             allUnits: allUnits,
-            mockPresentations: mockPresentations
+            store: store
         ))
         self.onSave = onSave
     }
@@ -59,9 +60,6 @@ struct RecipeLineSheet: View {
                     .fontWeight(.semibold)
                     .foregroundStyle(.tint)
                 }
-            }
-            .task {
-                await model.loadPresentations()
             }
         }
     }
@@ -226,12 +224,7 @@ struct RecipeLineSheet: View {
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.inkPrimary)
 
-            if model.isLoadingPresentations {
-                ProgressView()
-                    .tint(Color.accentColor)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, Spacing.sm)
-            } else if model.presentations.isEmpty {
+            if model.presentations.isEmpty {
                 Text("Todavía no tiene precio. Agrégalo en Catálogo.")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.warningText)
@@ -302,14 +295,12 @@ struct RecipeLineSheet: View {
             }
 
             Button {
-                Task {
-                    do {
-                        let line = try await model.saveLine()
-                        onSave(line)
-                        dismiss()
-                    } catch {
-                        model.errorMessage = userFacingRecipeError(error)
-                    }
+                do {
+                    let line = try model.saveLine()
+                    onSave(line)
+                    dismiss()
+                } catch {
+                    model.errorMessage = userFacingRecipeError(error)
                 }
             } label: {
                 if model.isSavingEquivalence {
@@ -330,72 +321,24 @@ struct RecipeLineSheet: View {
 
 #if DEBUG
 #Preview("Harina con Pregunta de Equivalencia") {
-    let mockHarina = RemoteIngredient(
-        id: "ing-harina-preview",
-        name: "Harina",
-        baseUnit: .g,
-        group: "Secos",
-        notes: nil,
-        conversions: [],
-        createdAt: .now,
-        updatedAt: .now
-    )
-    let mockUnits = [
-        MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
-        MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
-        MeasureUnit(id: "u_tz", name: "taza", abbreviation: "tz", baseUnit: .ml, factorToBase: "240", isSystem: true),
-        MeasureUnit(id: "u_cda", name: "cucharada", abbreviation: "cda", baseUnit: .ml, factorToBase: "15", isSystem: true),
-        MeasureUnit(id: "u_cdta", name: "cucharadita", abbreviation: "cdta", baseUnit: .ml, factorToBase: "5", isSystem: true)
-    ]
-    let mockPresentations = [
-        RemotePresentation(
-            id: "p_1",
-            ingredientId: "ing-harina-preview",
-            ingredientName: "Harina",
-            brand: "Selecta",
-            supplierId: "s_1",
-            supplierName: "Walmart",
-            packageQuantity: "1000",
-            baseUnit: .g,
-            barcode: nil,
-            latestPriceCents: 2350,
-            latestPriceAt: .now,
-            costPerBaseUnit: "2.350000",
-            isCurrent: true,
-            priceAgeDays: 0,
-            priceIsStale: false,
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
+    let previewStore = LocalStore.preview()
+    let harina = previewStore.data.ingredients.first(where: { $0.id == "ing-harina" })!
 
     RecipeLineSheet(
-        target: .ingredient(mockHarina),
-        allUnits: mockUnits,
-        mockPresentations: mockPresentations
+        target: .ingredient(harina),
+        allUnits: previewStore.data.availableKitchenUnits(),
+        store: previewStore
     ) { _ in }
 }
 
 #Preview("Harina - Accesibilidad AX3") {
-    let mockHarina = RemoteIngredient(
-        id: "ing-harina-preview-ax",
-        name: "Harina",
-        baseUnit: .g,
-        group: "Secos",
-        notes: nil,
-        conversions: [],
-        createdAt: .now,
-        updatedAt: .now
-    )
-    let mockUnits = [
-        MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
-        MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
-        MeasureUnit(id: "u_tz", name: "taza", abbreviation: "tz", baseUnit: .ml, factorToBase: "240", isSystem: true)
-    ]
+    let previewStore = LocalStore.preview()
+    let harina = previewStore.data.ingredients.first(where: { $0.id == "ing-harina" })!
 
     RecipeLineSheet(
-        target: .ingredient(mockHarina),
-        allUnits: mockUnits
+        target: .ingredient(harina),
+        allUnits: previewStore.data.availableKitchenUnits(),
+        store: previewStore
     ) { _ in }
     .dynamicTypeSize(.accessibility3)
 }

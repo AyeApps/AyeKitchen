@@ -1,30 +1,29 @@
 import SwiftUI
+import KitchenDomain
 
-/// Hoja para seleccionar un ingrediente o una subreceta para la receta.
+/// Hoja para seleccionar un ingrediente o una subreceta para la receta (Bloque I3b / I17 local-first).
 struct RecipeItemPicker: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: RecipeItemPickerModel
+    private let store: LocalStore
     @State private var selectedTarget: LineTarget?
     @State private var showingNewIngredientSheet = false
-    @State private var pendingTargetIngredient: RemoteIngredient?
+    @State private var pendingTargetIngredient: Ingredient?
 
-    let allUnits: [MeasureUnit]
+    let allUnits: [KitchenUnit]
     let onSelectLine: @MainActor @Sendable (RecipeEditorLine) -> Void
 
     init(
         editingRecipeId: String? = nil,
-        allUnits: [MeasureUnit],
-        mockIngredients: [RemoteIngredient]? = nil,
-        mockSubrecipes: [UsableSubrecipe]? = nil,
-        mockAllRecipes: [RemoteRecipeListItem]? = nil,
+        allUnits: [KitchenUnit],
+        store: LocalStore = .shared,
         onSelectLine: @escaping @MainActor @Sendable (RecipeEditorLine) -> Void
     ) {
+        self.store = store
         _model = State(initialValue: RecipeItemPickerModel(
             editingRecipeId: editingRecipeId,
-            mockIngredients: mockIngredients,
-            mockSubrecipes: mockSubrecipes,
-            mockAllRecipes: mockAllRecipes
+            store: store
         ))
         self.allUnits = allUnits
         self.onSelectLine = onSelectLine
@@ -48,10 +47,7 @@ struct RecipeItemPicker: View {
             .navigationTitle("Agregar a la receta")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
-                text: Binding(
-                    get: { model.searchText },
-                    set: { model.onSearchTextChanged($0) }
-                ),
+                text: $model.searchText,
                 prompt: "Buscar en el catálogo…"
             )
             .toolbar {
@@ -64,7 +60,7 @@ struct RecipeItemPicker: View {
                 }
             }
             .sheet(item: $selectedTarget) { target in
-                RecipeLineSheet(target: target, allUnits: allUnits) { line in
+                RecipeLineSheet(target: target, allUnits: allUnits, store: store) { line in
                     onSelectLine(line)
                     dismiss()
                 }
@@ -75,135 +71,96 @@ struct RecipeItemPicker: View {
                     selectedTarget = .ingredient(pending)
                 }
             }) {
-                IngredientFormView(mode: .create, initialName: model.searchText.trimmingCharacters(in: .whitespaces))
-            }
-            .task {
-                await model.loadInitialData()
+                IngredientFormView(
+                    mode: .create,
+                    initialName: model.searchText.trimmingCharacters(in: .whitespaces),
+                    store: store
+                ) { newIngredient in
+                    pendingTargetIngredient = newIngredient
+                }
             }
         }
     }
 
     @ViewBuilder
     private var contentList: some View {
-        if model.isLoading && model.ingredients.isEmpty && model.usableSubrecipes.isEmpty && model.allRecipes.isEmpty {
-            ProgressView()
-                .tint(Color.accentColor)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            List {
-                switch model.tab {
-                case .ingredients:
-                    Button {
-                        showingNewIngredientSheet = true
-                    } label: {
-                        HStack(spacing: Spacing.xs) {
-                            Image(systemName: "plus.circle.fill")
-                                .imageScale(.medium)
-                            Text(newIngredientButtonTitle)
-                        }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+        List {
+            switch model.tab {
+            case .ingredients:
+                Button {
+                    showingNewIngredientSheet = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "plus.circle.fill")
+                            .imageScale(.medium)
+                        Text(newIngredientButtonTitle)
                     }
-                    .listRowBackground(Color.surfaceCard)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(Color.accentColor)
+                }
+                .listRowBackground(Color.surfaceCard)
 
-                    if model.ingredients.isEmpty {
-                        emptyState(text: "No se encontraron ingredientes.")
-                    } else {
-                        ForEach(model.ingredients) { ingredient in
-                            Button {
-                                selectedTarget = .ingredient(ingredient)
-                            } label: {
+                if model.ingredients.isEmpty {
+                    emptyState(text: "No se encontraron ingredientes.")
+                } else {
+                    ForEach(model.ingredients) { ingredient in
+                        Button {
+                            selectedTarget = .ingredient(ingredient)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(ingredient.name)
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.inkPrimary)
+
+                                Text(RecipeItemPickerModel.ingredientSubtitle(for: ingredient.baseUnit))
+                                    .font(.subheadline)
+                                    .foregroundStyle(.inkMuted)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Color.surfaceCard)
+                    }
+                }
+            case .myRecipes:
+                if model.usableSubrecipes.isEmpty {
+                    emptyState(text: "No hay subrecetas disponibles.")
+                } else {
+                    ForEach(model.usableSubrecipes) { subrecipe in
+                        Button {
+                            selectedTarget = .subrecipe(
+                                id: subrecipe.id,
+                                name: subrecipe.name,
+                                yieldUnit: subrecipe.yieldUnit
+                            )
+                        } label: {
+                            HStack(spacing: Spacing.sm) {
+                                Image(systemName: "fork.knife")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.accentTextDeep)
+
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(ingredient.name)
+                                    Text(subrecipe.name)
                                         .font(.body.weight(.semibold))
                                         .foregroundStyle(.inkPrimary)
 
-                                    Text(RecipeItemPickerModel.ingredientSubtitle(for: ingredient.baseUnit))
+                                    Text(RecipeItemPickerModel.recipeSubtitle(for: subrecipe.yieldUnit))
                                         .font(.subheadline)
                                         .foregroundStyle(.inkMuted)
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .listRowBackground(Color.surfaceCard)
+                            .contentShape(Rectangle())
                         }
-                    }
-                case .myRecipes:
-                    if model.editingRecipeId != nil {
-                        if model.filteredSubrecipes.isEmpty {
-                            emptyState(text: "No hay subrecetas disponibles.")
-                        } else {
-                            ForEach(model.filteredSubrecipes) { subrecipe in
-                                Button {
-                                    selectedTarget = .subrecipe(
-                                        id: subrecipe.id,
-                                        name: subrecipe.name,
-                                        yieldUnit: subrecipe.yieldUnit
-                                    )
-                                } label: {
-                                    HStack(spacing: Spacing.sm) {
-                                        Image(systemName: "fork.knife")
-                                            .font(.body.weight(.semibold))
-                                            .foregroundStyle(.accentTextDeep)
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(subrecipe.name)
-                                                .font(.body.weight(.semibold))
-                                                .foregroundStyle(.inkPrimary)
-
-                                            Text(RecipeItemPickerModel.recipeSubtitle(for: subrecipe.yieldUnit))
-                                                .font(.subheadline)
-                                                .foregroundStyle(.inkMuted)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .listRowBackground(Color.surfaceCard)
-                            }
-                        }
-                    } else {
-                        if model.filteredAllRecipes.isEmpty {
-                            emptyState(text: "No hay recetas disponibles.")
-                        } else {
-                            ForEach(model.filteredAllRecipes) { item in
-                                Button {
-                                    selectedTarget = .subrecipe(
-                                        id: item.recipe.id,
-                                        name: item.recipe.name,
-                                        yieldUnit: item.recipe.yieldUnit
-                                    )
-                                } label: {
-                                    HStack(spacing: Spacing.sm) {
-                                        Image(systemName: "fork.knife")
-                                            .font(.body.weight(.semibold))
-                                            .foregroundStyle(.accentTextDeep)
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(item.recipe.name)
-                                                .font(.body.weight(.semibold))
-                                                .foregroundStyle(.inkPrimary)
-
-                                            Text(RecipeItemPickerModel.recipeSubtitle(for: item.recipe.yieldUnit))
-                                                .font(.subheadline)
-                                                .foregroundStyle(.inkMuted)
-                                        }
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .listRowBackground(Color.surfaceCard)
-                            }
-                        }
+                        .buttonStyle(.plain)
+                        .listRowBackground(Color.surfaceCard)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
     }
 
     private var newIngredientButtonTitle: String {
@@ -211,7 +168,7 @@ struct RecipeItemPicker: View {
         if trimmed.isEmpty {
             return "Nuevo ingrediente"
         } else {
-            return "Crear “\(trimmed)”"
+            return "Crear \"\(trimmed)\""
         }
     }
 
@@ -222,81 +179,26 @@ struct RecipeItemPicker: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, Spacing.xl)
             .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
     }
 }
 
 // MARK: - Previews
 
 #if DEBUG
-private let previewUnits: [MeasureUnit] = [
-    MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
-    MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
-    MeasureUnit(id: "u_tz", name: "taza", abbreviation: "tz", baseUnit: .ml, factorToBase: "240", isSystem: true),
-    MeasureUnit(id: "u_cda", name: "cucharada", abbreviation: "cda", baseUnit: .ml, factorToBase: "15", isSystem: true),
-    MeasureUnit(id: "u_pz", name: "pieza", abbreviation: "pz", baseUnit: .pz, factorToBase: "1", isSystem: true)
-]
-
-#Preview("Selector de ingredientes y recetas") {
-    let mockIngredients = [
-        RemoteIngredient(
-            id: "ing-1",
-            name: "Harina de trigo",
-            baseUnit: .g,
-            group: "Secos",
-            notes: nil,
-            conversions: [],
-            createdAt: .now,
-            updatedAt: .now
-        ),
-        RemoteIngredient(
-            id: "ing-2",
-            name: "Leche entera",
-            baseUnit: .ml,
-            group: "Lácteos",
-            notes: nil,
-            conversions: [],
-            createdAt: .now,
-            updatedAt: .now
-        ),
-        RemoteIngredient(
-            id: "ing-3",
-            name: "Huevo",
-            baseUnit: .pz,
-            group: "Frescos",
-            notes: nil,
-            conversions: [],
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
-    let mockSubrecipes = [
-        UsableSubrecipe(id: "rec-1", name: "Betún de mantequilla", yieldUnit: .g)
-    ]
-
+#Preview("Selector de ingredientes") {
+    let previewStore = LocalStore.preview()
     RecipeItemPicker(
-        allUnits: previewUnits,
-        mockIngredients: mockIngredients,
-        mockSubrecipes: mockSubrecipes
+        allUnits: previewStore.data.availableKitchenUnits(),
+        store: previewStore
     ) { _ in }
 }
 
-#Preview("Selector - Accesibilidad AX3") {
-    let mockIngredients = [
-        RemoteIngredient(
-            id: "ing-1",
-            name: "Harina de trigo",
-            baseUnit: .g,
-            group: "Secos",
-            notes: nil,
-            conversions: [],
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
-
+#Preview("Selector de ingredientes — Letra AX3") {
+    let previewStore = LocalStore.preview()
     RecipeItemPicker(
-        allUnits: previewUnits,
-        mockIngredients: mockIngredients
+        allUnits: previewStore.data.availableKitchenUnits(),
+        store: previewStore
     ) { _ in }
     .dynamicTypeSize(.accessibility3)
 }

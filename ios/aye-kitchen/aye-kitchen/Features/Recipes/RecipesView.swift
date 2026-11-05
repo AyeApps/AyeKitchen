@@ -1,15 +1,18 @@
 import SwiftUI
+import KitchenDomain
 
-/// Lista de recetas según Bloque I3 / I13.
+/// Lista de recetas según Bloque I3 / I13 / I17 local-first.
 struct RecipesView: View {
-    @Environment(\.scenePhase) private var scenePhase
-
-    @State private var model = RecipesModel()
+    @State private var model: RecipesModel
+    private let store: LocalStore
     @State private var showingNewRecipe = false
-    @State private var recipeToDelete: RemoteRecipeListItem?
+    @State private var recipeToDelete: RecipeListItem?
     @State private var deleteErrorMessage: String?
-    @State private var searchTask: Task<Void, Never>?
-    @State private var isVisible = false
+
+    init(store: LocalStore = .shared) {
+        self.store = store
+        self._model = State(initialValue: RecipesModel(store: store))
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,8 +20,11 @@ struct RecipesView: View {
                 .background(.canvasBackground)
                 .navigationTitle("Recetas")
                 .searchable(text: $model.query, prompt: "Buscar receta")
-                .onChange(of: model.query) { _, newQuery in
-                    handleSearch(query: newQuery)
+                .onChange(of: model.query) { _, _ in
+                    model.recalculate()
+                }
+                .task(id: store.revision) {
+                    model.recalculateIfNeeded()
                 }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -28,29 +34,10 @@ struct RecipesView: View {
                     }
                 }
                 .sheet(isPresented: $showingNewRecipe) {
-                    RecipeEditorView { _ in
-                        Task {
-                            await model.refresh()
-                        }
-                    }
+                    RecipeEditorView(mode: .create, store: store)
                 }
                 .navigationDestination(for: String.self) { recipeId in
-                    RecipeDetailView(recipeId: recipeId)
-                }
-                .task {
-                    await model.load()
-                }
-                .onAppear {
-                    isVisible = true
-                }
-                .onDisappear {
-                    isVisible = false
-                }
-                .onChange(of: scenePhase) { _, newPhase in
-                    guard newPhase == .active, isVisible else { return }
-                    Task {
-                        await model.reloadIfStale()
-                    }
+                    RecipeDetailView(recipeId: recipeId, store: store)
                 }
                 .confirmationDialog(
                     "¿Borrar esta receta?",
@@ -62,14 +49,19 @@ struct RecipesView: View {
                 ) {
                     Button("Borrar receta", role: .destructive) {
                         if let recipe = recipeToDelete {
-                            Task {
-                                do {
-                                    try await model.deleteRecipe(id: recipe.id)
-                                    recipeToDelete = nil
-                                } catch {
-                                    deleteErrorMessage = error.localizedDescription
-                                    recipeToDelete = nil
+                            do {
+                                try model.deleteRecipe(id: recipe.id)
+                                recipeToDelete = nil
+                            } catch let domainError as DomainError {
+                                if case .inUse = domainError {
+                                    deleteErrorMessage = "No se puede borrar: otra receta la usa como parte de ella."
+                                } else {
+                                    deleteErrorMessage = domainError.localizedDescription
                                 }
+                                recipeToDelete = nil
+                            } catch {
+                                deleteErrorMessage = error.localizedDescription
+                                recipeToDelete = nil
                             }
                         }
                     }
@@ -78,7 +70,7 @@ struct RecipesView: View {
                     }
                 } message: {
                     if let recipe = recipeToDelete {
-                        Text("Se eliminará la receta '\(recipe.recipe.name)'. Esta acción no se puede deshacer.")
+                        Text("Se eliminará la receta '\(recipe.name)'. Esta acción no se puede deshacer.")
                     }
                 }
                 .alert("No se pudo borrar", isPresented: Binding(
@@ -96,101 +88,50 @@ struct RecipesView: View {
 
     @ViewBuilder
     private var content: some View {
-        switch model.state {
-        case .loading where model.isEmpty:
-            ProgressView()
-                .tint(Color.accentColor)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .error(let message) where model.isEmpty:
-            ErrorStateView(message: message) {
-                Task { await model.load() }
-            }
-
-        default:
-            if model.isEmpty {
-                ScrollView {
-                    if model.isSearching {
-                        ContentUnavailableView.search(text: model.query)
-                            .padding(.top, 40)
-                    } else {
-                        ContentUnavailableView(
-                            "Todavía no hay recetas",
-                            systemImage: "book.closed",
-                            description: Text("Arma una receta y te decimos cuánto te cuesta.")
-                        )
+        if model.isEmpty {
+            ScrollView {
+                if model.isSearching {
+                    ContentUnavailableView.search(text: model.query)
                         .padding(.top, 40)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .refreshable {
-                    await model.refresh()
-                }
-            } else {
-                List {
-                    ForEach(model.items) { item in
-                        NavigationLink(value: item.id) {
-                            RecipeRow(item: item)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                recipeToDelete = item
-                            } label: {
-                                Label("Borrar", systemImage: "trash")
-                            }
-                        }
-                        .onAppear {
-                            Task {
-                                await model.loadNextPageIfNeeded(currentItem: item)
-                            }
-                        }
-                    }
-
-                    if model.isLoadingMore {
-                        HStack {
-                            Spacer()
-                            ProgressView()
-                                .tint(Color.accentColor)
-                            Spacer()
-                        }
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                    }
-                }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
-                .refreshable {
-                    await model.refresh()
+                } else {
+                    ContentUnavailableView(
+                        "Todavía no hay recetas",
+                        systemImage: "book.closed",
+                        description: Text("Arma una receta y te decimos cuánto te cuesta.")
+                    )
+                    .padding(.top, 40)
                 }
             }
-        }
-    }
-
-    private func handleSearch(query: String) {
-        searchTask?.cancel()
-        searchTask = Task {
-            let trimmed = query.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty {
-                // Borró la búsqueda: vuelve a la primera pantalla (desde la caché si está)
-                await model.load()
-            } else {
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                if !Task.isCancelled {
-                    await model.load()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List {
+                ForEach(model.items) { item in
+                    NavigationLink(value: item.id) {
+                        RecipeRow(item: item)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            recipeToDelete = item
+                        } label: {
+                            Label("Borrar", systemImage: "trash")
+                        }
+                    }
                 }
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
         }
     }
 }
 
 /// Fila individual de receta en la lista.
 struct RecipeRow: View {
-    let item: RemoteRecipeListItem
+    let item: RecipeListItem
 
     var body: some View {
         HStack(alignment: .center, spacing: Spacing.md) {
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                Text(item.recipe.name)
+                Text(item.name)
                     .font(.headline)
                     .foregroundStyle(.inkPrimary)
 
@@ -218,39 +159,11 @@ struct RecipeRow: View {
 
 #if DEBUG
 #Preview("Claro") {
-    NavigationStack {
-        RecipesMockListContainer()
-    }
+    RecipesView(store: .preview())
 }
 
 #Preview("Letra AX3") {
-    NavigationStack {
-        RecipesMockListContainer()
-    }
-    .dynamicTypeSize(.accessibility3)
-}
-
-private struct RecipesMockListContainer: View {
-    @State private var model = RecipesModel(mockItems: RemoteRecipeListItem.mockListItems)
-    @State private var showingNew = false
-
-    var body: some View {
-        List {
-            ForEach(model.items) { item in
-                RecipeRow(item: item)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .background(.canvasBackground)
-        .navigationTitle("Recetas")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                AddToolbarButton(label: "Nueva receta") {
-                    showingNew = true
-                }
-            }
-        }
-    }
+    RecipesView(store: .preview())
+        .dynamicTypeSize(.accessibility3)
 }
 #endif

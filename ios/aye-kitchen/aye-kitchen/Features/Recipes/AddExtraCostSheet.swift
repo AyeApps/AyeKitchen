@@ -1,4 +1,5 @@
 import SwiftUI
+import KitchenDomain
 
 /// Hoja para capturar un costo fijo adicional para la receta (caja, gas, etc.).
 struct AddExtraCostSheet: View {
@@ -7,7 +8,7 @@ struct AddExtraCostSheet: View {
     @State private var name: String = ""
     @State private var amountText: String = ""
 
-    let onAdd: @MainActor @Sendable (RemoteExtraCost) -> Void
+    let onAdd: @MainActor @Sendable (ExtraCost) -> Void
 
     private var parsedCents: Int? {
         let clean = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,7 +53,7 @@ struct AddExtraCostSheet: View {
                     Button {
                         if let cents = parsedCents {
                             let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                            onAdd(RemoteExtraCost(name: trimmedName, costCents: cents))
+                            onAdd(ExtraCost(name: trimmedName, costCents: cents))
                             dismiss()
                         }
                     } label: {
@@ -79,3 +80,9 @@ struct AddExtraCostSheet: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Costo fijo") {
+    AddExtraCostSheet { _ in }
+}
+#endif

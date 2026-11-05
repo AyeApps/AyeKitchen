@@ -1,40 +1,37 @@
 import SwiftUI
+import KitchenDomain
 
 /// Extensión para identificar líneas de costo en sheets.
-extension CostLine: Identifiable {
+extension RecipeCostLine: Identifiable {
     public var id: String { "\(kind.rawValue)_\(refId)_\(presentationId ?? "")" }
 }
 
-/// Detalle y desglose de costo de una receta según Bloque I3/I10 y contrato B6b.
+/// Detalle y desglose de costo de una receta según Bloque I3/I10 y contrato B6b (Bloque I17 local-first).
 struct RecipeDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: RecipeDetailModel
+    private let store: LocalStore
     @State private var showingEditSheet = false
     @State private var showingCreateVersionSheet = false
     @State private var showingRenameVersionSheet = false
     @State private var showingDeleteConfirmation = false
-    @State private var selectedLineForBrandChoice: CostLine? = nil
+    @State private var selectedLineForBrandChoice: RecipeCostLine? = nil
 
     private let marginOptions = [20, 30, 40, 60]
 
     init(
         recipeId: String,
-        mockRecipe: RemoteRecipe? = nil,
-        mockCost: RemoteRecipeCost? = nil,
-        mockComparisons: [RemoteCostVersionComparison]? = nil,
-        mockVersions: [RemoteCostVersion]? = nil,
-        initialVersionId: String? = nil
+        initialVersionId: String? = nil,
+        store: LocalStore = .shared
     ) {
+        self.store = store
         _model = State(
             initialValue: RecipeDetailModel(
                 recipeId: recipeId,
-                mockRecipe: mockRecipe,
-                mockCost: mockCost,
-                mockComparisons: mockComparisons,
-                mockVersions: mockVersions,
-                initialVersionId: initialVersionId
+                initialVersionId: initialVersionId,
+                store: store
             )
         )
     }
@@ -69,23 +66,17 @@ struct RecipeDetailView: View {
                 }
             }
             .sheet(isPresented: $showingEditSheet) {
-                if let recipe = model.recipe {
-                    RecipeEditorView(recipe: recipe) { _ in
-                        Task {
-                            await model.load()
-                        }
-                    }
-                }
+                RecipeEditorView(mode: .edit(recipeId: model.recipeId), store: store)
             }
             .sheet(isPresented: $showingCreateVersionSheet) {
                 CostVersionNameSheet(mode: .create) { newName in
-                    try await model.createVersion(name: newName)
+                    try model.createVersion(name: newName)
                 }
             }
             .sheet(isPresented: $showingRenameVersionSheet) {
                 if let versionId = model.selectedVersionId, let currentName = model.selectedVersionName {
                     CostVersionNameSheet(mode: .rename(versionId: versionId, currentName: currentName)) { newName in
-                        try await model.renameVersion(versionId: versionId, newName: newName)
+                        try model.renameVersion(versionId: versionId, newName: newName)
                     }
                 }
             }
@@ -93,13 +84,12 @@ struct RecipeDetailView: View {
                 BrandChoiceSheet(
                     line: line,
                     isBaseVersion: model.selectedVersionId == nil,
+                    store: store,
                     onSelectBrand: { presId in
-                        try await model.chooseBrand(for: line.refId, presentationId: presId)
+                        try model.chooseBrand(for: line.refId, presentationId: presId)
                     },
                     onOpenIngredient: {
-                        Task {
-                            await model.openIngredientLine(line)
-                        }
+                        model.openIngredientLine(line)
                     }
                 )
             }
@@ -109,12 +99,10 @@ struct RecipeDetailView: View {
             ) {
                 Button("Borrar", role: .destructive) {
                     if let versionId = model.selectedVersionId {
-                        Task {
-                            do {
-                                try await model.deleteVersion(versionId: versionId)
-                            } catch {
-                                model.actionErrorMessage = error.localizedDescription
-                            }
+                        do {
+                            try model.deleteVersion(versionId: versionId)
+                        } catch {
+                            model.actionErrorMessage = error.localizedDescription
                         }
                     }
                 }
@@ -122,18 +110,14 @@ struct RecipeDetailView: View {
             }
             .navigationDestination(item: $model.activeDestination) { destination in
                 switch destination {
-                case .presentation(let presentation):
-                    BrandDetailView(presentationId: presentation.id)
-                case .ingredient(let ingredient):
-                    IngredientDetailView(ingredientId: ingredient.id)
+                case .presentation(let presentationId):
+                    BrandDetailView(presentationId: presentationId, store: store)
+                case .ingredient(let ingredientId):
+                    IngredientDetailView(ingredientId: ingredientId, store: store)
                 }
             }
-            .onChange(of: model.activeDestination) { oldValue, newValue in
-                if oldValue != nil && newValue == nil {
-                    Task {
-                        await model.load()
-                    }
-                }
+            .navigationDestination(for: String.self) { recipeId in
+                RecipeDetailView(recipeId: recipeId, store: store)
             }
             .alert(
                 "No se pudo cargar",
@@ -148,50 +132,35 @@ struct RecipeDetailView: View {
                     Text(message)
                 }
             }
-            .task {
-                if model.state == .loading {
-                    await model.load()
-                }
-            }
-            .refreshable {
-                await model.load()
-            }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch model.state {
-        case .loading where model.recipe == nil:
-            ProgressView()
-                .tint(Color.accentColor)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-        case .error(let message) where model.recipe == nil:
-            ErrorStateView(message: message) {
-                Task { await model.load() }
-            }
-
-        default:
-            if let recipe = model.recipe, let cost = model.cost {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: Spacing.section) {
-                        headerSection(recipe: recipe)
-                        versionSelectorSection
-                        creamCostCard(recipe: recipe, cost: cost)
-                        warningsSection(cost: cost)
-                        costBreakdownSection(recipe: recipe, cost: cost)
-                    }
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.top, Spacing.sm)
-                    .padding(.bottom, Spacing.xxl)
+        if let recipe = model.recipe, let cost = model.cost {
+            ScrollView {
+                VStack(alignment: .leading, spacing: Spacing.section) {
+                    headerSection(recipe: recipe)
+                    versionSelectorSection
+                    creamCostCard(recipe: recipe, cost: cost)
+                    warningsSection(cost: cost)
+                    costBreakdownSection(recipe: recipe, cost: cost)
                 }
+                .padding(.horizontal, Spacing.xl)
+                .padding(.top, Spacing.sm)
+                .padding(.bottom, Spacing.xxl)
             }
+        } else {
+            ContentUnavailableView(
+                "Receta no encontrada",
+                systemImage: "fork.knife",
+                description: Text("Esta receta ya no existe o fue eliminada.")
+            )
         }
     }
 
     // MARK: - Encabezado
 
-    private func headerSection(recipe: RemoteRecipe) -> some View {
+    private func headerSection(recipe: Recipe) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(yieldDescription(recipe: recipe))
                 .font(.subheadline)
@@ -205,7 +174,7 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func yieldDescription(recipe: RemoteRecipe) -> String {
+    private func yieldDescription(recipe: Recipe) -> String {
         let qty = Quantity.format(recipe.yieldQuantity)
         let unitWord = yieldUnitWord(quantity: recipe.yieldQuantity, unit: recipe.yieldUnit)
         var text = "Rinde \(qty) \(unitWord)"
@@ -216,7 +185,7 @@ struct RecipeDetailView: View {
         return text
     }
 
-    private func yieldUnitWord(quantity: String, unit: RemoteBaseUnit) -> String {
+    private func yieldUnitWord(quantity: String, unit: BaseUnit) -> String {
         let clean = quantity.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
         let isSingular = (clean == "1" || clean == "1.0" || clean == "1.00" || clean == "1.000")
         switch unit {
@@ -262,9 +231,7 @@ struct RecipeDetailView: View {
             let isSelected = (comparison.versionId == model.selectedVersionId)
 
             Button {
-                Task {
-                    await model.selectVersion(comparison.versionId)
-                }
+                model.selectVersion(comparison.versionId)
             } label: {
                 HStack(spacing: Spacing.xs) {
                     Text(comparison.name)
@@ -317,7 +284,7 @@ struct RecipeDetailView: View {
 
     // MARK: - Tarjeta crema (componente firma)
 
-    private func creamCostCard(recipe: RemoteRecipe, cost: RemoteRecipeCost) -> some View {
+    private func creamCostCard(recipe: Recipe, cost: RecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.md) {
@@ -342,7 +309,7 @@ struct RecipeDetailView: View {
         .softCard()
     }
 
-    private func costColumn(cost: RemoteRecipeCost) -> some View {
+    private func costColumn(cost: RecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text("Te cuesta")
                 .font(.subheadline.weight(.bold))
@@ -362,7 +329,7 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func suggestedColumn(cost: RemoteRecipeCost) -> some View {
+    private func suggestedColumn(cost: RecipeCost) -> some View {
         let profit = cost.suggestedPriceCents - cost.batchCostCents
 
         return VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -382,7 +349,7 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func marginControlSection(cost: RemoteRecipeCost) -> some View {
+    private func marginControlSection(cost: RecipeCost) -> some View {
         let currentMargin = model.effectiveMargin
         let isStandard = marginOptions.contains(currentMargin)
 
@@ -393,18 +360,12 @@ struct RecipeDetailView: View {
                     .foregroundStyle(.inkPrimary)
 
                 Spacer()
-
-                if model.isUpdatingMargin {
-                    ProgressView()
-                        .tint(Color.accentColor)
-                        .scaleEffect(0.8)
-                }
             }
 
             if dynamicTypeSize > .accessibility1 {
                 Picker("¿Cuánto quieres ganar?", selection: Binding(
                     get: { isStandard ? currentMargin : nil },
-                    set: { if let newMargin = $0 { Task { await model.updateMargin(percent: newMargin) } } }
+                    set: { if let newMargin = $0 { model.updateMargin(percent: newMargin) } }
                 )) {
                     ForEach(marginOptions, id: \.self) { margin in
                         Text("\(margin) %").tag(Optional(margin))
@@ -414,7 +375,7 @@ struct RecipeDetailView: View {
             } else {
                 Picker("¿Cuánto quieres ganar?", selection: Binding(
                     get: { isStandard ? currentMargin : nil },
-                    set: { if let newMargin = $0 { Task { await model.updateMargin(percent: newMargin) } } }
+                    set: { if let newMargin = $0 { model.updateMargin(percent: newMargin) } }
                 )) {
                     ForEach(marginOptions, id: \.self) { margin in
                         Text("\(margin) %").tag(Optional(margin))
@@ -440,7 +401,7 @@ struct RecipeDetailView: View {
     // MARK: - Avisos
 
     @ViewBuilder
-    private func warningsSection(cost: RemoteRecipeCost) -> some View {
+    private func warningsSection(cost: RecipeCost) -> some View {
         if !cost.complete || cost.hasStalePrices {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 if !cost.complete {
@@ -473,7 +434,7 @@ struct RecipeDetailView: View {
 
     // MARK: - De dónde sale el costo
 
-    private func costBreakdownSection(recipe: RemoteRecipe, cost: RemoteRecipeCost) -> some View {
+    private func costBreakdownSection(recipe: Recipe, cost: RecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("De dónde sale el costo")
                 .sectionTitleStyle()
@@ -491,12 +452,10 @@ struct RecipeDetailView: View {
                         } label: {
                             CostLineRow(
                                 line: line,
-                                isNavigationLink: true,
-                                isLoading: model.loadingLine == line
+                                isNavigationLink: true
                             )
                         }
                         .buttonStyle(.plain)
-                        .disabled(model.loadingLine != nil)
                     }
                 }
 
@@ -510,7 +469,7 @@ struct RecipeDetailView: View {
 
 /// Fila individual de línea de costo (ingrediente o subreceta).
 struct CostLineRow: View {
-    let line: CostLine
+    let line: RecipeCostLine
     let isNavigationLink: Bool
     var isLoading: Bool = false
 
@@ -660,7 +619,7 @@ struct CostLineRow: View {
 
 /// Fila para un costo fijo adicional (gas, empaque, etc.).
 struct ExtraCostRow: View {
-    let extra: RemoteExtraCost
+    let extra: ExtraCost
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var iconBoxSize: CGFloat = 40
@@ -722,148 +681,25 @@ struct ExtraCostRow: View {
 }
 
 #if DEBUG
-#Preview("Receta contrato — Claro") {
+#Preview("Pastel de vainilla — Claro") {
+    let previewStore = LocalStore.preview()
     NavigationStack {
-        RecipeDetailView(
-            recipeId: "recipe-contract-1",
-            mockRecipe: .mockContractExample,
-            mockCost: .mockContractExample
-        )
+        RecipeDetailView(recipeId: "rec-pastel", store: previewStore)
     }
 }
 
-#Preview("Receta contrato — Letra AX3") {
+#Preview("Pastel de vainilla — Letra AX3") {
+    let previewStore = LocalStore.preview()
     NavigationStack {
-        RecipeDetailView(
-            recipeId: "recipe-contract-1",
-            mockRecipe: .mockContractExample,
-            mockCost: .mockContractExample
-        )
+        RecipeDetailView(recipeId: "rec-pastel", store: previewStore)
     }
     .dynamicTypeSize(.accessibility3)
 }
 
-#Preview("Con dos versiones — Claro") {
-    let mockComparisons = [
-        RemoteCostVersionComparison(
-            versionId: nil,
-            name: "Base",
-            batchCostCents: 705,
-            costPerServingCents: 705,
-            suggestedPriceCents: 917,
-            complete: true,
-            hasStalePrices: false
-        ),
-        RemoteCostVersionComparison(
-            versionId: "ver_tres_estrellas",
-            name: "Con Tres Estrellas",
-            batchCostCents: 900,
-            costPerServingCents: 900,
-            suggestedPriceCents: 1170,
-            complete: true,
-            hasStalePrices: false
-        )
-    ]
-
-    let mockVersions = [
-        RemoteCostVersion(
-            id: "ver_tres_estrellas",
-            recipeId: "recipe-contract-1",
-            name: "Con Tres Estrellas",
-            choices: [
-                RemoteCostVersionChoice(
-                    ingredientId: "ing-1",
-                    ingredientName: "Harina de trigo",
-                    presentationId: "pres-2",
-                    brand: "Tres Estrellas"
-                )
-            ],
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
-
+#Preview("Galletas con chispas") {
+    let previewStore = LocalStore.preview()
     NavigationStack {
-        RecipeDetailView(
-            recipeId: "recipe-contract-1",
-            mockRecipe: .mockContractExample,
-            mockCost: .mockContractExample,
-            mockComparisons: mockComparisons,
-            mockVersions: mockVersions
-        )
+        RecipeDetailView(recipeId: "rec-galletas", store: previewStore)
     }
-}
-
-#Preview("Con dos versiones — Letra AX3") {
-    let mockComparisons = [
-        RemoteCostVersionComparison(
-            versionId: nil,
-            name: "Base",
-            batchCostCents: 705,
-            costPerServingCents: 705,
-            suggestedPriceCents: 917,
-            complete: true,
-            hasStalePrices: false
-        ),
-        RemoteCostVersionComparison(
-            versionId: "ver_tres_estrellas",
-            name: "Con Tres Estrellas",
-            batchCostCents: 900,
-            costPerServingCents: 900,
-            suggestedPriceCents: 1170,
-            complete: true,
-            hasStalePrices: false
-        )
-    ]
-
-    let mockVersions = [
-        RemoteCostVersion(
-            id: "ver_tres_estrellas",
-            recipeId: "recipe-contract-1",
-            name: "Con Tres Estrellas",
-            choices: [
-                RemoteCostVersionChoice(
-                    ingredientId: "ing-1",
-                    ingredientName: "Harina de trigo",
-                    presentationId: "pres-2",
-                    brand: "Tres Estrellas"
-                )
-            ],
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
-
-    NavigationStack {
-        RecipeDetailView(
-            recipeId: "recipe-contract-1",
-            mockRecipe: .mockContractExample,
-            mockCost: .mockContractExample,
-            mockComparisons: mockComparisons,
-            mockVersions: mockVersions
-        )
-    }
-    .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Con avisos y subreceta — Claro") {
-    NavigationStack {
-        RecipeDetailView(
-            recipeId: "recipe-warnings-1",
-            mockRecipe: .mockContractExample,
-            mockCost: .mockWithWarnings
-        )
-    }
-}
-
-#Preview("Con avisos y subreceta — Letra AX3") {
-    NavigationStack {
-        RecipeDetailView(
-            recipeId: "recipe-warnings-1",
-            mockRecipe: .mockContractExample,
-            mockCost: .mockWithWarnings
-        )
-    }
-    .dynamicTypeSize(.accessibility3)
 }
 #endif

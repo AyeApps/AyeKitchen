@@ -1,11 +1,12 @@
 import SwiftUI
+import KitchenDomain
 
-/// Hoja para elegir la marca de un ingrediente en el costo o en una versión (Bloque I10 / I10.1).
+/// Hoja para elegir la marca de un ingrediente en el costo o en una versión (Bloque I10 / I17 local-first).
 struct BrandChoiceSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    let line: CostLine
+    let line: RecipeCostLine
     let isBaseVersion: Bool
     let onSelectBrand: @MainActor @Sendable (String?) async throws -> Void
     let onOpenIngredient: @MainActor @Sendable () -> Void
@@ -17,11 +18,11 @@ struct BrandChoiceSheet: View {
     @State private var actionErrorMessage: String? = nil
 
     init(
-        line: CostLine,
+        line: RecipeCostLine,
         isBaseVersion: Bool,
+        store: LocalStore = .shared,
         onSelectBrand: @escaping @MainActor @Sendable (String?) async throws -> Void,
-        onOpenIngredient: @escaping @MainActor @Sendable () -> Void,
-        mockPresentations: [RemotePresentation]? = nil
+        onOpenIngredient: @escaping @MainActor @Sendable () -> Void
     ) {
         self.line = line
         self.isBaseVersion = isBaseVersion
@@ -30,7 +31,7 @@ struct BrandChoiceSheet: View {
         _model = State(
             initialValue: BrandChoiceModel(
                 ingredientId: line.refId,
-                mockPresentations: mockPresentations
+                store: store
             )
         )
     }
@@ -43,7 +44,7 @@ struct BrandChoiceSheet: View {
                         baseVersionWarning
                     }
 
-                    if let error = actionErrorMessage ?? bannerLoadErrorMessage {
+                    if let error = actionErrorMessage {
                         HStack(alignment: .top, spacing: Spacing.sm) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.warningText)
@@ -57,23 +58,10 @@ struct BrandChoiceSheet: View {
                         .background(.warningSoft, in: .rect(cornerRadius: Radius.control))
                     }
 
-                    switch model.state {
-                    case .loading where model.presentations.isEmpty:
-                        ProgressView()
-                            .tint(Color.accentColor)
-                            .frame(maxWidth: .infinity, minHeight: 120)
-
-                    case .error where model.presentations.isEmpty:
-                        ErrorStateView(message: loadErrorMessage ?? "No se pudieron cargar las marcas") {
-                            Task { await model.load() }
-                        }
-
-                    default:
-                        if model.presentations.isEmpty {
-                            emptyStateView
-                        } else {
-                            brandsList
-                        }
+                    if model.presentations.isEmpty {
+                        emptyStateView
+                    } else {
+                        brandsList
                     }
 
                     footerLink
@@ -93,25 +81,7 @@ struct BrandChoiceSheet: View {
                     .disabled(isSaving)
                 }
             }
-            .task {
-                if model.state == .loading {
-                    await model.load()
-                }
-            }
         }
-    }
-
-    private var loadErrorMessage: String? {
-        if case .error(let msg) = model.state {
-            return msg
-        }
-        return nil
-    }
-
-    /// Con la lista vacía, el error de carga ya lo muestra `ErrorStateView`; el aviso solo
-    /// aparece si había marcas en pantalla y falló una recarga.
-    private var bannerLoadErrorMessage: String? {
-        model.presentations.isEmpty ? nil : loadErrorMessage
     }
 
     // MARK: - Subvistas
@@ -199,7 +169,7 @@ struct BrandChoiceSheet: View {
         .disabled(isSaving)
     }
 
-    private func isPresentationSelected(_ p: RemotePresentation) -> Bool {
+    private func isPresentationSelected(_ p: CatalogPresentation) -> Bool {
         if isBaseVersion {
             return line.brandSource == .recipe && line.presentationId == p.id
         } else {
@@ -207,7 +177,7 @@ struct BrandChoiceSheet: View {
         }
     }
 
-    private func presentationRow(_ p: RemotePresentation) -> some View {
+    private func presentationRow(_ p: CatalogPresentation) -> some View {
         let isSelected = isPresentationSelected(p)
 
         return Button {
@@ -260,7 +230,7 @@ struct BrandChoiceSheet: View {
         .disabled(isSaving)
     }
 
-    private func rowTitle(_ p: RemotePresentation) -> some View {
+    private func rowTitle(_ p: CatalogPresentation) -> some View {
         let brandStoreText: String = {
             if let supplier = p.supplierName, !supplier.isEmpty {
                 return "\(p.brand) · \(supplier)"
@@ -273,7 +243,7 @@ struct BrandChoiceSheet: View {
             .foregroundStyle(.inkPrimary)
     }
 
-    private func rowSubtitle(_ p: RemotePresentation) -> some View {
+    private func rowSubtitle(_ p: CatalogPresentation) -> some View {
         let packageText: String = {
             let pkgQty = Quantity.format(p.packageQuantity)
             let unitStr = p.baseUnit.rawValue
@@ -343,147 +313,59 @@ struct BrandChoiceSheet: View {
 
 #if DEBUG
 #Preview("Elegir marca — En Versión (Como en la base)") {
-    let mockLine = CostLine(
+    let previewStore = LocalStore.preview()
+    let mockLine = RecipeCostLine(
         kind: .ingredient,
-        refId: "ing_harina",
+        refId: "ing-harina",
         refName: "Harina de trigo",
         quantity: "300",
         unitName: "g",
         quantityInBase: "300",
         baseUnit: .g,
-        presentationId: "pres_selecta",
+        presentationId: "pres-selecta",
         presentationLabel: "Selecta · Walmart · 1000 g",
         pinned: true,
+        brandSource: .recipe,
         costCents: 705,
         missingPrice: false,
-        priceIsStale: false,
-        brandSource: .recipe
+        priceIsStale: false
     )
-
-    let mockList = [
-        RemotePresentation(
-            id: "pres_selecta",
-            ingredientId: "ing_harina",
-            ingredientName: "Harina de trigo",
-            brand: "Selecta",
-            supplierId: "sup_walmart",
-            supplierName: "Walmart",
-            packageQuantity: "1000",
-            baseUnit: .g,
-            barcode: nil,
-            latestPriceCents: 2350,
-            latestPriceAt: .now,
-            costPerBaseUnit: "2.350000",
-            isCurrent: true,
-            priceAgeDays: 2,
-            priceIsStale: false,
-            createdAt: .now,
-            updatedAt: .now
-        ),
-        RemotePresentation(
-            id: "pres_tres_estrellas",
-            ingredientId: "ing_harina",
-            ingredientName: "Harina de trigo",
-            brand: "Tres Estrellas",
-            supplierId: "sup_costco",
-            supplierName: "Costco",
-            packageQuantity: "1000",
-            baseUnit: .g,
-            barcode: nil,
-            latestPriceCents: 3000,
-            latestPriceAt: .now,
-            costPerBaseUnit: "3.000000",
-            isCurrent: false,
-            priceAgeDays: 1,
-            priceIsStale: false,
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
 
     BrandChoiceSheet(
         line: mockLine,
         isBaseVersion: false,
+        store: previewStore,
         onSelectBrand: { _ in },
-        onOpenIngredient: {},
-        mockPresentations: mockList
+        onOpenIngredient: {}
     )
 }
 
 #Preview("Elegir marca — En Base y Letra AX3") {
-    let mockLine = CostLine(
+    let previewStore = LocalStore.preview()
+    let mockLine = RecipeCostLine(
         kind: .ingredient,
-        refId: "ing_harina",
+        refId: "ing-harina",
         refName: "Harina de trigo",
         quantity: "300",
         unitName: "g",
         quantityInBase: "300",
         baseUnit: .g,
-        presentationId: "pres_selecta",
+        presentationId: "pres-selecta",
         presentationLabel: "Selecta · Walmart · 1000 g",
         pinned: false,
+        brandSource: .current,
         costCents: 705,
         missingPrice: false,
-        priceIsStale: false,
-        brandSource: .current
+        priceIsStale: false
     )
-
-    let mockList = [
-        RemotePresentation(
-            id: "pres_selecta",
-            ingredientId: "ing_harina",
-            ingredientName: "Harina de trigo",
-            brand: "Selecta",
-            supplierId: "sup_walmart",
-            supplierName: "Walmart",
-            packageQuantity: "1000",
-            baseUnit: .g,
-            barcode: nil,
-            latestPriceCents: 2350,
-            latestPriceAt: .now,
-            costPerBaseUnit: "2.350000",
-            isCurrent: true,
-            priceAgeDays: 2,
-            priceIsStale: false,
-            createdAt: .now,
-            updatedAt: .now
-        )
-    ]
 
     BrandChoiceSheet(
         line: mockLine,
         isBaseVersion: true,
+        store: previewStore,
         onSelectBrand: { _ in },
-        onOpenIngredient: {},
-        mockPresentations: mockList
+        onOpenIngredient: {}
     )
     .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Elegir marca — Sin marcas") {
-    let mockLine = CostLine(
-        kind: .ingredient,
-        refId: "ing_harina",
-        refName: "Harina de trigo",
-        quantity: "300",
-        unitName: "g",
-        quantityInBase: "300",
-        baseUnit: .g,
-        presentationId: nil,
-        presentationLabel: nil,
-        pinned: false,
-        costCents: 0,
-        missingPrice: true,
-        priceIsStale: false,
-        brandSource: nil
-    )
-
-    BrandChoiceSheet(
-        line: mockLine,
-        isBaseVersion: true,
-        onSelectBrand: { _ in },
-        onOpenIngredient: {},
-        mockPresentations: []
-    )
 }
 #endif
