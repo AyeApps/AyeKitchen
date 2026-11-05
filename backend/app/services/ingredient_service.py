@@ -1,5 +1,6 @@
 import math
 import re
+from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -9,10 +10,17 @@ from bson import ObjectId
 from app.core.errors import AppError
 from app.models.base import parse_decimal
 from app.models.ingredient import Ingredient, IngredientConversion
-from app.models.presentation import Presentation
+from app.models.presentation import Presentation, PriceRecord
 from app.models.recipe import Recipe
+from app.models.supplier import Supplier
 from app.models.unit import Unit
-from app.schemas.ingredient import IngredientConversionInput, IngredientCreate, IngredientUpdate
+from app.schemas.ingredient import (
+    IngredientConversionInput,
+    IngredientCreate,
+    IngredientCurrentBrandResponse,
+    IngredientUpdate,
+)
+from app.services.presentation_service import compute_cost_per_base_unit
 
 
 async def validate_conversions(workspace_id: str, conversions: list[IngredientConversionInput]) -> None:
@@ -243,3 +251,85 @@ async def delete_ingredient(workspace_id: str, ingredient_id: str) -> None:
     ).to_list()
     for p in presentations:
         await p.soft_delete()
+
+
+async def get_brand_summaries(
+    workspace_id: str,
+    ingredient_ids: list[str],
+) -> dict[str, tuple[int, IngredientCurrentBrandResponse | None]]:
+    clean_ids = list(dict.fromkeys(str(i) for i in ingredient_ids if i))
+    result: dict[str, tuple[int, IngredientCurrentBrandResponse | None]] = dict.fromkeys(
+        clean_ids, (0, None)
+    )
+    if not clean_ids:
+        return result
+
+    presentations = await Presentation.find(
+        Presentation.workspace_id == workspace_id,
+        Presentation.deleted_at == None,  # noqa: E711
+        {"ingredient_id": {"$in": clean_ids}},
+    ).to_list()
+
+    if not presentations:
+        return result
+
+    pres_by_ingredient: dict[str, list[Presentation]] = defaultdict(list)
+    for p in presentations:
+        pres_by_ingredient[str(p.ingredient_id)].append(p)
+
+    pres_ids = [str(p.id) for p in presentations]
+    price_records = await PriceRecord.find(
+        PriceRecord.workspace_id == workspace_id,
+        PriceRecord.deleted_at == None,  # noqa: E711
+        {"presentation_id": {"$in": pres_ids}},
+    ).sort("-recorded_at", "-created_at").to_list()
+
+    latest_by_pres: dict[str, PriceRecord] = {}
+    for pr in price_records:
+        if pr.presentation_id not in latest_by_pres:
+            latest_by_pres[pr.presentation_id] = pr
+
+    supplier_ids = {p.supplier_id for p in presentations if p.supplier_id}
+    supplier_map: dict[str, str] = {}
+    if supplier_ids:
+        valid_sids = [ObjectId(sid) for sid in supplier_ids if ObjectId.is_valid(sid)]
+        if valid_sids:
+            suppliers = await Supplier.find(
+                Supplier.workspace_id == workspace_id,
+                Supplier.deleted_at == None,  # noqa: E711
+                {"_id": {"$in": valid_sids}},
+            ).to_list()
+            supplier_map = {str(s.id): s.name for s in suppliers}
+
+    for iid in clean_ids:
+        ing_pres = pres_by_ingredient.get(iid, [])
+        brands_count = len(ing_pres)
+
+        candidates: list[tuple[Presentation, PriceRecord]] = []
+        for p in ing_pres:
+            pr = latest_by_pres.get(str(p.id))
+            if pr is not None:
+                candidates.append((p, pr))
+
+        current_brand: IngredientCurrentBrandResponse | None = None
+        if candidates:
+            candidates.sort(
+                key=lambda c: (c[1].recorded_at, c[0].created_at),
+                reverse=True,
+            )
+            winner_pres, winner_pr = candidates[0]
+            cost_per_base_unit = compute_cost_per_base_unit(
+                winner_pr.price_cents,
+                winner_pres.package_quantity,
+            )
+            sup_name = supplier_map.get(winner_pres.supplier_id) if winner_pres.supplier_id else None
+            current_brand = IngredientCurrentBrandResponse(
+                presentation_id=str(winner_pres.id),
+                brand=winner_pres.brand,
+                supplier_name=sup_name,
+                cost_per_base_unit=cost_per_base_unit,
+            )
+
+        result[iid] = (brands_count, current_brand)
+
+    return result

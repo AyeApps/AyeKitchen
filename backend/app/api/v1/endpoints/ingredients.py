@@ -5,6 +5,7 @@ from app.models.ingredient import Ingredient
 from app.schemas.ingredient import (
     IngredientConversionResponse,
     IngredientCreate,
+    IngredientCurrentBrandResponse,
     IngredientResponse,
     IngredientUpdate,
 )
@@ -12,6 +13,7 @@ from app.schemas.pagination import PaginatedResponse
 from app.services.ingredient_service import (
     create_ingredient,
     delete_ingredient,
+    get_brand_summaries,
     get_ingredient,
     list_ingredients,
     update_ingredient,
@@ -21,7 +23,12 @@ from app.services.unit_service import get_units_map
 router = APIRouter()
 
 
-def _serialize_ingredient(ing: Ingredient, unit_map: dict[str, str]) -> IngredientResponse:
+def _serialize_ingredient(
+    ing: Ingredient,
+    unit_map: dict[str, str],
+    brands_count: int = 0,
+    current_brand: IngredientCurrentBrandResponse | None = None,
+) -> IngredientResponse:
     conversions = [
         IngredientConversionResponse(
             unit_id=c.unit_id,
@@ -37,6 +44,8 @@ def _serialize_ingredient(ing: Ingredient, unit_map: dict[str, str]) -> Ingredie
         group=ing.group,
         notes=ing.notes,
         conversions=conversions,
+        brands_count=brands_count,
+        current_brand=current_brand,
         created_at=ing.created_at,
         updated_at=ing.updated_at,
     )
@@ -59,7 +68,17 @@ async def list_ingredients_endpoint(
     )
     unit_ids = {c.unit_id for ing in items for c in ing.conversions}
     unit_map = await get_units_map(unit_ids)
-    serialized = [_serialize_ingredient(ing, unit_map) for ing in items]
+    ingredient_ids = [str(ing.id) for ing in items]
+    brand_summaries = await get_brand_summaries(str(workspace.id), ingredient_ids)
+    serialized = [
+        _serialize_ingredient(
+            ing,
+            unit_map,
+            brand_summaries.get(str(ing.id), (0, None))[0],
+            brand_summaries.get(str(ing.id), (0, None))[1],
+        )
+        for ing in items
+    ]
     return PaginatedResponse(
         items=serialized,
         total=total,
@@ -73,21 +92,27 @@ async def list_ingredients_endpoint(
 async def create_ingredient_endpoint(data: IngredientCreate, workspace: CurrentWorkspace):
     ing = await create_ingredient(str(workspace.id), data)
     unit_map = await get_units_map({c.unit_id for c in ing.conversions})
-    return _serialize_ingredient(ing, unit_map)
+    brand_summaries = await get_brand_summaries(str(workspace.id), [str(ing.id)])
+    count, current = brand_summaries.get(str(ing.id), (0, None))
+    return _serialize_ingredient(ing, unit_map, count, current)
 
 
 @router.get("/{id}", response_model=IngredientResponse)
 async def get_ingredient_endpoint(id: str, workspace: CurrentWorkspace):
     ing = await get_ingredient(str(workspace.id), id)
     unit_map = await get_units_map({c.unit_id for c in ing.conversions})
-    return _serialize_ingredient(ing, unit_map)
+    brand_summaries = await get_brand_summaries(str(workspace.id), [str(ing.id)])
+    count, current = brand_summaries.get(str(ing.id), (0, None))
+    return _serialize_ingredient(ing, unit_map, count, current)
 
 
 @router.patch("/{id}", response_model=IngredientResponse)
 async def update_ingredient_endpoint(id: str, data: IngredientUpdate, workspace: CurrentWorkspace):
     ing = await update_ingredient(str(workspace.id), id, data)
     unit_map = await get_units_map({c.unit_id for c in ing.conversions})
-    return _serialize_ingredient(ing, unit_map)
+    brand_summaries = await get_brand_summaries(str(workspace.id), [str(ing.id)])
+    count, current = brand_summaries.get(str(ing.id), (0, None))
+    return _serialize_ingredient(ing, unit_map, count, current)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

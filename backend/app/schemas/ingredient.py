@@ -34,6 +34,13 @@ class IngredientUpdate(BaseModel):
     conversions: list[IngredientConversionInput] | None = None
 
 
+class IngredientCurrentBrandResponse(BaseModel):
+    presentation_id: str
+    brand: str
+    supplier_name: str | None = None
+    cost_per_base_unit: str | None = None
+
+
 class IngredientResponse(BaseModel):
     id: str
     name: str
@@ -41,5 +48,7 @@ class IngredientResponse(BaseModel):
     group: str | None = None
     notes: str | None = None
     conversions: list[IngredientConversionResponse] = Field(default_factory=list)
+    brands_count: int = 0
+    current_brand: IngredientCurrentBrandResponse | None = None
     created_at: datetime
     updated_at: datetime

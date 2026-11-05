@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
 
@@ -428,3 +430,214 @@ async def test_ingredient_patch_conversion_in_use_cannot_remove(client: AsyncCli
     get_resp2 = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
     assert len(get_resp2.json()["conversions"]) == 1
     assert get_resp2.json()["conversions"][0]["quantity_in_base"] == "130"
+
+
+@pytest.mark.asyncio
+async def test_ingredient_brand_summary_no_brands(client: AsyncClient, auth_headers):
+    resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Vainilla", "base_unit": "ml"},
+    )
+    assert resp.status_code == 201
+    created = resp.json()
+    assert created["brands_count"] == 0
+    assert created["current_brand"] is None
+
+    get_resp = await client.get(f"/api/v1/ingredients/{created['id']}", headers=auth_headers)
+    assert get_resp.status_code == 200
+    detail = get_resp.json()
+    assert detail["brands_count"] == 0
+    assert detail["current_brand"] is None
+
+
+@pytest.mark.asyncio
+async def test_ingredient_brand_summary_three_brands(client: AsyncClient, auth_headers):
+    # Crear proveedor
+    sup_resp = await client.post(
+        "/api/v1/suppliers/",
+        headers=auth_headers,
+        json={"name": "Costco"},
+    )
+    assert sup_resp.status_code == 201
+    supplier_id = sup_resp.json()["id"]
+
+    # Crear ingrediente
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Harina de fuerza", "base_unit": "g"},
+    )
+    assert ing_resp.status_code == 201
+    ing_id = ing_resp.json()["id"]
+
+    # Marca 1: Sin precio
+    p1_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={
+            "ingredient_id": ing_id,
+            "brand": "Marca Sin Precio",
+            "package_quantity": "1000",
+        },
+    )
+    assert p1_resp.status_code == 201
+
+    # Marca 2: Precio más antiguo (t1)
+    t1 = datetime.now(UTC) - timedelta(days=2)
+    p2_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={
+            "ingredient_id": ing_id,
+            "brand": "Marca Antigua",
+            "package_quantity": "1000",
+            "price_cents": 2000,
+        },
+    )
+    assert p2_resp.status_code == 201
+    p2_id = p2_resp.json()["id"]
+    await client.post(
+        f"/api/v1/presentations/{p2_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 2000, "recorded_at": t1.isoformat()},
+    )
+
+    # Marca 3: Precio más reciente (t2) con proveedor Costco
+    t2 = datetime.now(UTC)
+    p3_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={
+            "ingredient_id": ing_id,
+            "brand": "Marca Vigente",
+            "supplier_id": supplier_id,
+            "package_quantity": "1000",
+            "price_cents": 2350,
+        },
+    )
+    assert p3_resp.status_code == 201
+    p3_id = p3_resp.json()["id"]
+    await client.post(
+        f"/api/v1/presentations/{p3_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 2350, "recorded_at": t2.isoformat()},
+    )
+
+    # Consultar ingrediente
+    get_resp = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    assert data["brands_count"] == 3
+    assert data["current_brand"] is not None
+    assert data["current_brand"]["presentation_id"] == p3_id
+    assert data["current_brand"]["brand"] == "Marca Vigente"
+    assert data["current_brand"]["supplier_name"] == "Costco"
+    assert data["current_brand"]["cost_per_base_unit"] == "2.350000"
+
+
+@pytest.mark.asyncio
+async def test_ingredient_brand_summary_deleted_brand_not_counted(client: AsyncClient, auth_headers):
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Levadura", "base_unit": "g"},
+    )
+    ing_id = ing_resp.json()["id"]
+
+    p1 = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing_id, "brand": "Levadura A", "package_quantity": "500", "price_cents": 1000},
+    )
+    p2 = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing_id, "brand": "Levadura B", "package_quantity": "500", "price_cents": 1200},
+    )
+    p1_id = p1.json()["id"]
+    p2_id = p2.json()["id"]
+
+    get1 = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
+    assert get1.json()["brands_count"] == 2
+
+    del_resp = await client.delete(f"/api/v1/presentations/{p2_id}", headers=auth_headers)
+    assert del_resp.status_code == 204
+
+    get2 = await client.get(f"/api/v1/ingredients/{ing_id}", headers=auth_headers)
+    assert get2.json()["brands_count"] == 1
+    assert get2.json()["current_brand"]["presentation_id"] == p1_id
+    assert get2.json()["current_brand"]["brand"] == "Levadura A"
+
+
+@pytest.mark.asyncio
+async def test_ingredient_brand_summary_list_each_has_own_summary(client: AsyncClient, auth_headers):
+    ing_a = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Avena", "base_unit": "g"},
+    )
+    ing_a_id = ing_a.json()["id"]
+    pres_a = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={"ingredient_id": ing_a_id, "brand": "Quaker", "package_quantity": "800", "price_cents": 4000},
+    )
+    pres_a_id = pres_a.json()["id"]
+
+    ing_b = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Canela en polvo", "base_unit": "g"},
+    )
+    ing_b_id = ing_b.json()["id"]
+
+    list_resp = await client.get("/api/v1/ingredients/", headers=auth_headers)
+    assert list_resp.status_code == 200
+    items = {item["id"]: item for item in list_resp.json()["items"]}
+
+    assert ing_a_id in items
+    assert items[ing_a_id]["brands_count"] == 1
+    assert items[ing_a_id]["current_brand"]["presentation_id"] == pres_a_id
+    assert items[ing_a_id]["current_brand"]["brand"] == "Quaker"
+
+    assert ing_b_id in items
+    assert items[ing_b_id]["brands_count"] == 0
+    assert items[ing_b_id]["current_brand"] is None
+
+
+@pytest.mark.asyncio
+async def test_ingredient_brand_summary_isolation(client: AsyncClient, auth_headers, auth_headers_user_2):
+    ing_u1 = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Cacao", "base_unit": "g"},
+    )
+    ing_u1_id = ing_u1.json()["id"]
+
+    ing_u2 = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers_user_2,
+        json={"name": "Cacao", "base_unit": "g"},
+    )
+    ing_u2_id = ing_u2.json()["id"]
+    await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers_user_2,
+        json={"ingredient_id": ing_u2_id, "brand": "Hershey", "package_quantity": "500", "price_cents": 5500},
+    )
+
+    get_u1 = await client.get(f"/api/v1/ingredients/{ing_u1_id}", headers=auth_headers)
+    assert get_u1.status_code == 200
+    assert get_u1.json()["brands_count"] == 0
+    assert get_u1.json()["current_brand"] is None
+
+    list_u1 = await client.get("/api/v1/ingredients/", headers=auth_headers)
+    items_u1 = {item["id"]: item for item in list_u1.json()["items"]}
+    assert items_u1[ing_u1_id]["brands_count"] == 0
+    assert items_u1[ing_u1_id]["current_brand"] is None
+
+    get_u2 = await client.get(f"/api/v1/ingredients/{ing_u2_id}", headers=auth_headers_user_2)
+    assert get_u2.status_code == 200
+    assert get_u2.json()["brands_count"] == 1
+    assert get_u2.json()["current_brand"]["brand"] == "Hershey"
