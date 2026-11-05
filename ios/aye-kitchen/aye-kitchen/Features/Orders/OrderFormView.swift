@@ -3,6 +3,7 @@ import SwiftUI
 /// Formulario para crear o editar un pedido según Bloque I2.
 struct OrderFormView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: OrderFormModel
     @State private var showingRecipePicker = false
@@ -13,6 +14,13 @@ struct OrderFormView: View {
         _model = State(initialValue: OrderFormModel(order: order))
         self.onSave = onSave
     }
+
+#if DEBUG
+    init(model: OrderFormModel, onSave: @escaping @MainActor @Sendable (Order) -> Void = { _ in }) {
+        _model = State(initialValue: model)
+        self.onSave = onSave
+    }
+#endif
 
     var body: some View {
         NavigationStack {
@@ -69,6 +77,9 @@ struct OrderFormView: View {
                 CustomerPickerSheet { selectedCustomer in
                     model.selectCustomer(selectedCustomer)
                 }
+            }
+            .task {
+                await model.loadRecipeDetailsForEditing()
             }
         }
     }
@@ -233,32 +244,84 @@ struct OrderFormView: View {
                 .accessibilityLabel("Quitar \(item.wrappedValue.recipeName)")
             }
 
-            HStack {
-                Text("Cantidad: \(Quantity.format(item.wrappedValue.quantityString))")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.inkPrimary)
-                Spacer()
-                Stepper(
-                    "Cantidad de \(item.wrappedValue.recipeName)",
-                    onIncrement: {
-                        item.wrappedValue.quantity += 1
-                    },
-                    onDecrement: item.wrappedValue.quantity < 1 ? nil : {
-                        item.wrappedValue.quantity = max(1, item.wrappedValue.quantity - 1)
-                    }
-                )
-                .labelsHidden()
-                .accessibilityValue(Quantity.format(item.wrappedValue.quantityString))
+            // Selector por unidad / por tanda (solo si la receta rinde más de 1)
+            if item.wrappedValue.yieldsMultiple {
+                Picker("Modo de venta", selection: Binding(
+                    get: { item.wrappedValue.soldBy },
+                    set: { item.wrappedValue.changeMode(to: $0) }
+                )) {
+                    Text(item.wrappedValue.unitOptionTitle).tag(OrderSoldBy.unit)
+                    Text("Por tanda").tag(OrderSoldBy.batch)
+                }
+                .pickerStyle(.segmented)
             }
 
+            // Cantidad
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
+                        KitchenTextField(
+                            label: item.wrappedValue.quantityLabel,
+                            text: item.quantityText,
+                            keyboard: .decimalPad
+                        )
+
+                        HStack {
+                            Spacer()
+                            Stepper(
+                                "Cantidad de \(item.wrappedValue.recipeName)",
+                                onIncrement: {
+                                    item.wrappedValue.incrementQuantity()
+                                },
+                                onDecrement: item.wrappedValue.canDecrementQuantity ? {
+                                    item.wrappedValue.decrementQuantity()
+                                } : nil
+                            )
+                            .labelsHidden()
+                        }
+                    }
+                } else {
+                    HStack(alignment: .bottom, spacing: Spacing.md) {
+                        KitchenTextField(
+                            label: item.wrappedValue.quantityLabel,
+                            text: item.quantityText,
+                            keyboard: .decimalPad
+                        )
+
+                        Stepper(
+                            "Cantidad de \(item.wrappedValue.recipeName)",
+                            onIncrement: {
+                                item.wrappedValue.incrementQuantity()
+                            },
+                            onDecrement: item.wrappedValue.canDecrementQuantity ? {
+                                item.wrappedValue.decrementQuantity()
+                            } : nil
+                        )
+                        .labelsHidden()
+                        .padding(.bottom, 8)
+                    }
+                }
+
+                if item.wrappedValue.isQuantityInvalid {
+                    Text("Escribe una cantidad mayor a 0.")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.warningText)
+                } else if item.wrappedValue.soldBy == .batch, let summary = item.wrappedValue.yieldSummary {
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(.inkMuted)
+                }
+            }
+
+            // Precio
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 KitchenTextField(
-                    label: "Precio por unidad",
+                    label: item.wrappedValue.priceLabel,
                     text: item.unitPriceText,
                     keyboard: .decimalPad
                 )
 
-                if let suggested = item.wrappedValue.suggestedPriceCents {
+                if let suggested = item.wrappedValue.currentSuggestedPriceCents {
                     Text("Te sugerimos cobrar \(Money.format(cents: suggested))")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tint)
@@ -388,6 +451,44 @@ struct RecipePickerSheet: View {
 }
 
 #if DEBUG
+private func makeMockOrderFormModel() -> OrderFormModel {
+    OrderFormModel(
+        draftItems: [
+            DraftOrderItem(
+                recipeId: "rec-1",
+                recipeName: "Galletas con chispas",
+                soldBy: .unit,
+                yieldQuantity: 12,
+                yieldUnit: .pz,
+                quantityText: "4",
+                unitPriceText: "13",
+                suggestedPriceBatchCents: 15600,
+                suggestedPriceUnitCents: 1300
+            ),
+            DraftOrderItem(
+                recipeId: "rec-2",
+                recipeName: "Pastel de zanahoria",
+                soldBy: .batch,
+                yieldQuantity: 12,
+                yieldUnit: .pz,
+                quantityText: "1",
+                unitPriceText: "156",
+                suggestedPriceBatchCents: 15600,
+                suggestedPriceUnitCents: 1300
+            )
+        ]
+    )
+}
+
+#Preview("Formulario con pieza y tanda — Normal") {
+    OrderFormView(model: makeMockOrderFormModel()) { _ in }
+}
+
+#Preview("Formulario con pieza y tanda — AX3") {
+    OrderFormView(model: makeMockOrderFormModel()) { _ in }
+        .dynamicTypeSize(.accessibility3)
+}
+
 #Preview("Nuevo pedido — Claro") {
     OrderFormView(order: nil) { _ in }
 }

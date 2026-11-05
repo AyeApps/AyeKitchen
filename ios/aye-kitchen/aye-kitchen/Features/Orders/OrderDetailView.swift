@@ -223,7 +223,7 @@ struct OrderDetailView: View {
                                     .font(.body.weight(.semibold))
                                     .foregroundStyle(.inkPrimary)
 
-                                Text("\(Quantity.format(item.quantity)) × \(Money.format(cents: item.unitPriceCents))")
+                                Text(itemQuantityPriceDescription(for: item))
                                     .font(.subheadline)
                                     .foregroundStyle(.inkMuted)
 
@@ -239,7 +239,7 @@ struct OrderDetailView: View {
                                         .font(.body.weight(.semibold))
                                         .foregroundStyle(.inkPrimary)
 
-                                    Text("\(Quantity.format(item.quantity)) × \(Money.format(cents: item.unitPriceCents))")
+                                    Text(itemQuantityPriceDescription(for: item))
                                         .font(.subheadline)
                                         .foregroundStyle(.inkMuted)
                                 }
@@ -256,6 +256,22 @@ struct OrderDetailView: View {
                     .padding(Spacing.lg)
                 }
             }
+        }
+    }
+
+    private func itemQuantityPriceDescription(for item: OrderItem) -> String {
+        let mode = item.soldBy ?? .batch
+        let qtyFormatted = Quantity.format(item.quantity)
+        let priceFormatted = Money.format(cents: item.unitPriceCents)
+        switch mode {
+        case .unit:
+            let unitText = item.unitLabel?.rawValue ?? "pz"
+            return "\(qtyFormatted) \(unitText) × \(priceFormatted)"
+        case .batch:
+            let clean = item.quantity.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+            let isSingular = (clean == "1" || clean == "1.0" || clean == "1.00" || clean == "1.000")
+            let word = isSingular ? "tanda" : "tandas"
+            return "\(qtyFormatted) \(word) × \(priceFormatted)"
         }
     }
 
@@ -441,6 +457,58 @@ struct OrderDetailView: View {
 }
 
 #if DEBUG
+private let mockOrderWithPieceAndBatch = Order(
+    id: "order-preview-piece-batch",
+    customerName: "Mariana Rojas",
+    customerPhone: "5512345678",
+    deliveryAt: Date.now,
+    status: .inProgress,
+    notes: "Entregar en caja de regalo.",
+    items: [
+        OrderItem(
+            recipeId: "rec-1",
+            recipeName: "Galletas con chispas",
+            quantity: "4",
+            unitPriceCents: 1300,
+            unitCostCentsSnapshot: 500,
+            soldBy: .unit,
+            unitLabel: .pz
+        ),
+        OrderItem(
+            recipeId: "rec-2",
+            recipeName: "Pastel de zanahoria",
+            quantity: "1",
+            unitPriceCents: 15600,
+            unitCostCentsSnapshot: 6000,
+            soldBy: .batch,
+            unitLabel: nil
+        )
+    ],
+    payments: [
+        Payment(id: "pay-1", amountCents: 10000, paidAt: Date.now, method: "transferencia")
+    ],
+    totalCents: 20800,
+    paidCents: 10000,
+    balanceCents: 10800,
+    costCents: 8000,
+    profitCents: 12800,
+    createdAt: Date.now,
+    updatedAt: Date.now
+)
+
+#Preview("Detalle con pieza y tanda — Normal") {
+    NavigationStack {
+        OrderDetailView(order: mockOrderWithPieceAndBatch)
+    }
+}
+
+#Preview("Detalle con pieza y tanda — AX3") {
+    NavigationStack {
+        OrderDetailView(order: mockOrderWithPieceAndBatch)
+    }
+    .dynamicTypeSize(.accessibility3)
+}
+
 #Preview("Claro") {
     NavigationStack {
         OrderDetailView(order: .mockPendingToday)

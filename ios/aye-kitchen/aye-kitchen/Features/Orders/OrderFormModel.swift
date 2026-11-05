@@ -4,6 +4,7 @@ import SwiftUI
 /// Elemento de entrada para cada línea del pedido al crear o editar.
 nonisolated struct OrderItemInput: Encodable, Sendable {
     let recipeId: String
+    let soldBy: OrderSoldBy
     let quantity: String
     let unitPriceCents: Int?
 }
@@ -63,31 +64,175 @@ struct DraftOrderItem: Identifiable, Hashable {
     let id: UUID
     var recipeId: String
     var recipeName: String
-    var quantity: Decimal
+    var soldBy: OrderSoldBy
+    var yieldQuantity: Decimal?
+    var yieldUnit: BaseUnit
+    var quantityText: String
     var unitPriceText: String
-    var suggestedPriceCents: Int?
+    var suggestedPriceBatchCents: Int?
+    var suggestedPriceUnitCents: Int?
     var costCalculationFailed: Bool
-
-    var quantityString: String {
-        NSDecimalNumber(decimal: quantity).description(withLocale: Locale(identifier: "en_US_POSIX"))
-    }
 
     init(
         id: UUID = UUID(),
         recipeId: String,
         recipeName: String,
-        quantity: Decimal = 1,
+        soldBy: OrderSoldBy = .batch,
+        yieldQuantity: Decimal? = nil,
+        yieldUnit: BaseUnit = .pz,
+        quantityText: String = "1",
         unitPriceText: String = "",
-        suggestedPriceCents: Int? = nil,
+        suggestedPriceBatchCents: Int? = nil,
+        suggestedPriceUnitCents: Int? = nil,
         costCalculationFailed: Bool = false
     ) {
         self.id = id
         self.recipeId = recipeId
         self.recipeName = recipeName
-        self.quantity = quantity
+        self.soldBy = soldBy
+        self.yieldQuantity = yieldQuantity
+        self.yieldUnit = yieldUnit
+        self.quantityText = quantityText
         self.unitPriceText = unitPriceText
-        self.suggestedPriceCents = suggestedPriceCents
+        self.suggestedPriceBatchCents = suggestedPriceBatchCents
+        self.suggestedPriceUnitCents = suggestedPriceUnitCents
         self.costCalculationFailed = costCalculationFailed
+    }
+
+    /// La receta rinde más de 1 unidad.
+    var yieldsMultiple: Bool {
+        guard let yield = yieldQuantity else { return false }
+        return yield > 1
+    }
+
+    /// Título de la primera opción del selector de modo según yieldUnit ("Por pieza", "Por g", "Por ml").
+    var unitOptionTitle: String {
+        switch yieldUnit {
+        case .pz:
+            return "Por pieza"
+        case .g:
+            return "Por g"
+        case .ml:
+            return "Por ml"
+        }
+    }
+
+    /// Etiqueta del campo de cantidad según el modo elegido.
+    var quantityLabel: String {
+        switch soldBy {
+        case .unit:
+            switch yieldUnit {
+            case .pz:
+                return "Piezas"
+            case .g:
+                return "Gramos"
+            case .ml:
+                return "Mililitros"
+            }
+        case .batch:
+            return "Tandas"
+        }
+    }
+
+    /// Texto "1 tanda = 12 pz" con lo que rinde la receta.
+    var yieldSummary: String? {
+        guard let yield = yieldQuantity else { return nil }
+        let formatted = Quantity.format(DraftOrderItem.formatQuantityForInput(yield))
+        return "1 tanda = \(formatted) \(yieldUnit.rawValue)"
+    }
+
+    /// Etiqueta del campo de precio según el modo elegido.
+    var priceLabel: String {
+        switch soldBy {
+        case .unit:
+            switch yieldUnit {
+            case .pz:
+                return "Precio por pieza"
+            case .g:
+                return "Precio por g"
+            case .ml:
+                return "Precio por ml"
+            }
+        case .batch:
+            return "Precio por tanda"
+        }
+    }
+
+    /// Precio sugerido correspondiente al modo actual.
+    var currentSuggestedPriceCents: Int? {
+        switch soldBy {
+        case .unit:
+            return suggestedPriceUnitCents
+        case .batch:
+            return suggestedPriceBatchCents
+        }
+    }
+
+    /// Cantidad parseada con Quantity.parse; nil si no es un número > 0.
+    var parsedQuantity: Decimal? {
+        guard let valid = Quantity.parse(quantityText) else { return nil }
+        return Decimal(string: valid, locale: Locale(identifier: "en_US_POSIX"))
+    }
+
+    /// Validez de la cantidad para guardar.
+    var isQuantityValid: Bool {
+        Quantity.parse(quantityText) != nil
+    }
+
+    /// Cantidad inválida o cero para marcar el campo en la vista.
+    var isQuantityInvalid: Bool {
+        !isQuantityValid
+    }
+
+    /// El botón decrementar del Stepper se desactiva cuando la cantidad es 1 o menor.
+    var canDecrementQuantity: Bool {
+        guard let current = parsedQuantity else { return false }
+        return current > 1
+    }
+
+    mutating func incrementQuantity() {
+        if let current = parsedQuantity {
+            let next = current + 1
+            quantityText = DraftOrderItem.formatQuantityForInput(next)
+        } else {
+            quantityText = "1"
+        }
+    }
+
+    mutating func decrementQuantity() {
+        guard let current = parsedQuantity, current > 1 else { return }
+        let next = max(Decimal(1), current - 1)
+        quantityText = DraftOrderItem.formatQuantityForInput(next)
+    }
+
+    /// Cambia el modo entre .batch y .unit según la regla del bloque I12.
+    mutating func changeMode(to newMode: OrderSoldBy) {
+        guard newMode != soldBy else { return }
+        soldBy = newMode
+        switch newMode {
+        case .batch:
+            quantityText = "1"
+            if let suggested = suggestedPriceBatchCents {
+                unitPriceText = CurrencyMath.formatForInput(cents: suggested)
+            } else {
+                unitPriceText = ""
+            }
+        case .unit:
+            if let yield = yieldQuantity {
+                quantityText = DraftOrderItem.formatQuantityForInput(yield)
+            } else {
+                quantityText = "1"
+            }
+            if let suggested = suggestedPriceUnitCents {
+                unitPriceText = CurrencyMath.formatForInput(cents: suggested)
+            } else {
+                unitPriceText = ""
+            }
+        }
+    }
+
+    static func formatQuantityForInput(_ decimal: Decimal) -> String {
+        NSDecimalNumber(decimal: decimal).description(withLocale: Locale(identifier: "en_US_POSIX"))
     }
 }
 
@@ -118,12 +263,12 @@ final class OrderFormModel {
             guard let cents = CurrencyMath.parseCents(from: item.unitPriceText), cents >= 0 else {
                 return false
             }
-            guard item.quantity > 0 else { return false }
+            guard item.isQuantityValid else { return false }
         }
         return !isSaving
     }
 
-    init(order: Order? = nil) {
+    init(order: Order? = nil, draftItems: [DraftOrderItem]? = nil) {
         self.editingOrder = order
 
         if let order {
@@ -132,15 +277,21 @@ final class OrderFormModel {
             self.customerPhone = order.customerPhone ?? ""
             self.deliveryAt = order.deliveryAt
             self.notes = order.notes ?? ""
-            // Al editar, conserva su precio acordado y no pide el costo de nuevo
+            // Al editar, conserva su precio acordado y su cantidad; soldBy nulo se trata como tanda.
             self.items = order.items.map { item in
-                let qty = Decimal(string: item.quantity, locale: Locale(identifier: "en_US_POSIX")) ?? 1
+                let soldBy = item.soldBy ?? .batch
+                let unitLabel = item.unitLabel ?? .pz
                 return DraftOrderItem(
                     recipeId: item.recipeId,
                     recipeName: item.recipeName,
-                    quantity: qty,
+                    soldBy: soldBy,
+                    yieldQuantity: nil,
+                    yieldUnit: unitLabel,
+                    quantityText: item.quantity,
                     unitPriceText: CurrencyMath.formatForInput(cents: item.unitPriceCents),
-                    suggestedPriceCents: nil
+                    suggestedPriceBatchCents: nil,
+                    suggestedPriceUnitCents: nil,
+                    costCalculationFailed: false
                 )
             }
         } else {
@@ -151,6 +302,10 @@ final class OrderFormModel {
             self.deliveryAt = calendar.date(bySettingHour: 16, minute: 0, second: 0, of: tomorrow) ?? tomorrow
             self.items = []
         }
+
+        if let draftItems {
+            self.items = draftItems
+        }
     }
 
     /// Selecciona un cliente del catálogo (Bloque I7b).
@@ -160,32 +315,93 @@ final class OrderFormModel {
         self.customerPhone = customer.phone ?? ""
     }
 
+    /// Pide el rendimiento y costos de las recetas para las líneas existentes al editar.
+    /// Si falla, la línea se edita sin selector.
+    func loadRecipeDetailsForEditing() async {
+        guard isEditing else { return }
+
+        await withTaskGroup(of: (UUID, Recipe?, RecipeCost?).self) { group in
+            for item in items {
+                group.addTask {
+                    do {
+                        async let recipeReq: Recipe = NetworkService.shared.request(
+                            .get,
+                            "/recipes/\(item.recipeId)"
+                        )
+                        async let costReq: RecipeCost = NetworkService.shared.request(
+                            .get,
+                            "/recipes/\(item.recipeId)/cost"
+                        )
+                        let (recipe, cost) = try await (recipeReq, costReq)
+                        return (item.id, recipe, cost)
+                    } catch {
+                        return (item.id, nil, nil)
+                    }
+                }
+            }
+
+            for await (id, recipe, cost) in group {
+                guard let recipe = recipe,
+                      let idx = items.firstIndex(where: { $0.id == id }) else { continue }
+                let yieldDec = Decimal(string: recipe.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) ?? 1
+                items[idx].yieldQuantity = yieldDec
+                items[idx].yieldUnit = recipe.yieldUnit
+                if let cost = cost {
+                    items[idx].suggestedPriceBatchCents = cost.suggestedPriceCents
+                    items[idx].suggestedPriceUnitCents = cost.suggestedPricePerYieldUnitCents
+                }
+            }
+        }
+    }
+
     /// Agrega una receta seleccionada:
-    /// Pide GET /recipes/{id}/cost y escribe en el campo de precio el suggested_price_cents.
-    /// Si el costo falla, la línea se agrega igual con precio vacío y aviso de error.
+    /// Si yieldQuantity > 1, empieza por pieza con cantidad igual al rendimiento y precio por unidad.
+    /// Si rinde 1, empieza por tanda con cantidad 1 y precio por tanda.
     func addRecipe(_ recipeItem: RecipeListItem) async {
+        let recipe = recipeItem.recipe
+        let yieldQty = Decimal(string: recipe.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) ?? 1
+        let startsAsUnit = yieldQty > 1
+        let initialSoldBy: OrderSoldBy = startsAsUnit ? .unit : .batch
+        let initialQuantityText = startsAsUnit ? DraftOrderItem.formatQuantityForInput(yieldQty) : "1"
+
         do {
             let cost: RecipeCost = try await NetworkService.shared.request(
                 .get,
-                "/recipes/\(recipeItem.recipe.id)/cost"
+                "/recipes/\(recipe.id)/cost"
             )
 
+            let initialPriceCents = startsAsUnit ? cost.suggestedPricePerYieldUnitCents : cost.suggestedPriceCents
+            let initialPriceText: String
+            if let cents = initialPriceCents {
+                initialPriceText = CurrencyMath.formatForInput(cents: cents)
+            } else {
+                initialPriceText = ""
+            }
+
             let draft = DraftOrderItem(
-                recipeId: recipeItem.recipe.id,
-                recipeName: recipeItem.recipe.name,
-                quantity: 1,
-                unitPriceText: CurrencyMath.formatForInput(cents: cost.suggestedPriceCents),
-                suggestedPriceCents: cost.suggestedPriceCents,
+                recipeId: recipe.id,
+                recipeName: recipe.name,
+                soldBy: initialSoldBy,
+                yieldQuantity: yieldQty,
+                yieldUnit: recipe.yieldUnit,
+                quantityText: initialQuantityText,
+                unitPriceText: initialPriceText,
+                suggestedPriceBatchCents: cost.suggestedPriceCents,
+                suggestedPriceUnitCents: cost.suggestedPricePerYieldUnitCents,
                 costCalculationFailed: false
             )
             items.append(draft)
         } catch {
             let draft = DraftOrderItem(
-                recipeId: recipeItem.recipe.id,
-                recipeName: recipeItem.recipe.name,
-                quantity: 1,
+                recipeId: recipe.id,
+                recipeName: recipe.name,
+                soldBy: initialSoldBy,
+                yieldQuantity: yieldQty,
+                yieldUnit: recipe.yieldUnit,
+                quantityText: initialQuantityText,
                 unitPriceText: "",
-                suggestedPriceCents: nil,
+                suggestedPriceBatchCents: nil,
+                suggestedPriceUnitCents: nil,
                 costCalculationFailed: true
             )
             items.append(draft)
@@ -205,9 +421,11 @@ final class OrderFormModel {
 
         let payloadItems = items.compactMap { item -> OrderItemInput? in
             guard let cents = CurrencyMath.parseCents(from: item.unitPriceText) else { return nil }
+            guard let quantityString = Quantity.parse(item.quantityText) else { return nil }
             return OrderItemInput(
                 recipeId: item.recipeId,
-                quantity: item.quantityString,
+                soldBy: item.soldBy,
+                quantity: quantityString,
                 unitPriceCents: cents
             )
         }
