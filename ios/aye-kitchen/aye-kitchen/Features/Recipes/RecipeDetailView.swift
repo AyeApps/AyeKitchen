@@ -1,12 +1,5 @@
 import SwiftUI
 
-/// Extensión para permitir usar Chip("Texto") con tono neutral por defecto.
-extension Chip {
-    init(_ text: String) {
-        self.init(text, tone: .neutral)
-    }
-}
-
 /// Extensión para identificar líneas de costo en sheets.
 extension CostLine: Identifiable {
     public var id: String { "\(kind.rawValue)_\(refId)_\(presentationId ?? "")" }
@@ -267,7 +260,7 @@ struct RecipeDetailView: View {
                     HStack(spacing: Spacing.sm) {
                         comparisonChipsList
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, Spacing.xs)
                 }
             }
         }
@@ -295,8 +288,8 @@ struct RecipeDetailView: View {
                         .monospacedDigit()
                 }
                 .foregroundStyle(isSelected ? Color.accentInk : Color.inkPrimary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.horizontal, Spacing.md)
+                .padding(.vertical, Spacing.sm)
                 .background(
                     isSelected ? Color.accentFill : Color.surfaceCard,
                     in: .capsule
@@ -321,8 +314,8 @@ struct RecipeDetailView: View {
                     .font(.subheadline.weight(.bold))
             }
             .foregroundStyle(.tint)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
+            .padding(.horizontal, Spacing.md)
+            .padding(.vertical, Spacing.sm)
             .background(Color.surfaceCard, in: .capsule)
             .overlay {
                 Capsule()
@@ -561,7 +554,7 @@ struct CostLineRow: View {
 
                 if hasChips {
                     chipsLayout
-                        .padding(.top, 2)
+                        .padding(.top, Spacing.xs)
                 }
             }
 
@@ -612,7 +605,7 @@ struct CostLineRow: View {
         case .version:
             Chip("Esta versión", tone: .inProgress)
         case .recipe:
-            Chip("Fijada")
+            Chip("Fijada", tone: .neutral)
         case .current, .none:
             EmptyView()
         }

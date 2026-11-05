@@ -28,7 +28,7 @@ struct IngredientDetailView: View {
                 Text("Tus recetas usan la marca que dice La que usamos. Puedes elegir otra en cada receta.")
             }
 
-            Section("Cómo lo compras") {
+            Section("Cómo lo mides") {
                 Text(ingredient.buyingUnitDescription)
                     .font(.body)
                     .foregroundStyle(.inkPrimary)

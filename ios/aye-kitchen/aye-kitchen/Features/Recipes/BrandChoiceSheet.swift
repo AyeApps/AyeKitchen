@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Hoja para elegir la marca de un ingrediente en el costo o en una versión (Bloque I10).
+/// Hoja para elegir la marca de un ingrediente en el costo o en una versión (Bloque I10 / I10.1).
 struct BrandChoiceSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -9,14 +9,31 @@ struct BrandChoiceSheet: View {
     let isBaseVersion: Bool
     let onSelectBrand: @MainActor @Sendable (String?) async throws -> Void
     let onOpenIngredient: @MainActor @Sendable () -> Void
-    var mockPresentations: [Presentation]? = nil
 
-    @State private var presentations: [Presentation] = []
-    @State private var isLoading: Bool = true
+    @State private var model: BrandChoiceModel
     @State private var isSaving: Bool = false
     @State private var savingPresentationId: String? = nil
     @State private var savingDefault: Bool = false
-    @State private var errorMessage: String? = nil
+    @State private var actionErrorMessage: String? = nil
+
+    init(
+        line: CostLine,
+        isBaseVersion: Bool,
+        onSelectBrand: @escaping @MainActor @Sendable (String?) async throws -> Void,
+        onOpenIngredient: @escaping @MainActor @Sendable () -> Void,
+        mockPresentations: [Presentation]? = nil
+    ) {
+        self.line = line
+        self.isBaseVersion = isBaseVersion
+        self.onSelectBrand = onSelectBrand
+        self.onOpenIngredient = onOpenIngredient
+        _model = State(
+            initialValue: BrandChoiceModel(
+                ingredientId: line.refId,
+                mockPresentations: mockPresentations
+            )
+        )
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,12 +43,12 @@ struct BrandChoiceSheet: View {
                         baseVersionWarning
                     }
 
-                    if let errorMessage {
+                    if let error = actionErrorMessage ?? loadErrorMessage {
                         HStack(alignment: .top, spacing: Spacing.sm) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.warningText)
                                 .accessibilityHidden(true)
-                            Text(errorMessage)
+                            Text(error)
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.warningText)
                         }
@@ -40,14 +57,23 @@ struct BrandChoiceSheet: View {
                         .background(.warningSoft, in: .rect(cornerRadius: Radius.control))
                     }
 
-                    if isLoading {
+                    switch model.state {
+                    case .loading where model.presentations.isEmpty:
                         ProgressView()
                             .tint(Color.accentColor)
                             .frame(maxWidth: .infinity, minHeight: 120)
-                    } else if presentations.isEmpty {
-                        emptyStateView
-                    } else {
-                        brandsList
+
+                    case .error where model.presentations.isEmpty:
+                        ErrorStateView(message: loadErrorMessage ?? "No se pudieron cargar las marcas") {
+                            Task { await model.load() }
+                        }
+
+                    default:
+                        if model.presentations.isEmpty {
+                            emptyStateView
+                        } else {
+                            brandsList
+                        }
                     }
 
                     footerLink
@@ -68,9 +94,18 @@ struct BrandChoiceSheet: View {
                 }
             }
             .task {
-                await loadPresentations()
+                if model.state == .loading {
+                    await model.load()
+                }
             }
         }
+    }
+
+    private var loadErrorMessage: String? {
+        if case .error(let msg) = model.state {
+            return msg
+        }
+        return nil
     }
 
     // MARK: - Subvistas
@@ -100,32 +135,41 @@ struct BrandChoiceSheet: View {
 
     private var brandsList: some View {
         RowGroup {
-            defaultChoiceRow
+            firstChoiceRow
 
-            ForEach(presentations) { presentation in
+            ForEach(model.presentations) { presentation in
                 presentationRow(presentation)
             }
         }
     }
 
-    private var isDefaultSelected: Bool {
-        if line.brandSource == .version || line.brandSource == .recipe {
-            return false
+    private var isFirstRowSelected: Bool {
+        if isBaseVersion {
+            return line.brandSource != .recipe
+        } else {
+            return line.brandSource != .version
         }
-        return true
     }
 
-    private var defaultChoiceRow: some View {
+    private var firstRowTitle: String {
+        isBaseVersion ? "La que usamos por defecto" : "Como en la base"
+    }
+
+    private var firstRowSubtitle: String {
+        isBaseVersion ? "Usa la marca vigente del ingrediente" : "Usa la marca que tiene la receta"
+    }
+
+    private var firstChoiceRow: some View {
         Button {
             select(presentationId: nil)
         } label: {
             HStack(spacing: Spacing.md) {
                 VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("La que usamos por defecto")
+                    Text(firstRowTitle)
                         .font(.body.weight(.bold))
                         .foregroundStyle(.inkPrimary)
 
-                    Text("Usa la marca vigente del ingrediente")
+                    Text(firstRowSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(.inkMuted)
                 }
@@ -135,7 +179,7 @@ struct BrandChoiceSheet: View {
                 if savingDefault {
                     ProgressView()
                         .tint(Color.accentColor)
-                } else if isDefaultSelected {
+                } else if isFirstRowSelected {
                     Image(systemName: "checkmark")
                         .font(.headline.weight(.heavy))
                         .foregroundStyle(.tint)
@@ -149,9 +193,16 @@ struct BrandChoiceSheet: View {
         .disabled(isSaving)
     }
 
+    private func isPresentationSelected(_ p: Presentation) -> Bool {
+        if isBaseVersion {
+            return line.brandSource == .recipe && line.presentationId == p.id
+        } else {
+            return line.brandSource == .version && line.presentationId == p.id
+        }
+    }
+
     private func presentationRow(_ p: Presentation) -> some View {
-        let isSelected = (line.presentationId == p.id) &&
-            (line.brandSource == .version || line.brandSource == .recipe)
+        let isSelected = isPresentationSelected(p)
 
         return Button {
             select(presentationId: p.id)
@@ -258,37 +309,10 @@ struct BrandChoiceSheet: View {
 
     // MARK: - Acciones
 
-    private func loadPresentations() async {
-        if let mockPresentations {
-            self.presentations = mockPresentations
-            self.isLoading = false
-            return
-        }
-
-        isLoading = true
-        errorMessage = nil
-
-        do {
-            let page: Page<Presentation> = try await NetworkService.shared.request(
-                .get,
-                "/presentations/",
-                query: [
-                    URLQueryItem(name: "ingredient_id", value: line.refId),
-                    URLQueryItem(name: "limit", value: "100")
-                ]
-            )
-            self.presentations = page.items
-            self.isLoading = false
-        } catch {
-            self.isLoading = false
-            self.errorMessage = error.localizedDescription
-        }
-    }
-
     private func select(presentationId: String?) {
         guard !isSaving else { return }
         isSaving = true
-        errorMessage = nil
+        actionErrorMessage = nil
         if let presentationId {
             savingPresentationId = presentationId
             savingDefault = false
@@ -302,7 +326,7 @@ struct BrandChoiceSheet: View {
                 try await onSelectBrand(presentationId)
                 dismiss()
             } catch {
-                errorMessage = error.localizedDescription
+                actionErrorMessage = error.localizedDescription
                 isSaving = false
                 savingPresentationId = nil
                 savingDefault = false
@@ -312,7 +336,7 @@ struct BrandChoiceSheet: View {
 }
 
 #if DEBUG
-#Preview("Elegir marca — Normal") {
+#Preview("Elegir marca — En Versión (Como en la base)") {
     let mockLine = CostLine(
         kind: .ingredient,
         refId: "ing_harina",
@@ -327,7 +351,7 @@ struct BrandChoiceSheet: View {
         costCents: 705,
         missingPrice: false,
         priceIsStale: false,
-        brandSource: .version
+        brandSource: .recipe
     )
 
     let mockList = [
