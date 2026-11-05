@@ -189,6 +189,7 @@ Servicios que B3 consume:
  cost_per_serving_cents | null,
  margin_percent,                          # el efectivo (receta o workspace)
  suggested_price_cents,                   # batch_cost × (1 + margin/100)
+ suggested_price_per_yield_unit_cents,    # B7: cost_per_yield_unit × (1 + margin/100), sin redondear antes; para vender por pieza
  complete: bool,                          # false si alguna línea, incluso dentro de una subreceta, no tiene precio
  has_stale_prices: bool,                  # true si alguna línea, incluso dentro de una subreceta, usa un precio viejo
  version_id: str | null, version_name: str | null}   # B6b: la versión con la que se costeó; null = base
@@ -250,7 +251,8 @@ Los pedidos de un cliente se piden con `GET /orders/?customer_id=<id>`.
 `Order`:
 ```
 {id, customer_id, customer_name, customer_phone, delivery_at, status: "pendiente"|"en_proceso"|"entregado"|"cancelado", notes,
- items: [{recipe_id, recipe_name, quantity, unit_price_cents, unit_cost_cents_snapshot}],
+ items: [{recipe_id, recipe_name, sold_by: "batch"|"unit", unit_label: "pz"|"g"|"ml"|null,
+          quantity, unit_price_cents, unit_cost_cents_snapshot}],
  payments: [{id, amount_cents, paid_at, method}],
  total_cents, paid_cents, balance_cents, cost_cents, profit_cents,
  created_at, updated_at}
@@ -262,12 +264,17 @@ Los pedidos de un cliente se piden con `GET /orders/?customer_id=<id>`.
 
 `total = Σ quantity × unit_price`, `cost = Σ quantity × unit_cost_snapshot`, `profit = total − cost`, `balance = total − paid`.
 
+**Por tanda o por pieza (B7).** Cada línea dice cómo se vende con `sold_by`:
+- `"batch"` (por defecto, y el de todas las líneas anteriores a B7): `quantity` son tandas completas de la receta. Precio por defecto = `suggested_price_cents` de la receta; snapshot = `batch_cost_cents`.
+- `"unit"`: `quantity` va en la unidad que rinde la receta (`yield_unit`: 4 pz de una receta que rinde 12 pz). Precio por defecto = `suggested_price_per_yield_unit_cents` de la receta; snapshot = `round_to_cents(cost_per_yield_unit)`. `unit_label` guarda la `yield_unit` de la receta al crear la línea (si la receta cambia después, la línea no cambia). En `"batch"`, `unit_label` es `null`.
+- `quantity > 0` en los dos casos; puede tener decimales (0.5 tanda, 250 g).
+
 | Método | Ruta | Body / Query | Notas |
 |---|---|---|---|
 | GET | `/orders/` | `?page&limit&status&from&to&customer_id` | Paginado. `from`/`to` filtran `delivery_at`. Orden `delivery_at` asc |
-| POST | `/orders/` | `{customer_id?, customer_name?, customer_phone?, delivery_at, items: [{recipe_id, quantity, unit_price_cents?}] (mínimo 1), notes?}` | `unit_price_cents` por defecto = `suggested_price_cents` de la receta. `unit_cost_cents_snapshot` = `batch_cost_cents` de la receta en ese momento (lo calcula el backend; el cliente no lo envía) |
+| POST | `/orders/` | `{customer_id?, customer_name?, customer_phone?, delivery_at, items: [{recipe_id, sold_by?, quantity, unit_price_cents?}] (mínimo 1), notes?}` | `unit_price_cents` por defecto = `suggested_price_cents` de la receta. `unit_cost_cents_snapshot` = `batch_cost_cents` de la receta en ese momento (lo calcula el backend; el cliente no lo envía) |
 | GET | `/orders/{id}` | — | |
-| PATCH | `/orders/{id}` | parcial; `items` reemplaza la lista (mínimo 1 línea); `customer_id` acepta `null` para desligar | Una línea cuya `recipe_id` ya estaba en el pedido conserva su snapshot **y su `unit_price_cents` anterior** si no se envía uno nuevo: el precio acordado con el cliente nunca cambia solo. Solo las líneas nuevas toman `suggested_price_cents` por defecto y calculan snapshot. Si el nuevo `total_cents` quedaría por debajo de `paid_cents` → `PAYMENT_EXCEEDS_BALANCE` y no se guarda nada |
+| PATCH | `/orders/{id}` | parcial; `items` reemplaza la lista (mínimo 1 línea); `customer_id` acepta `null` para desligar | Una línea cuya `recipe_id` y `sold_by` ya estaban en el pedido conserva su snapshot, su `unit_label` **y su `unit_price_cents` anterior** si no se envía uno nuevo: el precio acordado con el cliente nunca cambia solo. Solo las líneas nuevas toman `suggested_price_cents` por defecto y calculan snapshot. Si el nuevo `total_cents` quedaría por debajo de `paid_cents` → `PAYMENT_EXCEEDS_BALANCE` y no se guarda nada |
 | DELETE | `/orders/{id}` | — | 204 |
 | POST | `/orders/{id}/payments` | `{amount_cents, paid_at?, method?}` | 201, devuelve el Order. Saldo negativo → `PAYMENT_EXCEEDS_BALANCE` |
 | DELETE | `/orders/{id}/payments/{payment_id}` | — | Devuelve el Order |

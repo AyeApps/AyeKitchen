@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from pymongo import ASCENDING, IndexModel
 
 from app.models.base import AyeDecimal, Cents, WorkspaceDocument
+from app.models.unit import BaseUnit
 
 
 class OrderStatus(StrEnum):
@@ -16,11 +17,21 @@ class OrderStatus(StrEnum):
     cancelado = "cancelado"
 
 
+class OrderSoldBy(StrEnum):
+    """Cómo se vende la línea (B7)."""
+
+    batch = "batch"  # Tandas completas de la receta (ej. 1 docena)
+    unit = "unit"  # La unidad que rinde la receta (ej. 4 galletas de una receta que rinde 12 pz)
+
+
 class OrderItem(BaseModel):
     recipe_id: str
-    quantity: AyeDecimal = Field(default=1)  # Tandas de la receta
-    unit_price_cents: Cents = Field(..., ge=0)  # Lo que se cobra por tanda
-    # Foto del costo al crear el pedido, para que la ganancia histórica no cambie con los precios
+    sold_by: OrderSoldBy = OrderSoldBy.batch  # Las líneas anteriores a B7 son por tanda
+    # Foto de recipe.yield_unit cuando sold_by=unit ("4 pz"); None en tandas
+    unit_label: BaseUnit | None = None
+    quantity: AyeDecimal = Field(default=1)  # Tandas, o unidades de rendimiento si sold_by=unit
+    unit_price_cents: Cents = Field(..., ge=0)  # Lo que se cobra por tanda o por unidad
+    # Foto del costo al crear la línea (por tanda o por unidad), para que la ganancia histórica no cambie
     unit_cost_cents_snapshot: Cents = 0
 
 

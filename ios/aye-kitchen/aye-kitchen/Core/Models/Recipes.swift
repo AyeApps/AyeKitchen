@@ -82,6 +82,8 @@ nonisolated struct RecipeCost: Decodable, Sendable, Hashable {
     /// Falso si alguna línea, incluso dentro de una subreceta, no tiene precio.
     let complete: Bool
     let hasStalePrices: Bool
+    /// B7. Precio sugerido por unidad de rendimiento (por pieza), para vender por pieza.
+    var suggestedPricePerYieldUnitCents: Int? = nil
     /// B6b. Versión con la que se costeó; nulo = base.
     var versionId: String? = nil
     var versionName: String? = nil
