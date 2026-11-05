@@ -21,6 +21,7 @@ from app.schemas.order import (
 )
 from app.schemas.recipe import RecipeCostResponse
 from app.services.costing_service import calculate_recipe_cost
+from app.services.costing_snapshot import CostingSnapshot, load_costing_snapshot
 from app.services.customer_service import get_customer
 
 
@@ -236,11 +237,18 @@ async def create_order(workspace_id: str, data: OrderCreate) -> Order:
                 )
             recipe_cache[it.recipe_id] = rec
 
+    costing_snapshot: CostingSnapshot | None = None
     order_items: list[OrderItem] = []
     for it in data.items:
         rec = recipe_cache[it.recipe_id]
         if it.recipe_id not in cost_cache:
-            cost_info = await calculate_recipe_cost(workspace_id, rec)
+            if costing_snapshot is None:
+                costing_snapshot = await load_costing_snapshot(workspace_id)
+            cost_info = await calculate_recipe_cost(
+                workspace_id,
+                rec,
+                snapshot=costing_snapshot,
+            )
             cost_cache[it.recipe_id] = cost_info
         else:
             cost_info = cost_cache[it.recipe_id]
@@ -381,6 +389,7 @@ async def update_order(
                     )
                 recipe_cache[it.recipe_id] = rec
 
+        costing_snapshot: CostingSnapshot | None = None
         new_items: list[OrderItem] = []
         for it in data.items:
             rec = recipe_cache[it.recipe_id]
@@ -396,7 +405,13 @@ async def update_order(
                 )
             else:
                 if it.recipe_id not in cost_cache:
-                    cost_cache[it.recipe_id] = await calculate_recipe_cost(workspace_id, rec)
+                    if costing_snapshot is None:
+                        costing_snapshot = await load_costing_snapshot(workspace_id)
+                    cost_cache[it.recipe_id] = await calculate_recipe_cost(
+                        workspace_id,
+                        rec,
+                        snapshot=costing_snapshot,
+                    )
                 cost_info = cost_cache[it.recipe_id]
                 unit_price, snapshot, unit_label = _compute_item_defaults(it, rec, cost_info)
 

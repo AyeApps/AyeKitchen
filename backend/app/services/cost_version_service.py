@@ -18,6 +18,7 @@ from app.schemas.cost_version import (
     CostVersionUpdate,
 )
 from app.services.costing_service import calculate_recipe_cost
+from app.services.costing_snapshot import load_costing_snapshot
 from app.services.recipe_service import get_recipe
 
 
@@ -350,6 +351,7 @@ async def compare_cost_versions(
     recipe_id: str,
 ) -> list[CostVersionCompareResponse]:
     recipe = await get_recipe(workspace_id, recipe_id)
+    snapshot = await load_costing_snapshot(workspace_id)
     cache: dict[str, Any] = {}
 
     base_cost = await calculate_recipe_cost(
@@ -357,6 +359,7 @@ async def compare_cost_versions(
         recipe,
         cache=cache,
         version=None,
+        snapshot=snapshot,
     )
 
     results: list[CostVersionCompareResponse] = [
@@ -383,6 +386,7 @@ async def compare_cost_versions(
             recipe,
             cache=cache,
             version=v,
+            snapshot=snapshot,
         )
         results.append(
             CostVersionCompareResponse(

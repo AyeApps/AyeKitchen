@@ -1,23 +1,23 @@
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, NamedTuple
 
-from bson import ObjectId
-
 from app.models.base import parse_decimal, round_to_cents
 from app.models.cost_version import CostVersion
 from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation, PriceRecord
 from app.models.recipe import Recipe, RecipeItem, RecipeItemKind
-from app.models.supplier import Supplier
-from app.models.unit import Unit
-from app.models.workspace import Workspace
 from app.schemas.recipe import CostLineResponse, RecipeCostResponse
-from app.services.conversion_service import convert_between_base_units, convert_to_base
+from app.services.costing_snapshot import CostingSnapshot, load_costing_snapshot
 from app.services.presentation_service import (
-    compute_price_staleness,
     get_current_presentation,
     get_latest_price,
 )
+
+__all__ = [
+    "calculate_recipe_cost",
+    "get_current_presentation",
+    "get_latest_price",
+]
 
 
 class _IngredientCostResult(NamedTuple):
@@ -30,26 +30,13 @@ class _IngredientCostResult(NamedTuple):
     brand_source: str | None
 
 
-async def _resolve_workspace(workspace_or_id: Workspace | str) -> Workspace:
-    if isinstance(workspace_or_id, Workspace):
-        return workspace_or_id
-    ws = None
-    if ObjectId.is_valid(workspace_or_id):
-        ws = await Workspace.get(ObjectId(workspace_or_id))
-    if not ws:
-        ws = await Workspace.get(workspace_or_id)
-    if ws:
-        return ws
-    return Workspace(owner_id="unknown")
-
-
 async def _compute_ingredient_line_cost(
-    workspace_or_id: Workspace | str,
+    snapshot: CostingSnapshot,
     item: RecipeItem,
     ingredient: Ingredient,
     chosen_presentation_id: str | None = None,
 ) -> _IngredientCostResult:
-    """Función interna única para calcular el costo de una línea de ingrediente.
+    """Función interna única para calcular el costo de una línea de ingrediente usando la foto.
 
     Orden de resolución de marca:
     i.   La elegida por la versión, si está activa y es de ese ingrediente.
@@ -59,11 +46,7 @@ async def _compute_ingredient_line_cost(
     Si la elegida o la fijada está activa pero no tiene precio, se mantiene con costo 0,
     price_cents=None y missing_price=True, sin caer a otra marca.
     """
-    workspace = await _resolve_workspace(workspace_or_id)
-    workspace_id = str(workspace.id) if workspace.id else str(workspace_or_id)
-
-    qty_in_base = await convert_to_base(
-        workspace_id,
+    qty_in_base = snapshot.convert_to_base(
         item.quantity,
         item.unit_id,
         ingredient,
@@ -76,40 +59,32 @@ async def _compute_ingredient_line_cost(
     price_cents: int | None = None
 
     # i. La elegida por la versión, si está activa y es de ese ingrediente
-    if chosen_presentation_id and ObjectId.is_valid(chosen_presentation_id):
-        chosen_p = await Presentation.find_one(
-            Presentation.id == ObjectId(chosen_presentation_id),
-            Presentation.workspace_id == workspace_id,
-            Presentation.deleted_at == None,  # noqa: E711
-        )
+    if chosen_presentation_id:
+        chosen_p = snapshot.presentations_by_id.get(str(chosen_presentation_id))
         if chosen_p and str(chosen_p.ingredient_id) == str(ingredient.id):
             pres = chosen_p
             brand_source = "version"
             pinned = True
-            pr = await get_latest_price(workspace_id, str(chosen_p.id))
+            pr = snapshot.get_latest_price(str(chosen_p.id))
             if pr:
                 price_record = pr
                 price_cents = pr.price_cents
 
     # ii. Si no, la fijada en la línea
-    if pres is None and item.pinned_presentation_id and ObjectId.is_valid(item.pinned_presentation_id):
-        pinned_p = await Presentation.find_one(
-            Presentation.id == ObjectId(item.pinned_presentation_id),
-            Presentation.workspace_id == workspace_id,
-            Presentation.deleted_at == None,  # noqa: E711
-        )
+    if pres is None and item.pinned_presentation_id:
+        pinned_p = snapshot.presentations_by_id.get(str(item.pinned_presentation_id))
         if pinned_p and str(pinned_p.ingredient_id) == str(ingredient.id):
             pres = pinned_p
             brand_source = "recipe"
             pinned = True
-            pr = await get_latest_price(workspace_id, str(pinned_p.id))
+            pr = snapshot.get_latest_price(str(pinned_p.id))
             if pr:
                 price_record = pr
                 price_cents = pr.price_cents
 
     # iii. Si no, la vigente
     if pres is None:
-        curr = await get_current_presentation(workspace_id, str(ingredient.id))
+        curr = snapshot.get_current_presentation(str(ingredient.id))
         if curr:
             pres = curr.presentation
             brand_source = "current"
@@ -133,7 +108,7 @@ async def _compute_ingredient_line_cost(
         unrounded_cost = Decimal("0")
 
     if pres is not None and price_record is not None and price_cents is not None:
-        _, price_is_stale = compute_price_staleness(workspace, price_record.recorded_at)
+        _, price_is_stale = snapshot.compute_price_staleness(price_record.recorded_at)
     else:
         price_is_stale = False
 
@@ -149,7 +124,7 @@ async def _compute_ingredient_line_cost(
 
 
 async def _compute_subrecipe_unrounded_cost(
-    workspace_or_id: Workspace | str,
+    snapshot: CostingSnapshot,
     recipe_id: str,
     cache: dict[str, Any],
     depth: int = 1,
@@ -169,18 +144,7 @@ async def _compute_subrecipe_unrounded_cost(
             return cached[0], cached[1], False
         return cached[0], cached[1], cached[2]
 
-    if not ObjectId.is_valid(recipe_id):
-        cache[recipe_id] = (Decimal("0"), False, False)
-        return Decimal("0"), False, False
-
-    workspace = await _resolve_workspace(workspace_or_id)
-    workspace_id = str(workspace.id) if workspace.id else str(workspace_or_id)
-
-    subrecipe = await Recipe.find_one(
-        Recipe.id == ObjectId(recipe_id),
-        Recipe.workspace_id == workspace_id,
-        Recipe.deleted_at == None,  # noqa: E711
-    )
+    subrecipe = snapshot.recipes_by_id.get(str(recipe_id))
     if not subrecipe:
         cache[recipe_id] = (Decimal("0"), False, False)
         return Decimal("0"), False, False
@@ -191,21 +155,13 @@ async def _compute_subrecipe_unrounded_cost(
 
     for item in subrecipe.items:
         if item.kind == RecipeItemKind.ingredient:
-            if not ObjectId.is_valid(item.ref_id):
-                is_complete = False
-                continue
-
-            ingredient = await Ingredient.find_one(
-                Ingredient.id == ObjectId(item.ref_id),
-                Ingredient.workspace_id == workspace_id,
-                Ingredient.deleted_at == None,  # noqa: E711
-            )
+            ingredient = snapshot.ingredients_by_id.get(str(item.ref_id))
             if not ingredient:
                 is_complete = False
                 continue
 
             cost_res = await _compute_ingredient_line_cost(
-                workspace,
+                snapshot,
                 item,
                 ingredient,
             )
@@ -217,7 +173,7 @@ async def _compute_subrecipe_unrounded_cost(
 
         elif item.kind == RecipeItemKind.recipe:
             sub_cost, sub_comp, sub_stale = await _compute_subrecipe_unrounded_cost(
-                workspace,
+                snapshot,
                 item.ref_id,
                 cache,
                 depth=depth + 1,
@@ -227,18 +183,9 @@ async def _compute_subrecipe_unrounded_cost(
             if sub_stale:
                 has_stale_prices = True
 
-            if not ObjectId.is_valid(item.ref_id):
-                is_complete = False
-                continue
-
-            nested_rec = await Recipe.find_one(
-                Recipe.id == ObjectId(item.ref_id),
-                Recipe.workspace_id == workspace_id,
-                Recipe.deleted_at == None,  # noqa: E711
-            )
+            nested_rec = snapshot.recipes_by_id.get(str(item.ref_id))
             if nested_rec:
-                qty_in_yield = await convert_between_base_units(
-                    workspace_id,
+                qty_in_yield = snapshot.convert_between_base_units(
                     item.quantity,
                     item.unit_id,
                     nested_rec.yield_unit,
@@ -266,6 +213,7 @@ async def calculate_recipe_cost(
     recipe: Recipe,
     cache: dict[str, Any] | None = None,
     version: CostVersion | None = None,
+    snapshot: CostingSnapshot | None = None,
 ) -> RecipeCostResponse:
     """Calcula el costo detallado de una receta según el contrato de la API.
 
@@ -275,8 +223,10 @@ async def calculate_recipe_cost(
     if cache is None:
         cache = {}
 
-    workspace = await _resolve_workspace(workspace_id)
-    ws_id = str(workspace.id) if workspace.id else str(workspace_id)
+    if snapshot is None:
+        snapshot = await load_costing_snapshot(workspace_id)
+
+    workspace = snapshot.workspace
 
     version_choices: dict[str, str] = (
         {c.ingredient_id: c.presentation_id for c in version.choices}
@@ -289,17 +239,13 @@ async def calculate_recipe_cost(
 
     for item in recipe.items:
         unit_name: str | None = None
-        if item.unit_id and ObjectId.is_valid(item.unit_id):
-            unit = await Unit.get(item.unit_id)
+        if item.unit_id:
+            unit = snapshot.units_by_id.get(str(item.unit_id))
             if unit:
                 unit_name = unit.name
 
         if item.kind == RecipeItemKind.ingredient:
-            ingredient = await Ingredient.find_one(
-                Ingredient.id == ObjectId(item.ref_id),
-                Ingredient.workspace_id == ws_id,
-                Ingredient.deleted_at == None,  # noqa: E711
-            ) if ObjectId.is_valid(item.ref_id) else None
+            ingredient = snapshot.ingredients_by_id.get(str(item.ref_id))
 
             if not ingredient:
                 lines.append(
@@ -325,7 +271,7 @@ async def calculate_recipe_cost(
 
             chosen_pres_id = version_choices.get(item.ref_id)
             cost_res = await _compute_ingredient_line_cost(
-                workspace,
+                snapshot,
                 item,
                 ingredient,
                 chosen_presentation_id=chosen_pres_id,
@@ -337,14 +283,8 @@ async def calculate_recipe_cost(
             if cost_res.presentation is not None:
                 presentation_id = str(cost_res.presentation.id)
                 supplier_name: str | None = None
-                if cost_res.presentation.supplier_id and ObjectId.is_valid(
-                    cost_res.presentation.supplier_id
-                ):
-                    supp = await Supplier.find_one(
-                        Supplier.id == ObjectId(cost_res.presentation.supplier_id),
-                        Supplier.workspace_id == ws_id,
-                        Supplier.deleted_at == None,  # noqa: E711
-                    )
+                if cost_res.presentation.supplier_id:
+                    supp = snapshot.suppliers_by_id.get(str(cost_res.presentation.supplier_id))
                     if supp:
                         supplier_name = supp.name
 
@@ -388,11 +328,7 @@ async def calculate_recipe_cost(
             )
 
         elif item.kind == RecipeItemKind.recipe:
-            subrecipe = await Recipe.find_one(
-                Recipe.id == ObjectId(item.ref_id),
-                Recipe.workspace_id == ws_id,
-                Recipe.deleted_at == None,  # noqa: E711
-            ) if ObjectId.is_valid(item.ref_id) else None
+            subrecipe = snapshot.recipes_by_id.get(str(item.ref_id))
 
             if not subrecipe:
                 lines.append(
@@ -416,15 +352,14 @@ async def calculate_recipe_cost(
                 unrounded_line_costs.append(Decimal("0"))
                 continue
 
-            qty_in_yield = await convert_between_base_units(
-                ws_id,
+            qty_in_yield = snapshot.convert_between_base_units(
                 item.quantity,
                 item.unit_id,
                 subrecipe.yield_unit,
             )
 
             sub_batch_cost, sub_complete, sub_stale = await _compute_subrecipe_unrounded_cost(
-                workspace,
+                snapshot,
                 item.ref_id,
                 cache,
                 depth=2,

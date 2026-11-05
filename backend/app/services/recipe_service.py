@@ -25,6 +25,7 @@ from app.schemas.recipe import (
 )
 from app.services.conversion_service import convert_between_base_units, convert_to_base
 from app.services.costing_service import calculate_recipe_cost
+from app.services.costing_snapshot import load_costing_snapshot
 
 
 async def get_recipe(workspace_id: str, recipe_id: str) -> Recipe:
@@ -398,7 +399,8 @@ async def list_recipes(
     rec_map = {str(r.id): r for r in all_recipes}
     unit_map = {str(u.id): u for u in units}
 
-    cost_cache: dict[str, tuple[Decimal, bool]] = {}
+    snapshot = await load_costing_snapshot(workspace_id) if page_items else None
+    cost_cache: dict[str, Any] = {}
     items: list[RecipeListItemResponse] = []
 
     for r in page_items:
@@ -408,6 +410,7 @@ async def list_recipes(
                 workspace_id,
                 r,
                 cache=cost_cache,
+                snapshot=snapshot,
             )
             batch_cost_cents = cost_resp.batch_cost_cents
             complete = cost_resp.complete
