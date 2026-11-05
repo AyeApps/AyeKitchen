@@ -1,29 +1,16 @@
 import SwiftUI
+import KitchenDomain
 
 // MARK: - Modos del formulario
 
-enum BrandFormMode: Sendable {
-    case create(ingredient: RemoteIngredient)
-    case edit(presentation: RemotePresentation)
+enum BrandFormMode: Sendable, Equatable {
+    case create(ingredientId: String)
+    case edit(presentationId: String)
 
     var title: String {
         switch self {
         case .create: "Nueva marca"
         case .edit: "Editar marca"
-        }
-    }
-
-    var baseUnit: RemoteBaseUnit {
-        switch self {
-        case .create(let ingredient): ingredient.baseUnit
-        case .edit(let presentation): presentation.baseUnit
-        }
-    }
-
-    var ingredientId: String {
-        switch self {
-        case .create(let ingredient): ingredient.id
-        case .edit(let presentation): presentation.ingredientId
         }
     }
 }
@@ -49,93 +36,18 @@ enum SupplierSelection: Hashable {
     }
 }
 
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-
-nonisolated struct PresentationCreateRequest: Encodable, Sendable {
-    let ingredientId: String
-    let brand: String
-    let supplierId: String?
-    let packageQuantity: String
-    let packageUnitId: String?
-    let priceCents: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case ingredientId
-        case brand
-        case supplierId
-        case packageQuantity
-        case packageUnitId
-        case priceCents
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(ingredientId, forKey: .ingredientId)
-        try container.encode(brand, forKey: .brand)
-        if let supplierId {
-            try container.encode(supplierId, forKey: .supplierId)
-        } else {
-            try container.encodeNil(forKey: .supplierId)
-        }
-        try container.encode(packageQuantity, forKey: .packageQuantity)
-        if let packageUnitId {
-            try container.encode(packageUnitId, forKey: .packageUnitId)
-        } else {
-            try container.encodeNil(forKey: .packageUnitId)
-        }
-        if let priceCents {
-            try container.encode(priceCents, forKey: .priceCents)
-        } else {
-            try container.encodeNil(forKey: .priceCents)
-        }
-    }
-}
-
-nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
-    let brand: String
-    let supplierId: String?
-    let packageQuantity: String
-    let packageUnitId: String?
-
-    enum CodingKeys: String, CodingKey {
-        case brand
-        case supplierId
-        case packageQuantity
-        case packageUnitId
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(brand, forKey: .brand)
-        if let supplierId {
-            try container.encode(supplierId, forKey: .supplierId)
-        } else {
-            try container.encodeNil(forKey: .supplierId)
-        }
-        try container.encode(packageQuantity, forKey: .packageQuantity)
-        if let packageUnitId {
-            try container.encode(packageUnitId, forKey: .packageUnitId)
-        } else {
-            try container.encodeNil(forKey: .packageUnitId)
-        }
-    }
-}
-
 // MARK: - Modelo de Formulario
 
 @Observable final class BrandFormModel {
     let mode: BrandFormMode
+    private let store: LocalStore
 
     var brandText: String = ""
     var selectedSupplier: SupplierSelection = .none
     var packageQuantityText: String = "1"
-    var selectedUnit: MeasureUnit?
+    var selectedUnit: KitchenUnit?
     var priceText: String = ""
-
-    var suppliers: [RemoteSupplier] = []
-    var availableUnits: [MeasureUnit] = []
-    var isLoadingOptions = false
-    var isSaving = false
+    var baseUnit: BaseUnit = .g
     var errorMessage: String?
 
     var isCreateMode: Bool {
@@ -143,36 +55,51 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
         return false
     }
 
-    init(
-        mode: BrandFormMode,
-        mockSuppliers: [RemoteSupplier]? = nil,
-        mockUnits: [MeasureUnit]? = nil
-    ) {
+    init(mode: BrandFormMode, store: LocalStore = .shared) {
         self.mode = mode
+        self.store = store
 
         switch mode {
-        case .create:
+        case .create(let ingredientId):
             self.brandText = ""
             self.selectedSupplier = .none
             self.packageQuantityText = "1"
             self.priceText = ""
-        case .edit(let pres):
-            self.brandText = pres.brand
-            if let supId = pres.supplierId, let supName = pres.supplierName {
-                self.selectedSupplier = .existing(id: supId, name: supName)
-            } else {
-                self.selectedSupplier = .none
+            let ingredient = store.data.ingredients.first(where: { $0.id == ingredientId && $0.isActive })
+            self.baseUnit = ingredient?.baseUnit ?? .g
+
+        case .edit(let presentationId):
+            if let pres = store.data.presentations.first(where: { $0.id == presentationId && $0.isActive }) {
+                self.brandText = pres.brand
+                if let supId = pres.supplierId,
+                   let sup = store.data.suppliers.first(where: { $0.id == supId && $0.isActive }) {
+                    self.selectedSupplier = .existing(id: sup.id, name: sup.name)
+                } else {
+                    self.selectedSupplier = .none
+                }
+                self.packageQuantityText = Quantity.format(pres.packageQuantity).replacingOccurrences(of: ",", with: "")
+                let ingredient = store.data.ingredients.first(where: { $0.id == pres.ingredientId && $0.isActive })
+                self.baseUnit = ingredient?.baseUnit ?? .g
             }
-            self.packageQuantityText = Quantity.format(pres.packageQuantity).replacingOccurrences(of: ",", with: "")
             self.priceText = ""
         }
 
-        if let mockSuppliers {
-            self.suppliers = mockSuppliers
-        }
-        if let mockUnits {
-            self.availableUnits = mockUnits.filter { $0.baseUnit == mode.baseUnit }
-            self.selectDefaultUnit()
+        selectDefaultUnit()
+    }
+
+    var suppliers: [Supplier] {
+        store.data.activeSuppliers()
+    }
+
+    var availableUnits: [KitchenUnit] {
+        store.data.availableKitchenUnits().filter { $0.baseUnit == self.baseUnit }
+    }
+
+    private func selectDefaultUnit() {
+        if let base = availableUnits.first(where: { $0.factorToBase == "1" }) {
+            selectedUnit = base
+        } else {
+            selectedUnit = availableUnits.first
         }
     }
 
@@ -182,63 +109,35 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
         let unitValid = selectedUnit != nil
         let priceValid: Bool
         if isCreateMode && !priceText.trimmingCharacters(in: .whitespaces).isEmpty {
-            priceValid = Self.parsePriceCents(priceText) != nil
+            priceValid = RecordPriceModel.parsePriceCents(priceText) != nil
         } else {
             priceValid = true
         }
         return brandValid && quantityValid && unitValid && priceValid
     }
 
-    func loadOptions() async {
-        isLoadingOptions = true
-        errorMessage = nil
-        do {
-            async let suppliersTask: [RemoteSupplier] = NetworkService.shared.request(.get, "/suppliers/")
-            async let unitsTask: [MeasureUnit] = NetworkService.shared.request(.get, "/units/")
-
-            let (fetchedSuppliers, fetchedUnits) = try await (suppliersTask, unitsTask)
-            self.suppliers = fetchedSuppliers
-            self.availableUnits = fetchedUnits.filter { $0.baseUnit == self.mode.baseUnit }
-            selectDefaultUnit()
-            self.isLoadingOptions = false
-        } catch {
-            self.isLoadingOptions = false
-            self.errorMessage = mapError(error)
-        }
-    }
-
-    private func selectDefaultUnit() {
-        if selectedUnit == nil {
-            // Prefer base unit factor 1
-            if let base = availableUnits.first(where: { $0.factorToBase == "1" }) {
-                selectedUnit = base
-            } else {
-                selectedUnit = availableUnits.first
-            }
-        }
-    }
-
-    func createSupplier(name: String) async -> RemoteSupplier? {
+    func createSupplier(name: String) -> Supplier? {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
         do {
-            let body = SupplierCreateRequest(name: trimmed, notes: nil)
-            let created: RemoteSupplier = try await NetworkService.shared.request(.post, "/suppliers/", body: body)
-            suppliers.append(created)
-            suppliers.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
+            let created = try store.mutate { data, ctx in
+                try data.createSupplier(name: trimmed, ctx: ctx)
+            }
             selectedSupplier = .existing(id: created.id, name: created.name)
             return created
+        } catch let domainError as DomainError {
+            errorMessage = domainError.detail
+            return nil
         } catch {
-            errorMessage = mapError(error)
+            errorMessage = error.localizedDescription
             return nil
         }
     }
 
-    func save() async -> RemotePresentation? {
+    func save() -> Presentation? {
         guard isValid, let unit = selectedUnit, let parsedQty = Quantity.parse(packageQuantityText) else {
             return nil
         }
-        isSaving = true
         errorMessage = nil
 
         let brand = brandText.trimmingCharacters(in: .whitespaces)
@@ -246,70 +145,53 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
 
         do {
             switch mode {
-            case .create(let ingredient):
+            case .create(let ingredientId):
                 let priceCents: Int?
                 if !priceText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    priceCents = Self.parsePriceCents(priceText)
+                    priceCents = RecordPriceModel.parsePriceCents(priceText)
                 } else {
                     priceCents = nil
                 }
 
-                let body = PresentationCreateRequest(
-                    ingredientId: ingredient.id,
-                    brand: brand,
-                    supplierId: supplierId,
-                    packageQuantity: parsedQty,
-                    packageUnitId: unit.id,
-                    priceCents: priceCents
-                )
-
-                let created: RemotePresentation = try await NetworkService.shared.request(.post, "/presentations/", body: body)
-                isSaving = false
+                let created = try store.mutate { data, ctx in
+                    try data.createPresentation(
+                        ingredientId: ingredientId,
+                        brand: brand,
+                        supplierId: supplierId,
+                        packageQuantity: parsedQty,
+                        packageUnitId: unit.id,
+                        barcode: nil,
+                        priceCents: priceCents,
+                        ctx: ctx
+                    )
+                }
                 return created
 
-            case .edit(let presentation):
-                let body = PresentationUpdateRequest(
-                    brand: brand,
-                    supplierId: supplierId,
-                    packageQuantity: parsedQty,
-                    packageUnitId: unit.id
-                )
-
-                let updated: RemotePresentation = try await NetworkService.shared.request(.patch, "/presentations/\(presentation.id)", body: body)
-                isSaving = false
+            case .edit(let presentationId):
+                let updated = try store.mutate { data, ctx in
+                    try data.updatePresentation(
+                        id: presentationId,
+                        brand: brand,
+                        supplierId: .some(supplierId),
+                        packageQuantity: parsedQty,
+                        packageUnitId: unit.id,
+                        barcode: nil,
+                        ctx: ctx
+                    )
+                }
                 return updated
             }
+        } catch let domainError as DomainError {
+            if domainError.code == "INVALID_REFERENCE" {
+                errorMessage = "Esa tienda o unidad ya no existe. Vuelve a abrir el formulario."
+            } else {
+                errorMessage = domainError.detail
+            }
+            return nil
         } catch {
-            isSaving = false
-            errorMessage = mapError(error)
+            errorMessage = error.localizedDescription
             return nil
         }
-    }
-
-    func mapError(_ error: Error) -> String {
-        if let apiError = error as? APIError {
-            if apiError.code == "INVALID_REFERENCE" {
-                return "Esa tienda o unidad ya no existe. Vuelve a abrir el formulario."
-            }
-            if apiError.code == "UNIT_NOT_CONVERTIBLE" {
-                return apiError.errorDescription ?? apiError.localizedDescription
-            }
-            return apiError.localizedDescription
-        }
-        return error.localizedDescription
-    }
-
-    static func parsePriceCents(_ text: String) -> Int? {
-        let normalized = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
-        guard !normalized.isEmpty,
-              let decimal = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")),
-              decimal >= 0 else {
-            return nil
-        }
-        var centsDecimal = decimal * 100
-        var rounded = Decimal()
-        NSDecimalRound(&rounded, &centsDecimal, 0, .plain)
-        return (rounded as NSDecimalNumber).intValue
     }
 }
 
@@ -324,19 +206,14 @@ struct BrandFormView: View {
     @State private var showingNewSupplierAlert = false
     @State private var newSupplierName = ""
 
-    let onSave: (RemotePresentation) -> Void
+    var onSave: ((Presentation) -> Void)?
 
     init(
         mode: BrandFormMode,
-        mockSuppliers: [RemoteSupplier]? = nil,
-        mockUnits: [MeasureUnit]? = nil,
-        onSave: @escaping (RemotePresentation) -> Void
+        store: LocalStore = .shared,
+        onSave: ((Presentation) -> Void)? = nil
     ) {
-        self._model = State(initialValue: BrandFormModel(
-            mode: mode,
-            mockSuppliers: mockSuppliers,
-            mockUnits: mockUnits
-        ))
+        self._model = State(initialValue: BrandFormModel(mode: mode, store: store))
         self.onSave = onSave
     }
 
@@ -361,15 +238,13 @@ struct BrandFormView: View {
                     Spacer(minLength: Spacing.lg)
 
                     Button("Guardar marca") {
-                        Task {
-                            if let saved = await model.save() {
-                                onSave(saved)
-                                dismiss()
-                            }
+                        if let saved = model.save() {
+                            onSave?(saved)
+                            dismiss()
                         }
                     }
                     .buttonStyle(.kitchenPrimary)
-                    .disabled(!model.isValid || model.isSaving)
+                    .disabled(!model.isValid)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.top, Spacing.lg)
@@ -388,18 +263,11 @@ struct BrandFormView: View {
             .alert("Nueva tienda", isPresented: $showingNewSupplierAlert) {
                 TextField("Nombre de la tienda", text: $newSupplierName)
                 Button("Guardar") {
-                    Task {
-                        _ = await model.createSupplier(name: newSupplierName)
-                        newSupplierName = ""
-                    }
+                    _ = model.createSupplier(name: newSupplierName)
+                    newSupplierName = ""
                 }
                 Button("Cancelar", role: .cancel) {
                     newSupplierName = ""
-                }
-            }
-            .task {
-                if model.availableUnits.isEmpty {
-                    await model.loadOptions()
                 }
             }
         }
@@ -530,73 +398,24 @@ struct BrandFormView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockIngredientPreview = RemoteIngredient(
-    id: "ing_prev",
-    name: "Harina de trigo",
-    baseUnit: .g,
-    group: "Harinas",
-    notes: nil,
-    conversions: [],
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockPresentationPreview = RemotePresentation(
-    id: "pres_prev",
-    ingredientId: "ing_prev",
-    ingredientName: "Harina de trigo",
-    brand: "Selecta",
-    supplierId: "sup_1",
-    supplierName: "Walmart",
-    packageQuantity: "1000",
-    baseUnit: .g,
-    barcode: nil,
-    latestPriceCents: 2350,
-    latestPriceAt: Date(),
-    costPerBaseUnit: "2.350000",
-    isCurrent: true,
-    priceAgeDays: 0,
-    priceIsStale: false,
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockSuppliersPreview: [RemoteSupplier] = [
-    RemoteSupplier(id: "sup_1", name: "Walmart", notes: nil, createdAt: Date(), updatedAt: Date()),
-    RemoteSupplier(id: "sup_2", name: "Costco", notes: nil, createdAt: Date(), updatedAt: Date())
-]
-
-private let mockUnitsPreview: [MeasureUnit] = [
-    MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
-    MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
-    MeasureUnit(id: "u_lb", name: "libra", abbreviation: "lb", baseUnit: .g, factorToBase: "453.592", isSystem: true),
-    MeasureUnit(id: "u_oz", name: "onza", abbreviation: "oz", baseUnit: .g, factorToBase: "28.3495", isSystem: true)
-]
-
 #Preview("Crear - Claro") {
     BrandFormView(
-        mode: .create(ingredient: mockIngredientPreview),
-        mockSuppliers: mockSuppliersPreview,
-        mockUnits: mockUnitsPreview,
-        onSave: { _ in }
+        mode: .create(ingredientId: "ing-harina"),
+        store: .preview()
     )
 }
 
 #Preview("Editar - Claro") {
     BrandFormView(
-        mode: .edit(presentation: mockPresentationPreview),
-        mockSuppliers: mockSuppliersPreview,
-        mockUnits: mockUnitsPreview,
-        onSave: { _ in }
+        mode: .edit(presentationId: "pres-selecta"),
+        store: .preview()
     )
 }
 
 #Preview("Crear - Letra AX3") {
     BrandFormView(
-        mode: .create(ingredient: mockIngredientPreview),
-        mockSuppliers: mockSuppliersPreview,
-        mockUnits: mockUnitsPreview,
-        onSave: { _ in }
+        mode: .create(ingredientId: "ing-harina"),
+        store: .preview()
     )
     .dynamicTypeSize(.accessibility3)
 }

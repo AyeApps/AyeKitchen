@@ -1,78 +1,58 @@
 import SwiftUI
-
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-
-nonisolated struct SupplierCreateRequest: Encodable, Sendable {
-    let name: String
-    let notes: String?
-}
-
-nonisolated struct SupplierUpdateRequest: Encodable, Sendable {
-    let name: String
-    let notes: String?
-}
+import KitchenDomain
 
 // MARK: - Modelo de Tiendas
 
 @Observable final class SuppliersModel {
-    var suppliers: [RemoteSupplier] = []
-    var isLoading = false
+    private let store: LocalStore
     var errorMessage: String?
 
-    init(mockSuppliers: [RemoteSupplier]? = nil) {
-        if let mockSuppliers {
-            self.suppliers = mockSuppliers
-        }
+    init(store: LocalStore = .shared) {
+        self.store = store
     }
 
-    func loadSuppliers() async {
-        isLoading = true
-        errorMessage = nil
-        do {
-            let list: [RemoteSupplier] = try await NetworkService.shared.request(.get, "/suppliers/")
-            self.suppliers = list
-            self.isLoading = false
-        } catch {
-            self.isLoading = false
-            self.errorMessage = error.localizedDescription
-        }
+    var suppliers: [Supplier] {
+        store.data.activeSuppliers()
     }
 
-    func createSupplier(name: String) async {
+    func createSupplier(name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         errorMessage = nil
         do {
-            let body = SupplierCreateRequest(name: trimmed, notes: nil)
-            let created: RemoteSupplier = try await NetworkService.shared.request(.post, "/suppliers/", body: body)
-            suppliers.append(created)
-            suppliers.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    func renameSupplier(id: String, name: String) async {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        errorMessage = nil
-        do {
-            let body = SupplierUpdateRequest(name: trimmed, notes: nil)
-            let updated: RemoteSupplier = try await NetworkService.shared.request(.patch, "/suppliers/\(id)", body: body)
-            if let index = suppliers.firstIndex(where: { $0.id == id }) {
-                suppliers[index] = updated
-                suppliers.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
+            try store.mutate { data, ctx in
+                try data.createSupplier(name: trimmed, ctx: ctx)
             }
+        } catch let domainError as DomainError {
+            errorMessage = domainError.detail
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    func deleteSupplier(id: String) async {
+    func renameSupplier(id: String, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
         errorMessage = nil
         do {
-            try await NetworkService.shared.requestNoContent(.delete, "/suppliers/\(id)")
-            suppliers.removeAll { $0.id == id }
+            try store.mutate { data, ctx in
+                try data.updateSupplier(id: id, name: trimmed, ctx: ctx)
+            }
+        } catch let domainError as DomainError {
+            errorMessage = domainError.detail
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func deleteSupplier(id: String) {
+        errorMessage = nil
+        do {
+            try store.mutate { data, ctx in
+                try data.deleteSupplier(id: id, ctx: ctx)
+            }
+        } catch let domainError as DomainError {
+            errorMessage = domainError.detail
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -89,17 +69,21 @@ struct SuppliersView: View {
     @State private var searchText = ""
     @State private var showingAddAlert = false
     @State private var newSupplierName = ""
-    @State private var supplierToRename: RemoteSupplier?
+    @State private var supplierToRename: Supplier?
     @State private var showingRenameAlert = false
     @State private var renameSupplierName = ""
-    @State private var supplierToDelete: RemoteSupplier?
+    @State private var supplierToDelete: Supplier?
     @State private var showingDeleteConfirmation = false
 
     init(model: SuppliersModel = SuppliersModel()) {
         self._model = State(initialValue: model)
     }
 
-    var filteredSuppliers: [RemoteSupplier] {
+    init(store: LocalStore) {
+        self._model = State(initialValue: SuppliersModel(store: store))
+    }
+
+    var filteredSuppliers: [Supplier] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
             return model.suppliers
@@ -135,9 +119,8 @@ struct SuppliersView: View {
                 .alert("Nueva tienda", isPresented: $showingAddAlert) {
                     TextField("Nombre de la tienda", text: $newSupplierName)
                     Button("Guardar") {
-                        Task {
-                            await model.createSupplier(name: newSupplierName)
-                        }
+                        model.createSupplier(name: newSupplierName)
+                        newSupplierName = ""
                     }
                     Button("Cancelar", role: .cancel) {
                         newSupplierName = ""
@@ -147,9 +130,7 @@ struct SuppliersView: View {
                     TextField("Nombre de la tienda", text: $renameSupplierName)
                     Button("Guardar") {
                         if let supplier = supplierToRename {
-                            Task {
-                                await model.renameSupplier(id: supplier.id, name: renameSupplierName)
-                            }
+                            model.renameSupplier(id: supplier.id, name: renameSupplierName)
                         }
                     }
                     Button("Cancelar", role: .cancel) {
@@ -163,9 +144,7 @@ struct SuppliersView: View {
                 ) {
                     Button("Borrar", role: .destructive) {
                         if let supplier = supplierToDelete {
-                            Task {
-                                await model.deleteSupplier(id: supplier.id)
-                            }
+                            model.deleteSupplier(id: supplier.id)
                         }
                     }
                     Button("Cancelar", role: .cancel) {
@@ -186,28 +165,17 @@ struct SuppliersView: View {
                         Text(errorMessage)
                     }
                 }
-                .task {
-                    if model.suppliers.isEmpty {
-                        await model.loadSuppliers()
-                    }
-                }
         }
     }
 
     @ViewBuilder
     private var content: some View {
-        if model.isLoading && model.suppliers.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if model.suppliers.isEmpty {
+        if model.suppliers.isEmpty {
             ContentUnavailableView(
                 "Todavía no tienes tiendas",
                 systemImage: "storefront",
                 description: Text("Agrega dónde compras: Walmart, Costco, el mercado…")
             )
-            .refreshable {
-                await model.loadSuppliers()
-            }
         } else if filteredSuppliers.isEmpty {
             ContentUnavailableView.search(text: searchText)
         } else {
@@ -237,9 +205,6 @@ struct SuppliersView: View {
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
-            .refreshable {
-                await model.loadSuppliers()
-            }
         }
     }
 }
@@ -247,36 +212,12 @@ struct SuppliersView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockSuppliersData: [RemoteSupplier] = [
-    RemoteSupplier(
-        id: "sup_1",
-        name: "Costco",
-        notes: nil,
-        createdAt: Date(),
-        updatedAt: Date()
-    ),
-    RemoteSupplier(
-        id: "sup_2",
-        name: "Mercado Central",
-        notes: nil,
-        createdAt: Date(),
-        updatedAt: Date()
-    ),
-    RemoteSupplier(
-        id: "sup_3",
-        name: "Walmart",
-        notes: nil,
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-]
-
 #Preview("Claro") {
-    SuppliersView(model: SuppliersModel(mockSuppliers: mockSuppliersData))
+    SuppliersView(store: .preview())
 }
 
 #Preview("Letra AX3") {
-    SuppliersView(model: SuppliersModel(mockSuppliers: mockSuppliersData))
+    SuppliersView(store: .preview())
         .dynamicTypeSize(.accessibility3)
 }
 #endif

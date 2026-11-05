@@ -1,78 +1,84 @@
 import SwiftUI
+import KitchenDomain
 
-/// Detalle del ingrediente (especificación B1 / I1).
+/// Detalle del ingrediente (especificación B1 / I1 / I16).
 struct IngredientDetailView: View {
-    @State private var ingredient: RemoteIngredient
-    var onUpdate: ((RemoteIngredient) -> Void)?
-    var onDelete: ((String) -> Void)?
+    let ingredientId: String
+    private let store: LocalStore
 
     @State private var showingEditSheet = false
 
-    init(
-        ingredient: RemoteIngredient,
-        onUpdate: ((RemoteIngredient) -> Void)? = nil,
-        onDelete: ((String) -> Void)? = nil
-    ) {
-        self._ingredient = State(initialValue: ingredient)
-        self.onUpdate = onUpdate
-        self.onDelete = onDelete
+    init(ingredientId: String, store: LocalStore = .shared) {
+        self.ingredientId = ingredientId
+        self.store = store
+    }
+
+    private var ingredient: Ingredient? {
+        store.data.ingredients.first(where: { $0.id == ingredientId && $0.isActive })
     }
 
     var body: some View {
-        List {
-            Section {
-                IngredientBrandsSection(ingredient: ingredient)
-            } header: {
-                Text("Marcas y precios")
-            } footer: {
-                Text("Tus recetas usan la marca que dice La que usamos. Puedes elegir otra en cada receta.")
-            }
+        Group {
+            if let ingredient {
+                List {
+                    Section {
+                        IngredientBrandsSection(ingredientId: ingredient.id, store: store)
+                    } header: {
+                        Text("Marcas y precios")
+                    } footer: {
+                        Text("Tus recetas usan la marca que dice La que usamos. Puedes elegir otra en cada receta.")
+                    }
 
-            Section("Cómo lo mides") {
-                Text(ingredient.buyingUnitDescription)
-                    .font(.body)
-                    .foregroundStyle(.inkPrimary)
-            }
-
-            Section("Equivalencias") {
-                if ingredient.conversions.isEmpty {
-                    Text("Aún no tiene. Te las preguntamos cuando las necesites.")
-                        .font(.body)
-                        .foregroundStyle(.inkMuted)
-                } else {
-                    ForEach(ingredient.conversions, id: \.unitId) { conversion in
-                        Text("1 \(conversion.unitName) = \(Quantity.format(conversion.quantityInBase)) \(ingredient.baseUnit.rawValue)")
+                    Section("Cómo lo mides") {
+                        Text(ingredient.buyingUnitDescription)
                             .font(.body)
                             .foregroundStyle(.inkPrimary)
                     }
-                }
-            }
 
-            if let notes = ingredient.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                Section("Notas") {
-                    Text(notes)
-                        .font(.body)
-                        .foregroundStyle(.inkPrimary)
+                    Section("Equivalencias") {
+                        if ingredient.conversions.isEmpty {
+                            Text("Aún no tiene. Te las preguntamos cuando las necesites.")
+                                .font(.body)
+                                .foregroundStyle(.inkMuted)
+                        } else {
+                            ForEach(ingredient.conversions, id: \.unitId) { conversion in
+                                let unitName = store.data.costingIndex().unitsById[conversion.unitId]?.name ?? conversion.unitId
+                                Text("1 \(unitName) = \(Quantity.format(conversion.quantityInBase)) \(ingredient.baseUnit.rawValue)")
+                                    .font(.body)
+                                    .foregroundStyle(.inkPrimary)
+                            }
+                        }
+                    }
+
+                    if let notes = ingredient.notes, !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Section("Notas") {
+                            Text(notes)
+                                .font(.body)
+                                .foregroundStyle(.inkPrimary)
+                        }
+                    }
                 }
+                .navigationTitle(ingredient.name)
+            } else {
+                ContentUnavailableView("Ingrediente no encontrado", systemImage: "questionmark.folder")
+                    .navigationTitle("Ingrediente")
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(.canvasBackground)
-        .navigationTitle(ingredient.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Editar") {
-                    showingEditSheet = true
+            if ingredient != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Editar") {
+                        showingEditSheet = true
+                    }
                 }
             }
         }
         .sheet(isPresented: $showingEditSheet) {
-            IngredientFormView(mode: .edit(ingredient)) { updated in
-                self.ingredient = updated
-                onUpdate?(updated)
-            }
+            IngredientFormView(mode: .edit(ingredientId: ingredientId), store: store)
         }
     }
 }
@@ -80,28 +86,15 @@ struct IngredientDetailView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let detailPreviewIngredient = RemoteIngredient(
-    id: "ing_preview_detail",
-    name: "Harina de trigo",
-    baseUnit: .g,
-    group: "Harinas",
-    notes: "Comprar en bulto de 25 kg para mejor precio en la central de abastos.",
-    conversions: [
-        RemoteIngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
-    ],
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
 #Preview("Claro") {
     NavigationStack {
-        IngredientDetailView(ingredient: detailPreviewIngredient)
+        IngredientDetailView(ingredientId: "ing-harina", store: .preview())
     }
 }
 
 #Preview("Letra AX3") {
     NavigationStack {
-        IngredientDetailView(ingredient: detailPreviewIngredient)
+        IngredientDetailView(ingredientId: "ing-harina", store: .preview())
     }
     .dynamicTypeSize(.accessibility3)
 }

@@ -1,31 +1,33 @@
 import Foundation
-import SwiftUI
-
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-
-nonisolated struct PriceRecordCreateRequest: Encodable, Sendable {
-    let priceCents: Int
-    let recordedAt: Date
-    let note: String?
-}
+import KitchenDomain
+import Observation
 
 // MARK: - Modelo para Registrar Precio
 
 @Observable final class RecordPriceModel {
     let presentationId: String
+    private let store: LocalStore
 
     var priceText: String = ""
     var recordedAt: Date = Date()
     var noteText: String = ""
-    var isSaving: Bool = false
     var errorMessage: String?
 
-    init(presentationId: String) {
+    init(presentationId: String, store: LocalStore = .shared) {
         self.presentationId = presentationId
+        self.store = store
     }
 
     var parsedPriceCents: Int? {
-        let normalized = priceText.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+        Self.parsePriceCents(priceText)
+    }
+
+    var canSave: Bool {
+        parsedPriceCents != nil
+    }
+
+    static func parsePriceCents(_ text: String) -> Int? {
+        let normalized = text.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
         guard !normalized.isEmpty,
               let decimal = Decimal(string: normalized, locale: Locale(identifier: "en_US_POSIX")),
               decimal >= 0 else {
@@ -37,32 +39,27 @@ nonisolated struct PriceRecordCreateRequest: Encodable, Sendable {
         return (rounded as NSDecimalNumber).intValue
     }
 
-    var canSave: Bool {
-        parsedPriceCents != nil && !isSaving
-    }
-
-    func save() async -> Bool {
+    func save() -> Bool {
         guard let cents = parsedPriceCents else { return false }
-        isSaving = true
         errorMessage = nil
-        defer { isSaving = false }
 
         let trimmedNote = noteText.trimmingCharacters(in: .whitespaces)
         let note = trimmedNote.isEmpty ? nil : trimmedNote
 
-        let body = PriceRecordCreateRequest(
-            priceCents: cents,
-            recordedAt: recordedAt,
-            note: note
-        )
-
         do {
-            let _: RemotePriceRecord = try await NetworkService.shared.request(
-                .post,
-                "/presentations/\(presentationId)/prices",
-                body: body
-            )
+            try store.mutate { data, ctx in
+                try data.addPrice(
+                    presentationId: presentationId,
+                    priceCents: cents,
+                    recordedAt: recordedAt,
+                    note: note,
+                    ctx: ctx
+                )
+            }
             return true
+        } catch let domainError as DomainError {
+            self.errorMessage = domainError.detail
+            return false
         } catch {
             self.errorMessage = error.localizedDescription
             return false

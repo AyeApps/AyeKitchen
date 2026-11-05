@@ -1,4 +1,5 @@
 import SwiftUI
+import KitchenDomain
 
 // MARK: - Vista de Detalle de Marca
 
@@ -6,78 +7,71 @@ import SwiftUI
 struct BrandDetailView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
+    let presentationId: String
+    private let store: LocalStore
     @State private var model: BrandDetailModel
     @State private var showingEditSheet = false
     @State private var showingRecordPriceSheet = false
 
-    var onBrandChangedOrDeleted: (() -> Void)?
-
-    init(
-        presentation: RemotePresentation,
-        mockPrices: [RemotePriceRecord]? = nil,
-        onBrandChangedOrDeleted: (() -> Void)? = nil
-    ) {
+    init(presentationId: String, store: LocalStore = .shared) {
+        self.presentationId = presentationId
+        self.store = store
         self._model = State(initialValue: BrandDetailModel(
-            presentation: presentation,
-            mockPrices: mockPrices
+            presentationId: presentationId,
+            store: store
         ))
-        self.onBrandChangedOrDeleted = onBrandChangedOrDeleted
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                priceCard
-                registerPriceButton
-                priceHistorySection
+        Group {
+            if let presentation = model.presentation {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.section) {
+                        priceCard(for: presentation)
+                        registerPriceButton
+                        priceHistorySection
+                    }
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.top, Spacing.sm)
+                    .padding(.bottom, Spacing.xxl)
+                }
+                .navigationTitle(presentation.brand)
+            } else {
+                ContentUnavailableView("Marca no encontrada", systemImage: "questionmark.folder")
+                    .navigationTitle("Marca")
             }
-            .padding(.horizontal, Spacing.xl)
-            .padding(.top, Spacing.sm)
-            .padding(.bottom, Spacing.xxl)
         }
         .background(.canvasBackground)
-        .navigationTitle(model.presentation.brand)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Editar") {
-                    showingEditSheet = true
+            if model.presentation != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Editar") {
+                        showingEditSheet = true
+                    }
                 }
             }
         }
         .sheet(isPresented: $showingEditSheet) {
-            BrandFormView(mode: .edit(presentation: model.presentation)) { updated in
-                model.presentation = updated
-                onBrandChangedOrDeleted?()
-            }
+            BrandFormView(mode: .edit(presentationId: presentationId), store: store)
         }
         .sheet(isPresented: $showingRecordPriceSheet) {
-            RecordPriceSheet(presentationId: model.presentation.id) {
-                Task {
-                    await model.reload()
-                    onBrandChangedOrDeleted?()
-                }
-            }
-        }
-        .task {
-            if model.prices.isEmpty {
-                await model.loadPrices()
-            }
+            RecordPriceSheet(presentationId: presentationId, store: store)
         }
     }
 
     // MARK: - Tarjeta de Precio
 
-    private var priceCard: some View {
+    private func priceCard(for presentation: CatalogPresentation) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            if let cents = model.presentation.latestPriceCents {
+            if let cents = presentation.latestPriceCents {
                 if dynamicTypeSize.isAccessibilitySize {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
                         Text(Money.format(cents: cents))
                             .font(.title.weight(.heavy))
                             .monospacedDigit()
                             .foregroundStyle(.inkPrimary)
-                        if model.presentation.priceIsStale {
+                        if presentation.priceIsStale {
                             Chip("Precio viejo", tone: .warning)
                         }
                     }
@@ -88,13 +82,13 @@ struct BrandDetailView: View {
                             .monospacedDigit()
                             .foregroundStyle(.inkPrimary)
                         Spacer()
-                        if model.presentation.priceIsStale {
+                        if presentation.priceIsStale {
                             Chip("Precio viejo", tone: .warning)
                         }
                     }
                 }
 
-                Text(packageStoreAndAgeText)
+                Text(packageStoreAndAgeText(for: presentation))
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
             } else {
@@ -102,7 +96,7 @@ struct BrandDetailView: View {
                     .font(.title3.weight(.heavy))
                     .foregroundStyle(.inkPrimary)
 
-                Text(packageAndStoreText)
+                Text(packageAndStoreText(for: presentation))
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
             }
@@ -110,28 +104,28 @@ struct BrandDetailView: View {
         .softCard()
     }
 
-    private var packageStoreAndAgeText: String {
+    private func packageStoreAndAgeText(for presentation: CatalogPresentation) -> String {
         var parts: [String] = []
-        let pkg = "por \(Quantity.format(model.presentation.packageQuantity)) \(model.presentation.baseUnit.rawValue)"
+        let pkg = "por \(Quantity.format(presentation.packageQuantity)) \(presentation.baseUnit.rawValue)"
         parts.append(pkg)
 
-        if let store = model.presentation.supplierName, !store.isEmpty {
+        if let store = presentation.supplierName, !store.isEmpty {
             parts.append(store)
         }
 
-        if let age = ageDescription(days: model.presentation.priceAgeDays) {
+        if let age = ageDescription(days: presentation.priceAgeDays) {
             parts.append(age)
         }
 
         return parts.joined(separator: " · ")
     }
 
-    private var packageAndStoreText: String {
+    private func packageAndStoreText(for presentation: CatalogPresentation) -> String {
         var parts: [String] = []
-        let pkg = "por \(Quantity.format(model.presentation.packageQuantity)) \(model.presentation.baseUnit.rawValue)"
+        let pkg = "por \(Quantity.format(presentation.packageQuantity)) \(presentation.baseUnit.rawValue)"
         parts.append(pkg)
 
-        if let store = model.presentation.supplierName, !store.isEmpty {
+        if let store = presentation.supplierName, !store.isEmpty {
             parts.append(store)
         }
 
@@ -165,14 +159,7 @@ struct BrandDetailView: View {
             Text("Historial de precios")
                 .sectionTitleStyle()
 
-            if model.isLoadingPrices && model.prices.isEmpty {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .padding(.vertical, Spacing.lg)
-            } else if model.prices.isEmpty {
+            if model.prices.isEmpty {
                 Text("Todavía no has registrado ningún precio.")
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
@@ -187,7 +174,7 @@ struct BrandDetailView: View {
         }
     }
 
-    private func priceHistoryRow(record: RemotePriceRecord, index: Int) -> some View {
+    private func priceHistoryRow(record: PriceRecord, index: Int) -> some View {
         let diffText = priceDifferenceText(currentIndex: index)
 
         return VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -241,8 +228,6 @@ struct BrandDetailView: View {
     }
 
     private func priceDifferenceText(currentIndex: Int) -> String? {
-        // La lista de precios viene ordenada descendente por recorded_at (el más nuevo en index 0).
-        // El precio anterior en el tiempo está en currentIndex + 1.
         guard currentIndex + 1 < model.prices.count else {
             return nil
         }
@@ -268,15 +253,17 @@ struct BrandDetailView: View {
 
 struct RecordPriceSheet: View {
     let presentationId: String
+    private let store: LocalStore
     var onSaved: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var model: RecordPriceModel
 
-    init(presentationId: String, onSaved: @escaping () -> Void) {
+    init(presentationId: String, store: LocalStore = .shared, onSaved: @escaping () -> Void = {}) {
         self.presentationId = presentationId
+        self.store = store
         self.onSaved = onSaved
-        self._model = State(initialValue: RecordPriceModel(presentationId: presentationId))
+        self._model = State(initialValue: RecordPriceModel(presentationId: presentationId, store: store))
     }
 
     var body: some View {
@@ -328,11 +315,9 @@ struct RecordPriceSheet: View {
                     Spacer(minLength: Spacing.lg)
 
                     Button("Guardar precio") {
-                        Task {
-                            if await model.save() {
-                                onSaved()
-                                dismiss()
-                            }
+                        if model.save() {
+                            onSaved()
+                            dismiss()
                         }
                     }
                     .buttonStyle(.kitchenPrimary)
@@ -359,114 +344,21 @@ struct RecordPriceSheet: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockPresentationWithPrice = RemotePresentation(
-    id: "pres_1",
-    ingredientId: "ing_1",
-    ingredientName: "Harina de trigo",
-    brand: "Selecta",
-    supplierId: "sup_1",
-    supplierName: "Walmart",
-    packageQuantity: "1000",
-    baseUnit: .g,
-    barcode: nil,
-    latestPriceCents: 2500,
-    latestPriceAt: Date(),
-    costPerBaseUnit: "2.500000",
-    isCurrent: true,
-    priceAgeDays: 0,
-    priceIsStale: false,
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockPresentationStale = RemotePresentation(
-    id: "pres_2",
-    ingredientId: "ing_1",
-    ingredientName: "Harina de trigo",
-    brand: "San Antonio",
-    supplierId: "sup_1",
-    supplierName: "Costco",
-    packageQuantity: "1000",
-    baseUnit: .g,
-    barcode: nil,
-    latestPriceCents: 2200,
-    latestPriceAt: Date().addingTimeInterval(-45 * 86400),
-    costPerBaseUnit: "2.200000",
-    isCurrent: false,
-    priceAgeDays: 45,
-    priceIsStale: true,
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockPresentationNoPrice = RemotePresentation(
-    id: "pres_3",
-    ingredientId: "ing_1",
-    ingredientName: "Harina de trigo",
-    brand: "Tres Estrellas",
-    supplierId: nil,
-    supplierName: nil,
-    packageQuantity: "1000",
-    baseUnit: .g,
-    barcode: nil,
-    latestPriceCents: nil,
-    latestPriceAt: nil,
-    costPerBaseUnit: nil,
-    isCurrent: false,
-    priceAgeDays: nil,
-    priceIsStale: false,
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockPricesHistory: [RemotePriceRecord] = [
-    RemotePriceRecord(
-        id: "pr_2",
-        priceCents: 2500,
-        recordedAt: Date(),
-        note: "Comprada en oferta"
-    ),
-    RemotePriceRecord(
-        id: "pr_1",
-        priceCents: 2350,
-        recordedAt: Date().addingTimeInterval(-10 * 86400),
-        note: nil
-    )
-]
-
 #Preview("Con precio e historial - Claro") {
     NavigationStack {
-        BrandDetailView(
-            presentation: mockPresentationWithPrice,
-            mockPrices: mockPricesHistory
-        )
+        BrandDetailView(presentationId: "pres-selecta", store: .preview())
     }
 }
 
 #Preview("Precio viejo - Claro") {
     NavigationStack {
-        BrandDetailView(
-            presentation: mockPresentationStale,
-            mockPrices: [mockPricesHistory[1]]
-        )
-    }
-}
-
-#Preview("Sin precio - Claro") {
-    NavigationStack {
-        BrandDetailView(
-            presentation: mockPresentationNoPrice,
-            mockPrices: []
-        )
+        BrandDetailView(presentationId: "pres-tres", store: .preview())
     }
 }
 
 #Preview("Letra AX3") {
     NavigationStack {
-        BrandDetailView(
-            presentation: mockPresentationWithPrice,
-            mockPrices: mockPricesHistory
-        )
+        BrandDetailView(presentationId: "pres-selecta", store: .preview())
     }
     .dynamicTypeSize(.accessibility3)
 }

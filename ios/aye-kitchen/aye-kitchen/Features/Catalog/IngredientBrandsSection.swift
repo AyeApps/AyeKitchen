@@ -1,162 +1,67 @@
 import SwiftUI
-
-// MARK: - Modelo de Sección de Marcas
-
-@Observable final class IngredientBrandsSectionModel {
-    let ingredientId: String
-    var presentations: [RemotePresentation] = []
-    var isLoading = false
-    var errorMessage: String?
-    /// Ya se cargó al menos una vez (aunque el ingrediente no tenga marcas): no se vuelve a pedir
-    /// solo porque una fila reaparezca.
-    private(set) var hasLoaded = false
-    /// La carga en curso. Vive fuera del `.task` de la vista: en una `List`, cambiar de "cargando"
-    /// a la lista reemplaza la fila que la lanzó y SwiftUI cancelaría la petición a medias.
-    private var loadTask: Task<Void, Never>?
-
-    init(ingredientId: String, initialPresentations: [RemotePresentation]? = nil) {
-        self.ingredientId = ingredientId
-        if let initialPresentations {
-            self.presentations = initialPresentations
-            self.hasLoaded = true
-        }
-    }
-
-    /// Pide las marcas. Si ya hay una carga en curso, espera esa en lugar de lanzar otra.
-    func loadBrands() async {
-        if let loadTask {
-            await loadTask.value
-            return
-        }
-        let task = Task { await self.fetchBrands() }
-        loadTask = task
-        await task.value
-        loadTask = nil
-    }
-
-    private func fetchBrands() async {
-        isLoading = true
-        errorMessage = nil
-        do {
-            let page: Page<RemotePresentation> = try await NetworkService.shared.request(
-                .get,
-                "/presentations/",
-                query: [
-                    URLQueryItem(name: "ingredient_id", value: ingredientId),
-                    URLQueryItem(name: "limit", value: "100")
-                ]
-            )
-            self.presentations = page.items
-            self.hasLoaded = true
-            self.isLoading = false
-        } catch where error.isCancellation {
-            self.isLoading = false
-        } catch {
-            self.isLoading = false
-            self.errorMessage = error.localizedDescription
-        }
-    }
-
-    func deletePresentation(id: String) async throws {
-        try await NetworkService.shared.requestNoContent(.delete, "/presentations/\(id)")
-        presentations.removeAll { $0.id == id }
-    }
-}
+import KitchenDomain
 
 // MARK: - Vista de Sección de Marcas
 
 /// Sección de marcas y precios dentro de la lista de detalle de un ingrediente.
 struct IngredientBrandsSection: View {
-    let ingredient: RemoteIngredient
+    let ingredientId: String
+    private let store: LocalStore
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @State private var model: IngredientBrandsSectionModel
     @State private var showingAddBrandSheet = false
-    @State private var presentationToDelete: RemotePresentation?
+    @State private var presentationToDelete: CatalogPresentation?
     @State private var showingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
 
-    init(ingredient: RemoteIngredient, initialPresentations: [RemotePresentation]? = nil) {
-        self.ingredient = ingredient
-        self._model = State(initialValue: IngredientBrandsSectionModel(
-            ingredientId: ingredient.id,
-            initialPresentations: initialPresentations
-        ))
+    init(ingredientId: String, store: LocalStore = .shared) {
+        self.ingredientId = ingredientId
+        self.store = store
+    }
+
+    var presentations: [CatalogPresentation] {
+        (try? store.data.presentations(forIngredient: ingredientId)) ?? []
     }
 
     var body: some View {
         Group {
-            if model.isLoading && model.presentations.isEmpty {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-            } else if let errorMessage = model.errorMessage, model.presentations.isEmpty {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text(errorMessage)
-                        .font(.subheadline)
-                        .foregroundStyle(.inkMuted)
-                    Button("Intentar de nuevo") {
-                        Task {
-                            await model.loadBrands()
-                        }
-                    }
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(Color.accentColor)
-                }
+            if presentations.isEmpty {
+                Text("Agrega dónde compras este ingrediente y cuánto cuesta.")
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
             } else {
-                if model.presentations.isEmpty {
-                    Text("Agrega dónde compras este ingrediente y cuánto cuesta.")
-                        .font(.subheadline)
-                        .foregroundStyle(.inkMuted)
-                } else {
-                    ForEach(model.presentations) { presentation in
-                        NavigationLink {
-                            BrandDetailView(presentation: presentation) {
-                                Task {
-                                    await model.loadBrands()
-                                }
-                            }
+                ForEach(presentations) { presentation in
+                    NavigationLink {
+                        BrandDetailView(presentationId: presentation.id, store: store)
+                    } label: {
+                        brandRow(presentation)
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            presentationToDelete = presentation
+                            showingDeleteConfirmation = true
                         } label: {
-                            brandRow(presentation)
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                presentationToDelete = presentation
-                                showingDeleteConfirmation = true
-                            } label: {
-                                Label("Borrar", systemImage: "trash")
-                            }
+                            Label("Borrar", systemImage: "trash")
                         }
                     }
-                }
-
-                Button {
-                    showingAddBrandSheet = true
-                } label: {
-                    HStack(spacing: Spacing.xs) {
-                        Image(systemName: "plus.circle.fill")
-                            .imageScale(.medium)
-                        Text("Agregar marca")
-                    }
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
                 }
             }
-        }
-        .task {
-            if !model.hasLoaded && model.errorMessage == nil {
-                await model.loadBrands()
+
+            Button {
+                showingAddBrandSheet = true
+            } label: {
+                HStack(spacing: Spacing.xs) {
+                    Image(systemName: "plus.circle.fill")
+                        .imageScale(.medium)
+                    Text("Agregar marca")
+                }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
             }
         }
         .sheet(isPresented: $showingAddBrandSheet) {
-            BrandFormView(mode: .create(ingredient: ingredient)) { _ in
-                Task {
-                    await model.loadBrands()
-                }
-            }
+            BrandFormView(mode: .create(ingredientId: ingredientId), store: store)
         }
         .confirmationDialog(
             "¿Borrar \(presentationToDelete?.brand ?? "esta marca")?",
@@ -165,9 +70,7 @@ struct IngredientBrandsSection: View {
         ) {
             Button("Borrar", role: .destructive) {
                 if let pres = presentationToDelete {
-                    Task {
-                        await performDelete(pres)
-                    }
+                    performDelete(pres)
                 }
             }
             Button("Cancelar", role: .cancel) {
@@ -188,7 +91,7 @@ struct IngredientBrandsSection: View {
         }
     }
 
-    private func brandRow(_ presentation: RemotePresentation) -> some View {
+    private func brandRow(_ presentation: CatalogPresentation) -> some View {
         let titleText: String = {
             if let store = presentation.supplierName, !store.isEmpty {
                 return "\(presentation.brand) · \(store)"
@@ -251,7 +154,7 @@ struct IngredientBrandsSection: View {
     }
 
     @ViewBuilder
-    private func chipsView(for presentation: RemotePresentation) -> some View {
+    private func chipsView(for presentation: CatalogPresentation) -> some View {
         HStack(spacing: Spacing.xs) {
             if presentation.latestPriceCents == nil {
                 Chip("Falta precio", tone: .warning)
@@ -275,15 +178,17 @@ struct IngredientBrandsSection: View {
         }
     }
 
-    private func performDelete(_ presentation: RemotePresentation) async {
+    private func performDelete(_ presentation: CatalogPresentation) {
         do {
-            try await model.deletePresentation(id: presentation.id)
+            try store.mutate { data, ctx in
+                try data.deletePresentation(id: presentation.id, ctx: ctx)
+            }
             presentationToDelete = nil
-        } catch let apiError as APIError {
-            if apiError.code == "IN_USE" {
+        } catch let domainError as DomainError {
+            if domainError.code == "IN_USE" {
                 deleteErrorMessage = "Una receta usa esta marca. Cámbiala en la receta antes de borrarla."
             } else {
-                deleteErrorMessage = apiError.localizedDescription
+                deleteErrorMessage = domainError.detail
             }
         } catch {
             deleteErrorMessage = error.localizedDescription
@@ -294,83 +199,12 @@ struct IngredientBrandsSection: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockIngredientForSection = RemoteIngredient(
-    id: "ing_preview",
-    name: "Harina de trigo",
-    baseUnit: .g,
-    group: "Harinas",
-    notes: nil,
-    conversions: [],
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockPresentationsForSection: [RemotePresentation] = [
-    RemotePresentation(
-        id: "pres_1",
-        ingredientId: "ing_preview",
-        ingredientName: "Harina de trigo",
-        brand: "Selecta",
-        supplierId: "sup_1",
-        supplierName: "Walmart",
-        packageQuantity: "1000",
-        baseUnit: .g,
-        barcode: nil,
-        latestPriceCents: 2350,
-        latestPriceAt: Date(),
-        costPerBaseUnit: "2.350000",
-        isCurrent: true,
-        priceAgeDays: 0,
-        priceIsStale: false,
-        createdAt: Date(),
-        updatedAt: Date()
-    ),
-    RemotePresentation(
-        id: "pres_2",
-        ingredientId: "ing_preview",
-        ingredientName: "Harina de trigo",
-        brand: "San Antonio",
-        supplierId: "sup_2",
-        supplierName: "Costco",
-        packageQuantity: "1000",
-        baseUnit: .g,
-        barcode: nil,
-        latestPriceCents: 2200,
-        latestPriceAt: Date().addingTimeInterval(-45 * 86400),
-        costPerBaseUnit: "2.200000",
-        isCurrent: false,
-        priceAgeDays: 45,
-        priceIsStale: true,
-        createdAt: Date(),
-        updatedAt: Date()
-    ),
-    RemotePresentation(
-        id: "pres_3",
-        ingredientId: "ing_preview",
-        ingredientName: "Harina de trigo",
-        brand: "Tres Estrellas",
-        supplierId: nil,
-        supplierName: nil,
-        packageQuantity: "1000",
-        baseUnit: .g,
-        barcode: nil,
-        latestPriceCents: nil,
-        latestPriceAt: nil,
-        costPerBaseUnit: nil,
-        isCurrent: false,
-        priceAgeDays: nil,
-        priceIsStale: false,
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-]
-
 #Preview("Con marcas - Claro") {
     List {
         Section("Marcas y precios") {
             IngredientBrandsSection(
-                ingredient: mockIngredientForSection,
-                initialPresentations: mockPresentationsForSection
+                ingredientId: "ing-harina",
+                store: .preview()
             )
         }
     }
@@ -380,8 +214,8 @@ private let mockPresentationsForSection: [RemotePresentation] = [
     List {
         Section("Marcas y precios") {
             IngredientBrandsSection(
-                ingredient: mockIngredientForSection,
-                initialPresentations: []
+                ingredientId: "ing-chispas",
+                store: .preview()
             )
         }
     }
@@ -391,8 +225,8 @@ private let mockPresentationsForSection: [RemotePresentation] = [
     List {
         Section("Marcas y precios") {
             IngredientBrandsSection(
-                ingredient: mockIngredientForSection,
-                initialPresentations: mockPresentationsForSection
+                ingredientId: "ing-harina",
+                store: .preview()
             )
         }
     }

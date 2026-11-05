@@ -1,9 +1,10 @@
 import SwiftUI
+import KitchenDomain
 
 /// Modo del formulario de ingrediente.
-enum IngredientFormMode: Sendable {
+enum IngredientFormMode: Sendable, Equatable {
     case create
-    case edit(RemoteIngredient)
+    case edit(ingredientId: String)
 
     var title: String {
         switch self {
@@ -22,100 +23,23 @@ struct FormConversion: Identifiable, Hashable, Sendable {
     var isInvalid: Bool = false
 }
 
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-// Deben ser nonisolated y Sendable según reglas de iOS.
-
-nonisolated struct IngredientConversionInput: Encodable, Sendable {
-    let unitId: String
-    let quantityInBase: String
-}
-
-nonisolated struct IngredientCreateRequest: Encodable, Sendable {
-    let name: String
-    let baseUnit: RemoteBaseUnit
-    let group: String?
-    let notes: String?
-    let conversions: [IngredientConversionInput]
-
-    enum CodingKeys: String, CodingKey {
-        case name
-        case baseUnit
-        case group
-        case notes
-        case conversions
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(name, forKey: .name)
-        try container.encode(baseUnit, forKey: .baseUnit)
-        if let group {
-            try container.encode(group, forKey: .group)
-        } else {
-            try container.encodeNil(forKey: .group)
-        }
-        if let notes {
-            try container.encode(notes, forKey: .notes)
-        } else {
-            try container.encodeNil(forKey: .notes)
-        }
-        try container.encode(conversions, forKey: .conversions)
-    }
-}
-
-nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
-    let name: String
-    let baseUnit: RemoteBaseUnit
-    let group: String?
-    let notes: String?
-    let conversions: [IngredientConversionInput]
-
-    enum CodingKeys: String, CodingKey {
-        case name
-        case baseUnit
-        case group
-        case notes
-        case conversions
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(name, forKey: .name)
-        try container.encode(baseUnit, forKey: .baseUnit)
-        if let group {
-            try container.encode(group, forKey: .group)
-        } else {
-            try container.encodeNil(forKey: .group)
-        }
-        if let notes {
-            try container.encode(notes, forKey: .notes)
-        } else {
-            try container.encodeNil(forKey: .notes)
-        }
-        try container.encode(conversions, forKey: .conversions)
-    }
-}
-
 // MARK: - ViewModel
 
 @Observable final class IngredientFormModel {
     let mode: IngredientFormMode
+    private let store: LocalStore
+
     var name: String = ""
-    var baseUnit: RemoteBaseUnit = .g
+    var baseUnit: BaseUnit = .g
     var group: String = ""
     var notes: String = ""
     var conversions: [FormConversion] = []
-    var allUnits: [MeasureUnit] = []
-    var unitsLoaded: Bool = false
-    var isLoadingUnits: Bool = false
-    var isSaving: Bool = false
     var errorMessage: String? = nil
-    private(set) var isMock: Bool = false
 
     // Campos para la sección "Primera marca" en modo .create
     var brandText: String = ""
     var packageQuantityText: String = "1"
-    var selectedPackageUnit: MeasureUnit?
+    var selectedPackageUnit: KitchenUnit?
     var priceText: String = ""
     var isPackageQuantityInvalid: Bool = false
     var isPriceInvalid: Bool = false
@@ -126,50 +50,48 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         return false
     }
 
-    init(mode: IngredientFormMode, initialName: String = "", mockUnits: [MeasureUnit]? = nil) {
+    init(mode: IngredientFormMode, initialName: String = "", store: LocalStore = .shared) {
         self.mode = mode
-        if let mockUnits {
-            self.allUnits = mockUnits
-            self.unitsLoaded = true
-            self.isMock = true
-        }
+        self.store = store
 
         switch mode {
         case .create:
             self.name = initialName
             self.baseUnit = .g
-        case .edit(let ingredient):
-            self.name = ingredient.name
-            self.baseUnit = ingredient.baseUnit
-            self.group = ingredient.group ?? ""
-            self.notes = ingredient.notes ?? ""
-            self.conversions = ingredient.conversions.map {
-                FormConversion(
-                    id: $0.unitId,
-                    unitId: $0.unitId,
-                    unitName: $0.unitName,
-                    quantityText: Quantity.format($0.quantityInBase),
-                    isInvalid: false
-                )
+        case .edit(let ingredientId):
+            if let ingredient = store.data.ingredients.first(where: { $0.id == ingredientId && $0.isActive }) {
+                self.name = ingredient.name
+                self.baseUnit = ingredient.baseUnit
+                self.group = ingredient.group ?? ""
+                self.notes = ingredient.notes ?? ""
+                let index = store.data.costingIndex()
+                self.conversions = ingredient.conversions.map {
+                    let uName = index.unitsById[$0.unitId]?.name ?? $0.unitId
+                    return FormConversion(
+                        id: $0.unitId,
+                        unitId: $0.unitId,
+                        unitName: uName,
+                        quantityText: Quantity.format($0.quantityInBase),
+                        isInvalid: false
+                    )
+                }
             }
         }
 
-        if unitsLoaded {
-            selectDefaultPackageUnit()
-        }
+        selectDefaultPackageUnit()
     }
 
     /// Solo unidades con baseUnit distinta a la del ingrediente y que aún no estén agregadas.
-    var availableUnits: [MeasureUnit] {
+    var availableUnits: [KitchenUnit] {
         let usedIds = Set(conversions.map(\.unitId))
-        return allUnits.filter { unit in
+        return store.data.availableKitchenUnits().filter { unit in
             unit.baseUnit != baseUnit && !usedIds.contains(unit.id)
         }
     }
 
     /// Unidades disponibles para el tamaño del paquete (con la misma unidad base que el ingrediente).
-    var packageAvailableUnits: [MeasureUnit] {
-        allUnits.filter { $0.baseUnit == baseUnit }
+    var packageAvailableUnits: [KitchenUnit] {
+        store.data.availableKitchenUnits().filter { $0.baseUnit == baseUnit }
     }
 
     var baseUnitHelpText: String {
@@ -184,9 +106,6 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
     }
 
     var saveButtonTitle: String {
-        if isSaving {
-            return "Guardando…"
-        }
         if hasSavedIngredientWithoutPrice {
             return "Listo"
         }
@@ -197,7 +116,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         if hasSavedIngredientWithoutPrice {
             return false
         }
-        return name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving
+        return name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     func selectDefaultPackageUnit() {
@@ -209,31 +128,14 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         }
     }
 
-    func onBaseUnitChanged(to newBaseUnit: RemoteBaseUnit) {
+    func onBaseUnitChanged(to newBaseUnit: BaseUnit) {
         self.baseUnit = newBaseUnit
-        // Se descartan equivalencias cuya unidad base ahora coincide con la nueva baseUnit
-        let matchingIds = Set(allUnits.filter { $0.baseUnit == newBaseUnit }.map(\.id))
+        let matchingIds = Set(store.data.availableKitchenUnits().filter { $0.baseUnit == newBaseUnit }.map(\.id))
         conversions.removeAll { matchingIds.contains($0.unitId) }
         selectDefaultPackageUnit()
     }
 
-    func loadUnitsIfNeeded() async {
-        guard !unitsLoaded && !isMock else { return }
-        isLoadingUnits = true
-        defer { isLoadingUnits = false }
-        do {
-            let units: [MeasureUnit] = try await NetworkService.shared.request(.get, "/units/")
-            self.allUnits = units
-            self.unitsLoaded = true
-            if selectedPackageUnit == nil {
-                selectDefaultPackageUnit()
-            }
-        } catch {
-            // Si falla la carga de unidades, no bloquea el formulario; se podrá reintentar al tocar agregar
-        }
-    }
-
-    func addConversion(for unit: MeasureUnit) {
+    func addConversion(for unit: KitchenUnit) {
         guard !conversions.contains(where: { $0.unitId == unit.id }) else { return }
         conversions.append(
             FormConversion(
@@ -250,7 +152,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         conversions.removeAll { $0.id == id }
     }
 
-    func save(onIngredientCreated: ((RemoteIngredient) -> Void)? = nil) async -> RemoteIngredient? {
+    func save(onIngredientCreated: ((Ingredient) -> Void)? = nil) -> Ingredient? {
         errorMessage = nil
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -279,7 +181,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         var presentationPackageQuantity: String = ""
 
         if shouldCreatePresentation {
-            let parsedCents = BrandFormModel.parsePriceCents(priceText)
+            let parsedCents = RecordPriceModel.parsePriceCents(priceText)
             let parsedQty = Quantity.parse(packageQuantityText)
 
             let priceValid = parsedCents != nil
@@ -306,72 +208,41 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let finalNotes: String? = trimmedNotes.isEmpty ? nil : trimmedNotes
 
-        let conversionInputs = conversions.compactMap { conv -> IngredientConversionInput? in
+        let conversionInputs = conversions.compactMap { conv -> IngredientConversion? in
             guard let qty = Quantity.parse(conv.quantityText) else { return nil }
-            return IngredientConversionInput(unitId: conv.unitId, quantityInBase: qty)
+            return IngredientConversion(unitId: conv.unitId, quantityInBase: qty)
         }
-
-        if isMock {
-            let mockId: String
-            switch mode {
-            case .create: mockId = "mock_\(UUID().uuidString.prefix(6))"
-            case .edit(let existing): mockId = existing.id
-            }
-            return RemoteIngredient(
-                id: mockId,
-                name: trimmedName,
-                baseUnit: baseUnit,
-                group: finalGroup,
-                notes: finalNotes,
-                conversions: conversionInputs.map { input in
-                    let name = allUnits.first(where: { $0.id == input.unitId })?.name ?? "unidad"
-                    return RemoteIngredientConversion(
-                        unitId: input.unitId,
-                        unitName: name,
-                        quantityInBase: input.quantityInBase
-                    )
-                },
-                createdAt: Date(),
-                updatedAt: Date()
-            )
-        }
-
-        isSaving = true
-        defer { isSaving = false }
 
         do {
             switch mode {
             case .create:
-                let body = IngredientCreateRequest(
-                    name: trimmedName,
-                    baseUnit: baseUnit,
-                    group: finalGroup,
-                    notes: finalNotes,
-                    conversions: conversionInputs
-                )
-                let createdIngredient: RemoteIngredient = try await NetworkService.shared.request(
-                    .post,
-                    "/ingredients/",
-                    body: body
-                )
+                let createdIngredient: Ingredient = try store.mutate { data, ctx in
+                    try data.createIngredient(
+                        name: trimmedName,
+                        baseUnit: baseUnit,
+                        group: finalGroup,
+                        notes: finalNotes,
+                        conversions: conversionInputs,
+                        ctx: ctx
+                    )
+                }
 
                 if shouldCreatePresentation {
                     let trimmedBrand = brandText.trimmingCharacters(in: .whitespacesAndNewlines)
                     let finalBrand = trimmedBrand.isEmpty ? "Sin marca" : trimmedBrand
-                    let presBody = PresentationCreateRequest(
-                        ingredientId: createdIngredient.id,
-                        brand: finalBrand,
-                        supplierId: nil,
-                        packageQuantity: presentationPackageQuantity,
-                        packageUnitId: selectedPackageUnit?.id,
-                        priceCents: presentationPriceCents
-                    )
                     do {
-                        let _: RemotePresentation = try await NetworkService.shared.request(
-                            .post,
-                            "/presentations/",
-                            body: presBody
-                        )
+                        try store.mutate { data, ctx in
+                            try data.createPresentation(
+                                ingredientId: createdIngredient.id,
+                                brand: finalBrand,
+                                supplierId: nil,
+                                packageQuantity: presentationPackageQuantity,
+                                packageUnitId: selectedPackageUnit?.id,
+                                barcode: nil,
+                                priceCents: presentationPriceCents,
+                                ctx: ctx
+                            )
+                        }
                         return createdIngredient
                     } catch {
                         hasSavedIngredientWithoutPrice = true
@@ -383,23 +254,22 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                     return createdIngredient
                 }
 
-            case .edit(let existing):
-                let body = IngredientUpdateRequest(
-                    name: trimmedName,
-                    baseUnit: baseUnit,
-                    group: finalGroup,
-                    notes: finalNotes,
-                    conversions: conversionInputs
-                )
-                let response: RemoteIngredient = try await NetworkService.shared.request(
-                    .patch,
-                    "/ingredients/\(existing.id)",
-                    body: body
-                )
+            case .edit(let ingredientId):
+                let response: Ingredient = try store.mutate { data, ctx in
+                    try data.updateIngredient(
+                        id: ingredientId,
+                        name: trimmedName,
+                        baseUnit: baseUnit,
+                        group: .some(finalGroup),
+                        notes: .some(finalNotes),
+                        conversions: conversionInputs,
+                        ctx: ctx
+                    )
+                }
                 return response
             }
-        } catch let apiError as APIError {
-            handleAPIError(apiError)
+        } catch let domainError as DomainError {
+            handleDomainError(domainError)
             return nil
         } catch {
             errorMessage = error.localizedDescription
@@ -407,13 +277,8 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         }
     }
 
-    private func handleAPIError(_ error: APIError) {
-        guard let code = error.code else {
-            errorMessage = error.localizedDescription
-            return
-        }
-
-        switch code {
+    private func handleDomainError(_ error: DomainError) {
+        switch error.code {
         case "DUPLICATE_NAME":
             errorMessage = "Ya tienes un ingrediente con ese nombre."
         case "IN_USE":
@@ -421,7 +286,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         case "INVALID_REFERENCE":
             errorMessage = "Una de las unidades ya no existe. Vuelve a abrir el formulario."
         default:
-            errorMessage = error.localizedDescription
+            errorMessage = error.detail
         }
     }
 }
@@ -432,7 +297,7 @@ struct IngredientFormView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: IngredientFormModel
-    var onSave: ((RemoteIngredient) -> Void)?
+    var onSave: ((Ingredient) -> Void)?
 
     @State private var showingUnitPicker = false
     @State private var showingBaseUnitHelp = false
@@ -440,10 +305,10 @@ struct IngredientFormView: View {
     init(
         mode: IngredientFormMode,
         initialName: String = "",
-        mockUnits: [MeasureUnit]? = nil,
-        onSave: ((RemoteIngredient) -> Void)? = nil
+        store: LocalStore = .shared,
+        onSave: ((Ingredient) -> Void)? = nil
     ) {
-        self._model = State(initialValue: IngredientFormModel(mode: mode, initialName: initialName, mockUnits: mockUnits))
+        self._model = State(initialValue: IngredientFormModel(mode: mode, initialName: initialName, store: store))
         self.onSave = onSave
     }
 
@@ -547,11 +412,9 @@ struct IngredientFormView: View {
                             dismiss()
                             return
                         }
-                        Task {
-                            if let saved = await model.save(onIngredientCreated: onSave) {
-                                onSave?(saved)
-                                dismiss()
-                            }
+                        if let saved = model.save(onIngredientCreated: onSave) {
+                            onSave?(saved)
+                            dismiss()
                         }
                     }
                     .buttonStyle(.kitchenPrimary)
@@ -582,9 +445,6 @@ struct IngredientFormView: View {
                 BaseUnitHelpSheet()
                     .presentationDetents([.medium, .large])
             }
-            .task {
-                await model.loadUnitsIfNeeded()
-            }
         }
     }
 
@@ -599,9 +459,9 @@ struct IngredientFormView: View {
                     get: { model.baseUnit },
                     set: { model.onBaseUnitChanged(to: $0) }
                 )) {
-                    Text("Se pesa (g)").tag(RemoteBaseUnit.g)
-                    Text("Es líquido (ml)").tag(RemoteBaseUnit.ml)
-                    Text("Se cuenta (piezas)").tag(RemoteBaseUnit.pz)
+                    Text("Se pesa (g)").tag(BaseUnit.g)
+                    Text("Es líquido (ml)").tag(BaseUnit.ml)
+                    Text("Se cuenta (piezas)").tag(BaseUnit.pz)
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, Spacing.md)
@@ -616,9 +476,9 @@ struct IngredientFormView: View {
                     get: { model.baseUnit },
                     set: { model.onBaseUnitChanged(to: $0) }
                 )) {
-                    Text("Se pesa").tag(RemoteBaseUnit.g)
-                    Text("Es líquido").tag(RemoteBaseUnit.ml)
-                    Text("Se cuenta").tag(RemoteBaseUnit.pz)
+                    Text("Se pesa").tag(BaseUnit.g)
+                    Text("Es líquido").tag(BaseUnit.ml)
+                    Text("Se cuenta").tag(BaseUnit.pz)
                 }
                 .pickerStyle(.segmented)
             }
@@ -868,8 +728,8 @@ struct IngredientFormView: View {
 // MARK: - Hoja para elegir unidad
 
 struct UnitPickerSheet: View {
-    let units: [MeasureUnit]
-    let onSelect: (MeasureUnit) -> Void
+    let units: [KitchenUnit]
+    let onSelect: (KitchenUnit) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -919,44 +779,21 @@ struct UnitPickerSheet: View {
 // MARK: - Previews
 
 #if DEBUG
-private let previewUnits: [MeasureUnit] = [
-    MeasureUnit(id: "u_g", name: "gramo", abbreviation: "g", baseUnit: .g, factorToBase: "1", isSystem: true),
-    MeasureUnit(id: "u_kg", name: "kilogramo", abbreviation: "kg", baseUnit: .g, factorToBase: "1000", isSystem: true),
-    MeasureUnit(id: "u_tz", name: "taza", abbreviation: "tz", baseUnit: .ml, factorToBase: "240", isSystem: true),
-    MeasureUnit(id: "u_cda", name: "cucharada", abbreviation: "cda", baseUnit: .ml, factorToBase: "15", isSystem: true),
-    MeasureUnit(id: "u_cdta", name: "cucharadita", abbreviation: "cdta", baseUnit: .ml, factorToBase: "5", isSystem: true),
-    MeasureUnit(id: "u_ml", name: "mililitro", abbreviation: "ml", baseUnit: .ml, factorToBase: "1", isSystem: true),
-    MeasureUnit(id: "u_pz", name: "pieza", abbreviation: "pz", baseUnit: .pz, factorToBase: "1", isSystem: true)
-]
-
-private let previewIngredient = RemoteIngredient(
-    id: "ing_preview_1",
-    name: "Harina de trigo",
-    baseUnit: .g,
-    group: "Harinas",
-    notes: "Comprar en bulto de 25 kg para mejor precio en la central de abastos.",
-    conversions: [
-        RemoteIngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
-    ],
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
 #Preview("Nuevo ingrediente") {
-    IngredientFormView(mode: .create, mockUnits: previewUnits)
+    IngredientFormView(mode: .create, store: .preview())
 }
 
 #Preview("Nuevo ingrediente - AX3") {
-    IngredientFormView(mode: .create, mockUnits: previewUnits)
+    IngredientFormView(mode: .create, store: .preview())
         .dynamicTypeSize(.accessibility3)
 }
 
 #Preview("Editar ingrediente") {
-    IngredientFormView(mode: .edit(previewIngredient), mockUnits: previewUnits)
+    IngredientFormView(mode: .edit(ingredientId: "ing-harina"), store: .preview())
 }
 
 #Preview("Letra AX3") {
-    IngredientFormView(mode: .edit(previewIngredient), mockUnits: previewUnits)
+    IngredientFormView(mode: .edit(ingredientId: "ing-harina"), store: .preview())
         .dynamicTypeSize(.accessibility3)
 }
 #endif
