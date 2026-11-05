@@ -3,6 +3,7 @@ import SwiftUI
 /// Vista de Clientes según Bloque I7a.
 struct CustomersView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var model: CustomersModel
     @State private var searchText = ""
@@ -10,6 +11,7 @@ struct CustomersView: View {
     @State private var showingNewCustomer = false
     @State private var customerToDelete: Customer?
     @State private var showingDeleteConfirmation = false
+    @State private var isVisible = false
 
     init(model: CustomersModel = CustomersModel()) {
         self._model = State(initialValue: model)
@@ -24,9 +26,14 @@ struct CustomersView: View {
                 .onChange(of: searchText) { _, newValue in
                     searchTask?.cancel()
                     searchTask = Task {
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                        if !Task.isCancelled {
-                            await model.load(query: newValue)
+                        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            await model.load(query: "")
+                        } else {
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            if !Task.isCancelled {
+                                await model.load(query: newValue)
+                            }
                         }
                     }
                 }
@@ -81,8 +88,18 @@ struct CustomersView: View {
                     }
                 }
                 .task {
-                    if model.state == .idle {
-                        await model.load()
+                    await model.load(query: searchText)
+                }
+                .onAppear {
+                    isVisible = true
+                }
+                .onDisappear {
+                    isVisible = false
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active, isVisible else { return }
+                    Task {
+                        await model.reloadIfStale()
                     }
                 }
         }
@@ -116,7 +133,7 @@ struct CustomersView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .refreshable {
-                    await model.load(query: searchText)
+                    await model.refresh(query: searchText)
                 }
             } else {
                 List {
@@ -148,7 +165,7 @@ struct CustomersView: View {
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
                 .refreshable {
-                    await model.load(query: searchText)
+                    await model.refresh(query: searchText)
                 }
             }
         }

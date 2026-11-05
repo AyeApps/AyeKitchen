@@ -30,7 +30,7 @@ enum CatalogLoadingState: Equatable, Sendable {
     case error(String)
 }
 
-/// ViewModel para la lista de ingredientes (`CatalogView`).
+/// ViewModel para la lista de ingredientes (`CatalogView`, MVVM, Regla 5 / Bloque I13).
 @Observable final class CatalogModel {
     var ingredients: [Ingredient] = []
     var state: CatalogLoadingState = .idle
@@ -39,12 +39,26 @@ enum CatalogLoadingState: Equatable, Sendable {
     var isLoadingNextPage: Bool = false
     var currentSearchQuery: String? = nil
     private(set) var isMock: Bool = false
+    private var hasLoadedOnce: Bool = false
+
+    private let firstPageQuery = [
+        URLQueryItem(name: "page", value: "1"),
+        URLQueryItem(name: "limit", value: "50")
+    ]
+
+    var isSearching: Bool {
+        guard let query = currentSearchQuery?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return !query.isEmpty
+    }
 
     init(mockIngredients: [Ingredient]? = nil) {
         if let mockIngredients {
             self.ingredients = mockIngredients
             self.state = .loaded
             self.isMock = true
+            self.hasLoadedOnce = true
         }
     }
 
@@ -80,22 +94,52 @@ enum CatalogLoadingState: Equatable, Sendable {
         return result
     }
 
-    /// Carga inicial de la primera página (limit=50).
+    /// Carga inicial: caché instantánea si existe, o spinner con forceReload.
     func loadInitial() async {
         guard !isMock else { return }
-        if ingredients.isEmpty {
+        if isSearching {
             state = .loading
+            await fetchPage(pageNumber: 1, query: currentSearchQuery, resetList: true)
+            return
         }
-        await fetchPage(pageNumber: 1, query: currentSearchQuery, resetList: true)
+
+        if hasLoadedOnce {
+            await reloadIfStale()
+        } else {
+            if await loadFromCache() {
+                await reloadIfStale()
+            } else {
+                state = .loading
+                await forceReload()
+            }
+        }
     }
 
     /// Recarga desde la página 1 (pull-to-refresh).
     func refresh() async {
         guard !isMock else { return }
-        await fetchPage(pageNumber: 1, query: currentSearchQuery, resetList: true)
+        if isSearching {
+            await fetchPage(pageNumber: 1, query: currentSearchQuery, resetList: true)
+        } else {
+            await forceReload()
+        }
     }
 
-    /// Carga la siguiente página si hay más items.
+    func forceReload() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.forceReload(.catalog) {
+            await self.reloadSilently()
+        }
+    }
+
+    func reloadIfStale() async {
+        guard !isMock, !isSearching else { return }
+        await ChangeTracker.shared.reloadIfStale(.catalog) {
+            await self.reloadSilently()
+        }
+    }
+
+    /// Carga la siguiente página si hay más items (paginación, sigue con request).
     func loadNextPage() async {
         guard !isMock, hasMore, !isLoadingNextPage, state == .loaded else { return }
         isLoadingNextPage = true
@@ -104,14 +148,18 @@ enum CatalogLoadingState: Equatable, Sendable {
         await fetchPage(pageNumber: nextPage, query: currentSearchQuery, resetList: false)
     }
 
-    /// Búsqueda con filtro en servidor.
+    /// Búsqueda con filtro en servidor. Al vaciarse, vuelve a la primera pantalla (desde caché).
     func search(query: String) async {
         guard !isMock else { return }
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let newQuery = trimmed.isEmpty ? nil : trimmed
-        currentSearchQuery = newQuery
-        state = .loading
-        await fetchPage(pageNumber: 1, query: newQuery, resetList: true)
+        if trimmed.isEmpty {
+            currentSearchQuery = nil
+            await loadInitial()
+        } else {
+            currentSearchQuery = trimmed
+            state = .loading
+            await fetchPage(pageNumber: 1, query: trimmed, resetList: true)
+        }
     }
 
     /// Borrado del ingrediente. Lanza error para que la vista decida cómo mostrarlo (p. ej. IN_USE).
@@ -147,21 +195,68 @@ enum CatalogLoadingState: Equatable, Sendable {
 
     // MARK: - Privado
 
+    /// Lee la copia guardada en disco de la primera pantalla sin búsqueda.
+    private func loadFromCache() async -> Bool {
+        guard !isMock else { return true }
+        guard let page: Page<Ingredient> = await NetworkService.shared.cached("/ingredients/", query: firstPageQuery) else {
+            return false
+        }
+        self.ingredients = page.items
+        self.currentPage = page.page
+        self.hasMore = page.hasMore
+        self.hasLoadedOnce = true
+        self.state = .loaded
+        return true
+    }
+
+    /// Recarga en silencio sin pasar por estado de carga. Guarda la respuesta en disco con requestCaching.
+    @discardableResult
+    func reloadSilently() async -> Bool {
+        guard !isMock else { return true }
+        do {
+            let page: Page<Ingredient> = try await NetworkService.shared.requestCaching(
+                "/ingredients/",
+                query: firstPageQuery
+            )
+            self.ingredients = page.items
+            self.currentPage = page.page
+            self.hasMore = page.hasMore
+            self.hasLoadedOnce = true
+            self.state = .loaded
+            return true
+        } catch {
+            if !hasLoadedOnce {
+                self.state = .error(error.localizedDescription)
+            }
+            return false
+        }
+    }
+
     private func fetchPage(pageNumber: Int, query: String?, resetList: Bool) async {
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "page", value: "\(pageNumber)"),
             URLQueryItem(name: "limit", value: "50")
         ]
-        if let query, !query.isEmpty {
-            queryItems.append(URLQueryItem(name: "q", value: query))
+        let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasQuery = trimmed != nil && !trimmed!.isEmpty
+        if hasQuery {
+            queryItems.append(URLQueryItem(name: "q", value: trimmed!))
         }
 
         do {
-            let page: Page<Ingredient> = try await NetworkService.shared.request(
-                .get,
-                "/ingredients/",
-                query: queryItems
-            )
+            let page: Page<Ingredient>
+            if !hasQuery && pageNumber == 1 {
+                page = try await NetworkService.shared.requestCaching(
+                    "/ingredients/",
+                    query: queryItems
+                )
+            } else {
+                page = try await NetworkService.shared.request(
+                    .get,
+                    "/ingredients/",
+                    query: queryItems
+                )
+            }
             currentPage = page.page
             hasMore = page.hasMore
             if resetList {
@@ -169,11 +264,16 @@ enum CatalogLoadingState: Equatable, Sendable {
             } else {
                 ingredients.append(contentsOf: page.items)
             }
+            hasLoadedOnce = true
             state = .loaded
         } catch let apiError as APIError {
-            state = .error(apiError.localizedDescription)
+            if !hasLoadedOnce {
+                state = .error(apiError.localizedDescription)
+            }
         } catch {
-            state = .error(error.localizedDescription)
+            if !hasLoadedOnce {
+                state = .error(error.localizedDescription)
+            }
         }
     }
 }

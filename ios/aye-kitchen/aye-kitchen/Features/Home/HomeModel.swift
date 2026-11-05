@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - Modelo de Inicio (Bloque I4)
+// MARK: - Modelo de Inicio (Bloque I4 / I13)
 
 @Observable final class HomeModel {
     var pendingOrders: [Order] = []
@@ -10,6 +10,8 @@ import Foundation
 
     var isLoading = false
     var errorMessage: String?
+    private(set) var isMock: Bool = false
+    private var hasLoadedOnce: Bool = false
 
     private var calendar: Calendar { Calendar.current }
     var startOfToday: Date { calendar.startOfDay(for: Date.now) }
@@ -17,12 +19,31 @@ import Foundation
         calendar.date(byAdding: .day, value: 7, to: startOfToday) ?? startOfToday.addingTimeInterval(7 * 86400)
     }
 
+    private let pendingQuery = [
+        URLQueryItem(name: "status", value: "pendiente"),
+        URLQueryItem(name: "limit", value: "100")
+    ]
+    private let inProgressQuery = [
+        URLQueryItem(name: "status", value: "en_proceso"),
+        URLQueryItem(name: "limit", value: "100")
+    ]
+    private let recipesQuery = [
+        URLQueryItem(name: "limit", value: "100")
+    ]
+    private let staleQuery = [
+        URLQueryItem(name: "limit", value: "5")
+    ]
+
     init(
         pendingOrders: [Order]? = nil,
         inProgressOrders: [Order]? = nil,
         recipes: [RecipeListItem]? = nil,
         stalePresentations: [StalePresentation]? = nil
     ) {
+        if pendingOrders != nil || inProgressOrders != nil || recipes != nil || stalePresentations != nil {
+            self.isMock = true
+            self.hasLoadedOnce = true
+        }
         if let pendingOrders { self.pendingOrders = pendingOrders }
         if let inProgressOrders { self.inProgressOrders = inProgressOrders }
         if let recipes { self.recipes = recipes }
@@ -76,40 +97,84 @@ import Foundation
         !incompleteRecipes.isEmpty || !stalePresentations.isEmpty
     }
 
+    /// Carga inicial: caché instantánea si existe, o spinner con forceReload.
     func load() async {
-        isLoading = true
-        errorMessage = nil
+        guard !isMock else { return }
+        if hasLoadedOnce {
+            await reloadIfStale()
+        } else {
+            if await loadFromCache() {
+                await reloadIfStale()
+            } else {
+                isLoading = true
+                errorMessage = nil
+                await forceReload()
+            }
+        }
+    }
 
+    /// Jalar para refrescar o recarga forzada tras guardar.
+    func refresh() async {
+        await forceReload()
+    }
+
+    func forceReload() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.forceReload(.home) {
+            await self.reloadSilently()
+        }
+    }
+
+    func reloadIfStale() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.reloadIfStale(.home) {
+            await self.reloadSilently()
+        }
+    }
+
+    /// Lee la copia guardada en disco de las 4 peticiones de Inicio.
+    private func loadFromCache() async -> Bool {
+        guard !isMock else { return true }
+        async let cachedPending: Page<Order>? = NetworkService.shared.cached("/orders/", query: pendingQuery)
+        async let cachedInProgress: Page<Order>? = NetworkService.shared.cached("/orders/", query: inProgressQuery)
+        async let cachedRecipes: Page<RecipeListItem>? = NetworkService.shared.cached("/recipes/", query: recipesQuery)
+        async let cachedStale: Page<StalePresentation>? = NetworkService.shared.cached("/presentations/stale", query: staleQuery)
+
+        let (pOrders, ipOrders, rList, sList) = await (cachedPending, cachedInProgress, cachedRecipes, cachedStale)
+        guard let pOrders, let ipOrders, let rList, let sList else {
+            return false
+        }
+
+        self.pendingOrders = pOrders.items
+        self.inProgressOrders = ipOrders.items
+        self.recipes = rList.items
+        self.stalePresentations = sList.items
+        self.hasLoadedOnce = true
+        self.isLoading = false
+        self.errorMessage = nil
+        return true
+    }
+
+    /// Recarga en silencio sin pasar por estado de carga. Guarda las respuestas en caché.
+    @discardableResult
+    func reloadSilently() async -> Bool {
+        guard !isMock else { return true }
         do {
-            async let pendingTask: Page<Order> = NetworkService.shared.request(
-                .get,
+            async let pendingTask: Page<Order> = NetworkService.shared.requestCaching(
                 "/orders/",
-                query: [
-                    URLQueryItem(name: "status", value: "pendiente"),
-                    URLQueryItem(name: "limit", value: "100")
-                ]
+                query: pendingQuery
             )
-            async let inProgressTask: Page<Order> = NetworkService.shared.request(
-                .get,
+            async let inProgressTask: Page<Order> = NetworkService.shared.requestCaching(
                 "/orders/",
-                query: [
-                    URLQueryItem(name: "status", value: "en_proceso"),
-                    URLQueryItem(name: "limit", value: "100")
-                ]
+                query: inProgressQuery
             )
-            async let recipesTask: Page<RecipeListItem> = NetworkService.shared.request(
-                .get,
+            async let recipesTask: Page<RecipeListItem> = NetworkService.shared.requestCaching(
                 "/recipes/",
-                query: [
-                    URLQueryItem(name: "limit", value: "100")
-                ]
+                query: recipesQuery
             )
-            async let staleTask: Page<StalePresentation> = NetworkService.shared.request(
-                .get,
+            async let staleTask: Page<StalePresentation> = NetworkService.shared.requestCaching(
                 "/presentations/stale",
-                query: [
-                    URLQueryItem(name: "limit", value: "5")
-                ]
+                query: staleQuery
             )
 
             let (pOrders, ipOrders, rList, sList) = try await (pendingTask, inProgressTask, recipesTask, staleTask)
@@ -117,10 +182,16 @@ import Foundation
             self.inProgressOrders = ipOrders.items
             self.recipes = rList.items
             self.stalePresentations = sList.items
+            self.hasLoadedOnce = true
+            self.errorMessage = nil
             self.isLoading = false
+            return true
         } catch {
             self.isLoading = false
-            self.errorMessage = error.localizedDescription
+            if !hasLoadedOnce {
+                self.errorMessage = error.localizedDescription
+            }
+            return false
         }
     }
 }

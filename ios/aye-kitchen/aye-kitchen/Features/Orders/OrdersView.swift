@@ -2,9 +2,11 @@ import SwiftUI
 
 /// Lista de pedidos según Bloque I2 y artboard "Inicio — iPhone".
 struct OrdersView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model = OrdersModel()
     @State private var showingNewOrder = false
     @State private var showingCustomers = false
+    @State private var isVisible = false
 
     var body: some View {
         NavigationStack {
@@ -47,8 +49,18 @@ struct OrdersView: View {
                     }
                 }
                 .task {
-                    if model.state == .loading {
-                        await model.load()
+                    await model.load()
+                }
+                .onAppear {
+                    isVisible = true
+                }
+                .onDisappear {
+                    isVisible = false
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active, isVisible else { return }
+                    Task {
+                        await model.reloadIfStale()
                     }
                 }
         }
@@ -99,7 +111,7 @@ struct OrdersView: View {
                 .padding(.bottom, Spacing.xxl)
             }
             .refreshable {
-                await model.load()
+                await model.refresh()
             }
         }
     }

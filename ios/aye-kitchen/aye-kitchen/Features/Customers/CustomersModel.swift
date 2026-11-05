@@ -8,12 +8,22 @@ enum CustomersLoadingState: Equatable, Sendable {
     case error(String)
 }
 
+/// ViewModel para la lista de clientes (`CustomersView`, MVVM, Regla 5 / Bloque I13).
 @Observable final class CustomersModel {
     var customers: [Customer] = []
     var state: CustomersLoadingState = .idle
     var actionErrorMessage: String? = nil
     private(set) var isMock: Bool = false
     private var allMockCustomers: [Customer] = []
+    private var hasLoadedOnce: Bool = false
+    private(set) var currentSearchQuery: String? = nil
+
+    var isSearching: Bool {
+        guard let query = currentSearchQuery?.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            return false
+        }
+        return !query.isEmpty
+    }
 
     init(mockCustomers: [Customer]? = nil) {
         if let mockCustomers {
@@ -21,11 +31,15 @@ enum CustomersLoadingState: Equatable, Sendable {
             self.allMockCustomers = self.customers
             self.state = .loaded
             self.isMock = true
+            self.hasLoadedOnce = true
         }
     }
 
+    /// Carga la primera pantalla (desde caché si existe) o ejecuta la búsqueda activa.
     func load(query: String? = nil) async {
         let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isSearch = !(trimmed?.isEmpty ?? true)
+        currentSearchQuery = isSearch ? trimmed : nil
 
         if isMock {
             if let trimmed, !trimmed.isEmpty {
@@ -40,28 +54,94 @@ enum CustomersLoadingState: Equatable, Sendable {
             return
         }
 
-        if customers.isEmpty {
-            state = .loading
+        if isSearch {
+            if customers.isEmpty {
+                state = .loading
+            }
+            actionErrorMessage = nil
+            do {
+                let list: [Customer] = try await NetworkService.shared.request(
+                    .get,
+                    "/customers/",
+                    query: [URLQueryItem(name: "q", value: trimmed!)]
+                )
+                self.customers = list
+                self.state = .loaded
+            } catch let apiError as APIError {
+                self.state = .error(apiError.localizedDescription)
+            } catch {
+                self.state = .error(error.localizedDescription)
+            }
+            return
         }
-        actionErrorMessage = nil
 
-        var queryItems: [URLQueryItem] = []
+        // Sin búsqueda activa: primera pantalla
+        if hasLoadedOnce {
+            await reloadIfStale()
+        } else {
+            if await loadFromCache() {
+                await reloadIfStale()
+            } else {
+                state = .loading
+                await forceReload()
+            }
+        }
+    }
+
+    /// Pull-to-refresh
+    func refresh(query: String? = nil) async {
+        let trimmed = query?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmed, !trimmed.isEmpty {
-            queryItems.append(URLQueryItem(name: "q", value: trimmed))
+            await load(query: trimmed)
+        } else {
+            await forceReload()
         }
+    }
 
+    func forceReload() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.forceReload(.customers) {
+            await self.reloadSilently()
+        }
+    }
+
+    func reloadIfStale() async {
+        guard !isMock, !isSearching else { return }
+        await ChangeTracker.shared.reloadIfStale(.customers) {
+            await self.reloadSilently()
+        }
+    }
+
+    /// Lee la copia guardada en disco de la primera pantalla sin búsqueda.
+    private func loadFromCache() async -> Bool {
+        guard !isMock else { return true }
+        guard let list: [Customer] = await NetworkService.shared.cached("/customers/", query: []) else {
+            return false
+        }
+        self.customers = list
+        self.hasLoadedOnce = true
+        self.state = .loaded
+        return true
+    }
+
+    /// Recarga en silencio sin pasar por estado de carga. Guarda la respuesta en disco con requestCaching.
+    @discardableResult
+    func reloadSilently() async -> Bool {
+        guard !isMock else { return true }
         do {
-            let list: [Customer] = try await NetworkService.shared.request(
-                .get,
+            let list: [Customer] = try await NetworkService.shared.requestCaching(
                 "/customers/",
-                query: queryItems
+                query: []
             )
             self.customers = list
+            self.hasLoadedOnce = true
             self.state = .loaded
-        } catch let apiError as APIError {
-            self.state = .error(apiError.localizedDescription)
+            return true
         } catch {
-            self.state = .error(error.localizedDescription)
+            if !hasLoadedOnce {
+                self.state = .error(error.localizedDescription)
+            }
+            return false
         }
     }
 

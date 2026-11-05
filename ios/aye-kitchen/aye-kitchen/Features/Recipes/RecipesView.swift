@@ -1,18 +1,25 @@
 import SwiftUI
 
-/// Lista de recetas según Bloque I3.
+/// Lista de recetas según Bloque I3 / I13.
 struct RecipesView: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var model = RecipesModel()
     @State private var showingNewRecipe = false
     @State private var recipeToDelete: RecipeListItem?
     @State private var deleteErrorMessage: String?
     @State private var searchTask: Task<Void, Never>?
+    @State private var isVisible = false
 
     var body: some View {
         NavigationStack {
             content
                 .background(.canvasBackground)
                 .navigationTitle("Recetas")
+                .searchable(text: $model.query, prompt: "Buscar receta")
+                .onChange(of: model.query) { _, newQuery in
+                    handleSearch(query: newQuery)
+                }
                 .toolbar {
                     ToolbarItem(placement: .topBarTrailing) {
                         AddToolbarButton(label: "Nueva receta") {
@@ -23,7 +30,7 @@ struct RecipesView: View {
                 .sheet(isPresented: $showingNewRecipe) {
                     RecipeEditorView { _ in
                         Task {
-                            await model.load()
+                            await model.refresh()
                         }
                     }
                 }
@@ -31,8 +38,18 @@ struct RecipesView: View {
                     RecipeDetailView(recipeId: recipeId)
                 }
                 .task {
-                    if model.state == .loading && model.isEmpty {
-                        await model.load()
+                    await model.load()
+                }
+                .onAppear {
+                    isVisible = true
+                }
+                .onDisappear {
+                    isVisible = false
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active, isVisible else { return }
+                    Task {
+                        await model.reloadIfStale()
                     }
                 }
                 .confirmationDialog(
@@ -92,14 +109,22 @@ struct RecipesView: View {
 
         default:
             if model.isEmpty {
-                ContentUnavailableView(
-                    "Todavía no hay recetas",
-                    systemImage: "book.closed",
-                    description: Text("Arma una receta y te decimos cuánto te cuesta.")
-                )
-                .searchable(text: $model.query, prompt: "Buscar receta")
-                .onChange(of: model.query) { _, newQuery in
-                    handleSearch(query: newQuery)
+                ScrollView {
+                    if model.isSearching {
+                        ContentUnavailableView.search(text: model.query)
+                            .padding(.top, 40)
+                    } else {
+                        ContentUnavailableView(
+                            "Todavía no hay recetas",
+                            systemImage: "book.closed",
+                            description: Text("Arma una receta y te decimos cuánto te cuesta.")
+                        )
+                        .padding(.top, 40)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .refreshable {
+                    await model.refresh()
                 }
             } else {
                 List {
@@ -134,10 +159,6 @@ struct RecipesView: View {
                 }
                 .listStyle(.insetGrouped)
                 .scrollContentBackground(.hidden)
-                .searchable(text: $model.query, prompt: "Buscar receta")
-                .onChange(of: model.query) { _, newQuery in
-                    handleSearch(query: newQuery)
-                }
                 .refreshable {
                     await model.refresh()
                 }
@@ -148,9 +169,15 @@ struct RecipesView: View {
     private func handleSearch(query: String) {
         searchTask?.cancel()
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            if !Task.isCancelled {
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                // Borró la búsqueda: vuelve a la primera pantalla (desde la caché si está)
                 await model.load()
+            } else {
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                if !Task.isCancelled {
+                    await model.load()
+                }
             }
         }
     }

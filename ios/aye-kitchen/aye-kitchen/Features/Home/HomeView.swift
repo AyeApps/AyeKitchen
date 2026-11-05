@@ -4,9 +4,11 @@ import SwiftUI
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var model: HomeModel
     @State private var showingNewOrder = false
+    @State private var isVisible = false
 
     @ScaledMetric(relativeTo: .headline) private var warningIconSize: CGFloat = 36
 
@@ -44,7 +46,7 @@ struct HomeView: View {
             }
             .background(.canvasBackground)
             .refreshable {
-                await model.load()
+                await model.refresh()
             }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -59,12 +61,24 @@ struct HomeView: View {
             .sheet(isPresented: $showingNewOrder) {
                 OrderFormView(order: nil) { _ in
                     Task {
-                        await model.load()
+                        await model.refresh()
                     }
                 }
             }
             .task {
                 await model.load()
+            }
+            .onAppear {
+                isVisible = true
+            }
+            .onDisappear {
+                isVisible = false
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active, isVisible else { return }
+                Task {
+                    await model.reloadIfStale()
+                }
             }
         }
     }

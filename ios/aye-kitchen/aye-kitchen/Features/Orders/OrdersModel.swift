@@ -30,7 +30,7 @@ struct OrderSection: Identifiable, Sendable {
     let orders: [Order]
 }
 
-/// Modelo de presentación para la lista de pedidos (MVVM, Regla 5).
+/// Modelo de presentación para la lista de pedidos (MVVM, Regla 5 / Bloque I13).
 @Observable
 final class OrdersModel {
     var filter: OrdersFilter = .pendingAndInProgress {
@@ -49,6 +49,16 @@ final class OrdersModel {
     private var deliveredOrders: [Order] = []
     private var hasLoadedPending = false
     private var hasLoadedDelivered = false
+    private(set) var isMock: Bool = false
+
+    private let pendingQuery = [
+        URLQueryItem(name: "status", value: OrderStatus.pending.rawValue),
+        URLQueryItem(name: "limit", value: "100")
+    ]
+    private let inProgressQuery = [
+        URLQueryItem(name: "status", value: OrderStatus.inProgress.rawValue),
+        URLQueryItem(name: "limit", value: "100")
+    ]
 
     var isEmpty: Bool {
         sections.isEmpty
@@ -56,6 +66,7 @@ final class OrdersModel {
 
     init(mockOrders: [Order]? = nil) {
         if let mockOrders {
+            self.isMock = true
             self.state = .loaded
             self.pendingAndInProgressOrders = mockOrders.filter { $0.status == .pending || $0.status == .inProgress }
             self.deliveredOrders = mockOrders.filter { $0.status == .delivered }
@@ -67,18 +78,34 @@ final class OrdersModel {
 
     /// Carga los pedidos del filtro actual y actualiza las secciones.
     func load() async {
-        state = .loading
-        do {
-            switch filter {
-            case .pendingAndInProgress:
-                try await fetchPendingAndInProgress()
-            case .delivered:
-                try await fetchDelivered()
+        guard !isMock else { return }
+        if hasLoadedPending {
+            await reloadIfStale()
+        } else {
+            if await loadFromCache() {
+                await reloadIfStale()
+            } else {
+                state = .loading
+                await forceReload()
             }
-            rebuildSections()
-            state = .loaded
-        } catch {
-            state = .error(error.localizedDescription)
+        }
+    }
+
+    func refresh() async {
+        await forceReload()
+    }
+
+    func forceReload() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.forceReload(.orders) {
+            await self.reloadSilently()
+        }
+    }
+
+    func reloadIfStale() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.reloadIfStale(.orders) {
+            await self.reloadSilently()
         }
     }
 
@@ -90,38 +117,74 @@ final class OrdersModel {
             }
         case .delivered:
             if !hasLoadedDelivered {
-                await load()
+                state = .loading
+                do {
+                    try await fetchDelivered()
+                    rebuildSections()
+                    state = .loaded
+                } catch {
+                    if !hasLoadedDelivered {
+                        state = .error(error.localizedDescription)
+                    }
+                }
             }
         }
     }
 
-    /// Dos peticiones en paralelo para "Por entregar":
-    /// GET /orders/?status=pendiente&limit=100 y GET /orders/?status=en_proceso&limit=100
-    private func fetchPendingAndInProgress() async throws {
-        async let pendingRequest: Page<Order> = NetworkService.shared.request(
-            .get,
-            "/orders/",
-            query: [
-                URLQueryItem(name: "status", value: OrderStatus.pending.rawValue),
-                URLQueryItem(name: "limit", value: "100")
-            ]
-        )
+    /// Lee la copia guardada en disco de la primera pantalla ("Por entregar").
+    private func loadFromCache() async -> Bool {
+        guard !isMock else { return true }
+        async let cachedPending: Page<Order>? = NetworkService.shared.cached("/orders/", query: pendingQuery)
+        async let cachedInProgress: Page<Order>? = NetworkService.shared.cached("/orders/", query: inProgressQuery)
 
-        async let inProgressRequest: Page<Order> = NetworkService.shared.request(
-            .get,
-            "/orders/",
-            query: [
-                URLQueryItem(name: "status", value: OrderStatus.inProgress.rawValue),
-                URLQueryItem(name: "limit", value: "100")
-            ]
-        )
+        let (pendingPage, inProgressPage) = await (cachedPending, cachedInProgress)
+        guard let pendingPage, let inProgressPage else {
+            return false
+        }
 
-        let (pendingPage, inProgressPage) = try await (pendingRequest, inProgressRequest)
         self.pendingAndInProgressOrders = pendingPage.items + inProgressPage.items
         self.hasLoadedPending = true
+        rebuildSections()
+        self.state = .loaded
+        return true
     }
 
-    /// Petición para "Entregados":
+    /// Recarga en silencio sin pasar por estado de carga. Guarda las respuestas en disco con requestCaching.
+    @discardableResult
+    func reloadSilently() async -> Bool {
+        guard !isMock else { return true }
+        do {
+            async let pendingRequest: Page<Order> = NetworkService.shared.requestCaching(
+                "/orders/",
+                query: pendingQuery
+            )
+
+            async let inProgressRequest: Page<Order> = NetworkService.shared.requestCaching(
+                "/orders/",
+                query: inProgressQuery
+            )
+
+            let (pendingPage, inProgressPage) = try await (pendingRequest, inProgressRequest)
+            self.pendingAndInProgressOrders = pendingPage.items + inProgressPage.items
+            self.hasLoadedPending = true
+
+            if filter == .delivered {
+                try await fetchDelivered()
+            }
+
+            rebuildSections()
+            self.state = .loaded
+            return true
+        } catch {
+            let hasData = filter == .delivered ? hasLoadedDelivered : hasLoadedPending
+            if !hasData {
+                self.state = .error(error.localizedDescription)
+            }
+            return false
+        }
+    }
+
+    /// Petición para "Entregados" (filtro secundario, sigue con request estándar):
     /// GET /orders/?status=entregado&from=<hace 30 días>&limit=100
     private func fetchDelivered() async throws {
         let calendar = Calendar.current

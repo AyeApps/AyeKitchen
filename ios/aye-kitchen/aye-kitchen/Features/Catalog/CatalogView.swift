@@ -3,6 +3,7 @@ import SwiftUI
 /// Catálogo: lista de ingredientes agrupados con búsqueda, paginación y borrado.
 struct CatalogView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     @State private var model: CatalogModel
     @State private var searchText = ""
     @State private var searchTask: Task<Void, Never>?
@@ -11,6 +12,7 @@ struct CatalogView: View {
     @State private var ingredientToDelete: Ingredient?
     @State private var showingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
+    @State private var isVisible = false
 
     init(model: CatalogModel = CatalogModel()) {
         self._model = State(initialValue: model)
@@ -25,9 +27,14 @@ struct CatalogView: View {
                 .onChange(of: searchText) { _, newValue in
                     searchTask?.cancel()
                     searchTask = Task {
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                        if !Task.isCancelled {
-                            await model.search(query: newValue)
+                        let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if trimmed.isEmpty {
+                            await model.search(query: "")
+                        } else {
+                            try? await Task.sleep(nanoseconds: 300_000_000)
+                            if !Task.isCancelled {
+                                await model.search(query: newValue)
+                            }
                         }
                     }
                 }
@@ -87,6 +94,18 @@ struct CatalogView: View {
                 }
                 .task {
                     await model.loadInitial()
+                }
+                .onAppear {
+                    isVisible = true
+                }
+                .onDisappear {
+                    isVisible = false
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active, isVisible else { return }
+                    Task {
+                        await model.reloadIfStale()
+                    }
                 }
         }
     }

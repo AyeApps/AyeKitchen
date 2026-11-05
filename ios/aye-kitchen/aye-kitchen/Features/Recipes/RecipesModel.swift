@@ -20,7 +20,7 @@ enum RecipeActionError: LocalizedError, Sendable {
     }
 }
 
-/// Modelo de presentación para la lista de recetas (MVVM, Regla 5).
+/// Modelo de presentación para la lista de recetas (MVVM, Regla 5 / Bloque I13).
 @Observable
 final class RecipesModel {
     var items: [RecipeListItem] = []
@@ -30,6 +30,13 @@ final class RecipesModel {
     private var currentPage: Int = 1
     private var totalPages: Int = 1
     private(set) var isLoadingMore: Bool = false
+    private(set) var isMock: Bool = false
+    private var hasLoadedOnce: Bool = false
+
+    private let firstPageQuery = [
+        URLQueryItem(name: "page", value: "1"),
+        URLQueryItem(name: "limit", value: "50")
+    ]
 
     var isEmpty: Bool {
         items.isEmpty
@@ -39,32 +46,67 @@ final class RecipesModel {
         currentPage < totalPages
     }
 
+    var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
     init(mockItems: [RecipeListItem]? = nil) {
         if let mockItems {
             self.items = mockItems
             self.state = .loaded
             self.currentPage = 1
             self.totalPages = 1
+            self.isMock = true
+            self.hasLoadedOnce = true
         }
     }
 
-    /// Carga la primera página de recetas (o filtra por búsqueda).
+    /// Carga la primera página de recetas (o filtra por búsqueda activa).
     func load() async {
-        state = .loading
-        currentPage = 1
+        guard !isMock else { return }
+        if isSearching {
+            await performSearch()
+            return
+        }
 
-        do {
-            let page = try await fetchPage(pageNumber: 1, query: query)
-            self.items = page.items
-            self.totalPages = page.pages
-            self.state = .loaded
-        } catch {
-            self.state = .error(error.localizedDescription)
+        if hasLoadedOnce {
+            await reloadIfStale()
+        } else {
+            if await loadFromCache() {
+                await reloadIfStale()
+            } else {
+                state = .loading
+                await forceReload()
+            }
         }
     }
 
-    /// Recarga la lista respetando la búsqueda actual.
+    /// Recarga la lista respetando la búsqueda actual o forzando recarga de la sección.
     func refresh() async {
+        guard !isMock else { return }
+        if isSearching {
+            await performSearch()
+        } else {
+            await forceReload()
+        }
+    }
+
+    func forceReload() async {
+        guard !isMock else { return }
+        await ChangeTracker.shared.forceReload(.recipes) {
+            await self.reloadSilently()
+        }
+    }
+
+    func reloadIfStale() async {
+        guard !isMock, !isSearching else { return }
+        await ChangeTracker.shared.reloadIfStale(.recipes) {
+            await self.reloadSilently()
+        }
+    }
+
+    private func performSearch() async {
+        state = .loading
         currentPage = 1
         do {
             let page = try await fetchPage(pageNumber: 1, query: query)
@@ -109,6 +151,43 @@ final class RecipesModel {
         }
     }
 
+    /// Lee la copia guardada en disco de la primera pantalla sin búsqueda.
+    private func loadFromCache() async -> Bool {
+        guard !isMock else { return true }
+        guard let page: Page<RecipeListItem> = await NetworkService.shared.cached("/recipes/", query: firstPageQuery) else {
+            return false
+        }
+        self.items = page.items
+        self.totalPages = page.pages
+        self.currentPage = 1
+        self.hasLoadedOnce = true
+        self.state = .loaded
+        return true
+    }
+
+    /// Recarga en silencio sin pasar por estado de carga. Guarda la respuesta en disco con requestCaching.
+    @discardableResult
+    func reloadSilently() async -> Bool {
+        guard !isMock else { return true }
+        do {
+            let page: Page<RecipeListItem> = try await NetworkService.shared.requestCaching(
+                "/recipes/",
+                query: firstPageQuery
+            )
+            self.items = page.items
+            self.totalPages = page.pages
+            self.currentPage = 1
+            self.hasLoadedOnce = true
+            self.state = .loaded
+            return true
+        } catch {
+            if !hasLoadedOnce {
+                self.state = .error(error.localizedDescription)
+            }
+            return false
+        }
+    }
+
     private func fetchPage(pageNumber: Int, query: String) async throws -> Page<RecipeListItem> {
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "page", value: "\(pageNumber)"),
@@ -118,12 +197,22 @@ final class RecipesModel {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         if !trimmed.isEmpty {
             queryItems.append(URLQueryItem(name: "q", value: trimmed))
+            return try await NetworkService.shared.request(
+                .get,
+                "/recipes/",
+                query: queryItems
+            )
+        } else if pageNumber == 1 {
+            return try await NetworkService.shared.requestCaching(
+                "/recipes/",
+                query: queryItems
+            )
+        } else {
+            return try await NetworkService.shared.request(
+                .get,
+                "/recipes/",
+                query: queryItems
+            )
         }
-
-        return try await NetworkService.shared.request(
-            .get,
-            "/recipes/",
-            query: queryItems
-        )
     }
 }
