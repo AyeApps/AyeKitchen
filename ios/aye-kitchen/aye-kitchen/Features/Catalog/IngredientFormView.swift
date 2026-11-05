@@ -175,11 +175,11 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
     var baseUnitHelpText: String {
         switch baseUnit {
         case .g:
-            "Todo se lleva a gramos"
+            "Harina, azúcar, mantequilla, queso. En tus recetas usas g, kg o tazas."
         case .ml:
-            "Todo se lleva a mililitros"
+            "Leche, aceite, crema, vainilla. En tus recetas usas ml, litros o cucharadas."
         case .pz:
-            "Todo se lleva a piezas"
+            "Huevos, latas, tortillas: lo que cuentas uno por uno."
         }
     }
 
@@ -435,6 +435,7 @@ struct IngredientFormView: View {
     var onSave: ((Ingredient) -> Void)?
 
     @State private var showingUnitPicker = false
+    @State private var showingBaseUnitHelp = false
 
     init(
         mode: IngredientFormMode,
@@ -577,6 +578,10 @@ struct IngredientFormView: View {
                     model.addConversion(for: unit)
                 }
             }
+            .sheet(isPresented: $showingBaseUnitHelp) {
+                BaseUnitHelpSheet()
+                    .presentationDetents([.medium, .large])
+            }
             .task {
                 await model.loadUnitsIfNeeded()
             }
@@ -587,18 +592,16 @@ struct IngredientFormView: View {
 
     private var buyingUnitField: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("¿Cómo lo compras?")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.inkPrimary)
+            buyingUnitHeader
 
             if dynamicTypeSize.isAccessibilitySize {
-                Picker("¿Cómo lo compras?", selection: Binding(
+                Picker("¿Cómo lo mides en tus recetas?", selection: Binding(
                     get: { model.baseUnit },
                     set: { model.onBaseUnitChanged(to: $0) }
                 )) {
-                    Text("Peso (g)").tag(BaseUnit.g)
-                    Text("Volumen (ml)").tag(BaseUnit.ml)
-                    Text("Pieza (pz)").tag(BaseUnit.pz)
+                    Text("Se pesa (g)").tag(BaseUnit.g)
+                    Text("Es líquido (ml)").tag(BaseUnit.ml)
+                    Text("Se cuenta (piezas)").tag(BaseUnit.pz)
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, Spacing.md)
@@ -609,13 +612,13 @@ struct IngredientFormView: View {
                         .strokeBorder(Color.borderInput, lineWidth: 1.5)
                 }
             } else {
-                Picker("¿Cómo lo compras?", selection: Binding(
+                Picker("¿Cómo lo mides en tus recetas?", selection: Binding(
                     get: { model.baseUnit },
                     set: { model.onBaseUnitChanged(to: $0) }
                 )) {
-                    Text("Peso").tag(BaseUnit.g)
-                    Text("Volumen").tag(BaseUnit.ml)
-                    Text("Pieza").tag(BaseUnit.pz)
+                    Text("Se pesa").tag(BaseUnit.g)
+                    Text("Es líquido").tag(BaseUnit.ml)
+                    Text("Se cuenta").tag(BaseUnit.pz)
                 }
                 .pickerStyle(.segmented)
             }
@@ -623,6 +626,49 @@ struct IngredientFormView: View {
             Text(model.baseUnitHelpText)
                 .font(.footnote)
                 .foregroundStyle(.inkMuted)
+        }
+    }
+
+    @ViewBuilder
+    private var buyingUnitHeader: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("¿Cómo lo mides en tus recetas?")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.inkPrimary)
+
+                Button {
+                    showingBaseUnitHelp = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "questionmark.circle")
+                        Text("¿Cuál elijo?")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            HStack {
+                Text("¿Cómo lo mides en tus recetas?")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(.inkPrimary)
+
+                Spacer()
+
+                Button {
+                    showingBaseUnitHelp = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "questionmark.circle")
+                        Text("¿Cuál elijo?")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 

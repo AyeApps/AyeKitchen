@@ -1,16 +1,16 @@
 import Foundation
 import Observation
 
-/// Descripción de cómo se compra según la unidad base del contrato.
+/// Descripción de cómo se mide según la unidad base del contrato.
 extension Ingredient {
     var buyingUnitDescription: String {
         switch baseUnit {
         case .g:
-            "Por peso (g)"
+            "Se pesa (g)"
         case .ml:
-            "Por volumen (ml)"
+            "Es líquido (ml)"
         case .pz:
-            "Por pieza"
+            "Se cuenta (piezas)"
         }
     }
 }
