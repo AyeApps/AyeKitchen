@@ -59,7 +59,7 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showingNewOrder) {
-                OrderFormView(order: nil) { _ in
+                OrderFormView(.create) { _ in
                     Task {
                         await model.refresh()
                     }
@@ -179,11 +179,7 @@ struct HomeView: View {
                 }
 
                 NavigationLink {
-                    OrderDetailView(
-                        order: order,
-                        onOrderUpdated: { _ in Task { await model.load() } },
-                        onOrderDeleted: { _ in Task { await model.load() } }
-                    )
+                    OrderDetailView(orderId: order.id)
                 } label: {
                     Text("Ver pedido")
                         .font(.body.weight(.heavy))
@@ -250,13 +246,9 @@ struct HomeView: View {
                 RowGroup {
                     ForEach(model.remainingWeekOrders) { order in
                         NavigationLink {
-                            OrderDetailView(
-                                order: order,
-                                onOrderUpdated: { _ in Task { await model.load() } },
-                                onOrderDeleted: { _ in Task { await model.load() } }
-                            )
+                            OrderDetailView(orderId: order.id)
                         } label: {
-                            OrderRow(order: order)
+                            OrderRow(orderId: order.id)
                         }
                         .buttonStyle(.plain)
                     }
@@ -302,12 +294,7 @@ struct HomeView: View {
 
                 ForEach(model.stalePresentations.prefix(3)) { stale in
                     NavigationLink {
-                        BrandDetailView(
-                            presentation: stale.presentation,
-                            onBrandChangedOrDeleted: {
-                                Task { await model.load() }
-                            }
-                        )
+                        BrandDetailView(presentationId: stale.presentation.id)
                     } label: {
                         HStack(spacing: Spacing.md) {
                             warningIconSquare

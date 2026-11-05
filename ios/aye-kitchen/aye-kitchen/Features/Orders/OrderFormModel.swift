@@ -1,72 +1,16 @@
 import Foundation
 import SwiftUI
+import KitchenDomain
+import Observation
 
-/// Elemento de entrada para cada línea del pedido al crear o editar.
-nonisolated struct OrderItemInput: Encodable, Sendable {
-    let recipeId: String
-    let soldBy: RemoteOrderSoldBy
-    let quantity: String
-    let unitPriceCents: Int?
-}
-
-/// Cuerpo de la petición para crear un pedido (POST /orders/).
-nonisolated struct OrderCreateBody: Encodable, Sendable {
-    let customerId: String?
-    let customerName: String
-    let customerPhone: String?
-    let deliveryAt: Date
-    let items: [OrderItemInput]
-    let notes: String?
-}
-
-/// Cuerpo de la petición para editar un pedido (PATCH /orders/{id}).
-nonisolated struct OrderUpdateBody: Encodable, Sendable {
-    let customerId: String?
-    let customerName: String?
-    let customerPhone: String?
-    let deliveryAt: Date?
-    let status: RemoteOrderStatus?
-    let notes: String?
-    let items: [OrderItemInput]?
-
-    enum CodingKeys: String, CodingKey {
-        case customerId
-        case customerName
-        case customerPhone
-        case deliveryAt
-        case status
-        case notes
-        case items
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(customerId, forKey: .customerId)
-        try container.encodeIfPresent(customerName, forKey: .customerName)
-        if let customerPhone {
-            try container.encode(customerPhone, forKey: .customerPhone)
-        } else {
-            try container.encodeNil(forKey: .customerPhone)
-        }
-        try container.encodeIfPresent(deliveryAt, forKey: .deliveryAt)
-        try container.encodeIfPresent(status, forKey: .status)
-        if let notes {
-            try container.encode(notes, forKey: .notes)
-        } else {
-            try container.encodeNil(forKey: .notes)
-        }
-        try container.encodeIfPresent(items, forKey: .items)
-    }
-}
-
-/// Línea de producto en el borrador del formulario.
+/// Línea de producto en el borrador del formulario (Bloque I18 local-first).
 struct DraftOrderItem: Identifiable, Hashable {
     let id: UUID
     var recipeId: String
     var recipeName: String
-    var soldBy: RemoteOrderSoldBy
+    var soldBy: OrderSoldBy
     var yieldQuantity: Decimal?
-    var yieldUnit: RemoteBaseUnit
+    var yieldUnit: BaseUnit
     var quantityText: String
     var unitPriceText: String
     var suggestedPriceBatchCents: Int?
@@ -77,9 +21,9 @@ struct DraftOrderItem: Identifiable, Hashable {
         id: UUID = UUID(),
         recipeId: String,
         recipeName: String,
-        soldBy: RemoteOrderSoldBy = .batch,
+        soldBy: OrderSoldBy = .batch,
         yieldQuantity: Decimal? = nil,
-        yieldUnit: RemoteBaseUnit = .pz,
+        yieldUnit: BaseUnit = .pz,
         quantityText: String = "1",
         unitPriceText: String = "",
         suggestedPriceBatchCents: Int? = nil,
@@ -205,8 +149,8 @@ struct DraftOrderItem: Identifiable, Hashable {
         quantityText = DraftOrderItem.formatQuantityForInput(next)
     }
 
-    /// Cambia el modo entre .batch y .unit según la regla del bloque I12.
-    mutating func changeMode(to newMode: RemoteOrderSoldBy) {
+    /// Cambia el modo entre .batch y .unit según la regla del bloque I12 / I18.
+    mutating func changeMode(to newMode: OrderSoldBy) {
         guard newMode != soldBy else { return }
         soldBy = newMode
         switch newMode {
@@ -236,10 +180,16 @@ struct DraftOrderItem: Identifiable, Hashable {
     }
 }
 
-/// Modelo de presentación para el formulario de nuevo o editar pedido (MVVM, Regla 5).
+/// Modelo de presentación para el formulario de nuevo o editar pedido (MVVM, Regla 5 / Bloque I18 local-first).
 @Observable
 final class OrderFormModel {
-    let editingOrder: RemoteOrder?
+    enum Mode: Equatable, Sendable {
+        case create
+        case edit(orderId: String)
+    }
+
+    let mode: Mode
+    var store: LocalStore
 
     var customerId: String? = nil
     var customerName: String = ""
@@ -252,7 +202,13 @@ final class OrderFormModel {
     var errorMessage: String?
 
     var isEditing: Bool {
-        editingOrder != nil
+        if case .edit = mode { return true }
+        return false
+    }
+
+    var editingOrderId: String? {
+        if case .edit(let id) = mode { return id }
+        return nil
     }
 
     var canSave: Bool {
@@ -268,39 +224,62 @@ final class OrderFormModel {
         return !isSaving
     }
 
-    init(order: RemoteOrder? = nil, draftItems: [DraftOrderItem]? = nil) {
-        self.editingOrder = order
+    init(
+        mode: Mode = .create,
+        store: LocalStore = .shared,
+        draftItems: [DraftOrderItem]? = nil
+    ) {
+        self.mode = mode
+        self.store = store
 
-        if let order {
-            self.customerId = order.customerId
-            self.customerName = order.customerName
-            self.customerPhone = order.customerPhone ?? ""
-            self.deliveryAt = order.deliveryAt
-            self.notes = order.notes ?? ""
-            // Al editar, conserva su precio acordado y su cantidad; soldBy nulo se trata como tanda.
-            self.items = order.items.map { item in
-                let soldBy = item.soldBy ?? .batch
-                let unitLabel = item.unitLabel ?? .pz
-                return DraftOrderItem(
-                    recipeId: item.recipeId,
-                    recipeName: item.recipeName,
-                    soldBy: soldBy,
-                    yieldQuantity: nil,
-                    yieldUnit: unitLabel,
-                    quantityText: item.quantity,
-                    unitPriceText: CurrencyMath.formatForInput(cents: item.unitPriceCents),
-                    suggestedPriceBatchCents: nil,
-                    suggestedPriceUnitCents: nil,
-                    costCalculationFailed: false
-                )
-            }
-        } else {
+        switch mode {
+        case .create:
             self.customerId = nil
-            // Para uno nuevo: mañana a las 4:00 pm
             let calendar = Calendar.current
             let tomorrow = calendar.date(byAdding: .day, value: 1, to: Date.now) ?? Date.now
             self.deliveryAt = calendar.date(bySettingHour: 16, minute: 0, second: 0, of: tomorrow) ?? tomorrow
             self.items = []
+
+        case .edit(let orderId):
+            if let order = try? store.data.order(id: orderId) {
+                self.customerId = order.customerId
+                self.customerName = order.customerName
+                self.customerPhone = order.customerPhone ?? ""
+                self.deliveryAt = order.deliveryAt
+                self.notes = order.notes ?? ""
+
+                let costing = store.data.costingIndex()
+                self.items = order.items.map { item in
+                    let rec = store.data.recipe(id: item.recipeId)
+                    let yieldDec = rec.flatMap { Decimal(string: $0.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) }
+                    let yieldUnit = rec?.yieldUnit ?? (item.unitLabel ?? .pz)
+
+                    var batchCost: Int? = nil
+                    var unitCost: Int? = nil
+                    if let rec {
+                        if let cost = try? costing.calculateRecipeCost(recipe: rec, version: nil, now: Date()) {
+                            batchCost = cost.suggestedPriceCents
+                            unitCost = cost.suggestedPricePerYieldUnitCents
+                        }
+                    }
+
+                    return DraftOrderItem(
+                        recipeId: item.recipeId,
+                        recipeName: item.recipeName,
+                        soldBy: item.soldBy,
+                        yieldQuantity: yieldDec,
+                        yieldUnit: yieldUnit,
+                        quantityText: item.quantity,
+                        unitPriceText: CurrencyMath.formatForInput(cents: item.unitPriceCents),
+                        suggestedPriceBatchCents: batchCost,
+                        suggestedPriceUnitCents: unitCost,
+                        costCalculationFailed: false
+                    )
+                }
+            } else {
+                self.deliveryAt = Date.now
+                self.items = []
+            }
         }
 
         if let draftItems {
@@ -308,108 +287,47 @@ final class OrderFormModel {
         }
     }
 
-    /// Selecciona un cliente del catálogo (Bloque I7b).
-    func selectCustomer(_ customer: RemoteCustomer) {
+    /// Selecciona un cliente de KitchenKit.
+    func selectCustomer(_ customer: Customer) {
         self.customerId = customer.id
         self.customerName = customer.name
         self.customerPhone = customer.phone ?? ""
     }
 
-    /// Pide el rendimiento y costos de las recetas para las líneas existentes al editar.
-    /// Si falla, la línea se edita sin selector.
-    func loadRecipeDetailsForEditing() async {
-        guard isEditing else { return }
-
-        await withTaskGroup(of: (UUID, RemoteRecipe?, RemoteRecipeCost?).self) { group in
-            for item in items {
-                group.addTask {
-                    do {
-                        async let recipeReq: RemoteRecipe = NetworkService.shared.request(
-                            .get,
-                            "/recipes/\(item.recipeId)"
-                        )
-                        async let costReq: RemoteRecipeCost = NetworkService.shared.request(
-                            .get,
-                            "/recipes/\(item.recipeId)/cost"
-                        )
-                        let (recipe, cost) = try await (recipeReq, costReq)
-                        return (item.id, recipe, cost)
-                    } catch where error.isCancellation {
-                        return (item.id, nil, nil)
-                    } catch {
-                        return (item.id, nil, nil)
-                    }
-                }
-            }
-
-            for await (id, recipe, cost) in group {
-                guard let recipe = recipe,
-                      let idx = items.firstIndex(where: { $0.id == id }) else { continue }
-                let yieldDec = Decimal(string: recipe.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) ?? 1
-                items[idx].yieldQuantity = yieldDec
-                items[idx].yieldUnit = recipe.yieldUnit
-                if let cost = cost {
-                    items[idx].suggestedPriceBatchCents = cost.suggestedPriceCents
-                    items[idx].suggestedPriceUnitCents = cost.suggestedPricePerYieldUnitCents
-                }
-            }
-        }
-    }
-
     /// Agrega una receta seleccionada:
     /// Si yieldQuantity > 1, empieza por pieza con cantidad igual al rendimiento y precio por unidad.
     /// Si rinde 1, empieza por tanda con cantidad 1 y precio por tanda.
-    func addRecipe(_ recipeItem: RemoteRecipeListItem) async {
+    func addRecipe(_ recipeItem: RecipeListItem) {
         let recipe = recipeItem.recipe
         let yieldQty = Decimal(string: recipe.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) ?? 1
         let startsAsUnit = yieldQty > 1
-        let initialSoldBy: RemoteOrderSoldBy = startsAsUnit ? .unit : .batch
+        let initialSoldBy: OrderSoldBy = startsAsUnit ? .unit : .batch
         let initialQuantityText = startsAsUnit ? DraftOrderItem.formatQuantityForInput(yieldQty) : "1"
 
-        do {
-            let cost: RemoteRecipeCost = try await NetworkService.shared.request(
-                .get,
-                "/recipes/\(recipe.id)/cost"
-            )
+        let costing = store.data.costingIndex()
+        let cost = try? costing.calculateRecipeCost(recipe: recipe, version: nil, now: Date())
 
-            let initialPriceCents = startsAsUnit ? cost.suggestedPricePerYieldUnitCents : cost.suggestedPriceCents
-            let initialPriceText: String
-            if let cents = initialPriceCents {
-                initialPriceText = CurrencyMath.formatForInput(cents: cents)
-            } else {
-                initialPriceText = ""
-            }
-
-            let draft = DraftOrderItem(
-                recipeId: recipe.id,
-                recipeName: recipe.name,
-                soldBy: initialSoldBy,
-                yieldQuantity: yieldQty,
-                yieldUnit: recipe.yieldUnit,
-                quantityText: initialQuantityText,
-                unitPriceText: initialPriceText,
-                suggestedPriceBatchCents: cost.suggestedPriceCents,
-                suggestedPriceUnitCents: cost.suggestedPricePerYieldUnitCents,
-                costCalculationFailed: false
-            )
-            items.append(draft)
-        } catch where error.isCancellation {
-            return
-        } catch {
-            let draft = DraftOrderItem(
-                recipeId: recipe.id,
-                recipeName: recipe.name,
-                soldBy: initialSoldBy,
-                yieldQuantity: yieldQty,
-                yieldUnit: recipe.yieldUnit,
-                quantityText: initialQuantityText,
-                unitPriceText: "",
-                suggestedPriceBatchCents: nil,
-                suggestedPriceUnitCents: nil,
-                costCalculationFailed: true
-            )
-            items.append(draft)
+        let initialPriceCents = startsAsUnit ? cost?.suggestedPricePerYieldUnitCents : cost?.suggestedPriceCents
+        let initialPriceText: String
+        if let cents = initialPriceCents {
+            initialPriceText = CurrencyMath.formatForInput(cents: cents)
+        } else {
+            initialPriceText = ""
         }
+
+        let draft = DraftOrderItem(
+            recipeId: recipe.id,
+            recipeName: recipe.name,
+            soldBy: initialSoldBy,
+            yieldQuantity: yieldQty,
+            yieldUnit: recipe.yieldUnit,
+            quantityText: initialQuantityText,
+            unitPriceText: initialPriceText,
+            suggestedPriceBatchCents: cost?.suggestedPriceCents,
+            suggestedPriceUnitCents: cost?.suggestedPricePerYieldUnitCents,
+            costCalculationFailed: cost == nil
+        )
+        items.append(draft)
     }
 
     /// Elimina una línea de producto.
@@ -417,16 +335,16 @@ final class OrderFormModel {
         items.removeAll { $0.id == id }
     }
 
-    /// Guarda el pedido (POST /orders/ o PATCH /orders/{id}).
-    func save() async throws -> RemoteOrder {
+    /// Guarda el pedido aplicando las reglas de KitchenKit.
+    func save() throws -> Order {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
 
-        let payloadItems = items.compactMap { item -> OrderItemInput? in
+        let payloadItems = items.compactMap { item -> OrderItemDraft? in
             guard let cents = CurrencyMath.parseCents(from: item.unitPriceText) else { return nil }
             guard let quantityString = Quantity.parse(item.quantityText) else { return nil }
-            return OrderItemInput(
+            return OrderItemDraft(
                 recipeId: item.recipeId,
                 soldBy: item.soldBy,
                 quantity: quantityString,
@@ -441,52 +359,49 @@ final class OrderFormModel {
         let notesValue = trimmedNotes.isEmpty ? nil : trimmedNotes
 
         do {
-            if let order = editingOrder {
-                // Editar pedido
-                let body = OrderUpdateBody(
-                    customerId: customerId,
-                    customerName: trimmedName,
-                    customerPhone: phoneValue,
-                    deliveryAt: deliveryAt,
-                    status: nil,
-                    notes: notesValue,
-                    items: payloadItems
-                )
-                let updated: RemoteOrder = try await NetworkService.shared.request(
-                    .patch,
-                    "/orders/\(order.id)",
-                    body: body
-                )
+            if let editingOrderId {
+                let updated = try store.mutate { data, ctx in
+                    try data.updateOrder(
+                        id: editingOrderId,
+                        customerId: customerId,
+                        customerName: trimmedName.isEmpty ? nil : trimmedName,
+                        customerPhone: phoneValue,
+                        deliveryAt: deliveryAt,
+                        status: nil,
+                        notes: notesValue,
+                        items: payloadItems,
+                        ctx: ctx
+                    )
+                }
                 return updated
             } else {
-                // Crear pedido
-                let body = OrderCreateBody(
-                    customerId: customerId,
-                    customerName: trimmedName,
-                    customerPhone: phoneValue,
-                    deliveryAt: deliveryAt,
-                    items: payloadItems,
-                    notes: notesValue
-                )
-                let created: RemoteOrder = try await NetworkService.shared.request(
-                    .post,
-                    "/orders/",
-                    body: body
-                )
+                let created = try store.mutate { data, ctx in
+                    try data.createOrder(
+                        customerId: customerId,
+                        customerName: trimmedName.isEmpty ? nil : trimmedName,
+                        customerPhone: phoneValue,
+                        deliveryAt: deliveryAt,
+                        items: payloadItems,
+                        notes: notesValue,
+                        ctx: ctx
+                    )
+                }
                 return created
             }
-        } catch {
-            if let apiError = error as? APIError {
-                if apiError.code == "PAYMENT_EXCEEDS_BALANCE" {
-                    errorMessage = "Con este cambio el total quedaría por debajo de lo que ya te pagaron."
-                } else if apiError.code == "INVALID_REFERENCE" {
-                    errorMessage = "Una de las recetas ya no existe."
-                } else {
-                    errorMessage = apiError.localizedDescription
-                }
-            } else {
-                errorMessage = error.localizedDescription
+        } catch let domainError as DomainError {
+            switch domainError.code {
+            case "PAYMENT_EXCEEDS_BALANCE":
+                errorMessage = "Con este cambio el total quedaría por debajo de lo que ya te pagaron."
+            case "CUSTOMER_REQUIRED":
+                errorMessage = "Elige un cliente o escribe su nombre."
+            case "INVALID_REFERENCE":
+                errorMessage = "Una de las recetas ya no existe."
+            default:
+                errorMessage = domainError.detail
             }
+            throw domainError
+        } catch {
+            errorMessage = error.localizedDescription
             throw error
         }
     }

@@ -1,47 +1,13 @@
 import SwiftUI
+import KitchenDomain
 
-// MARK: - Cuerpos de petición (docs/api-contract.md)
-
-nonisolated struct CustomerCreateRequest: Encodable, Sendable {
-    let name: String
-    let phone: String?
-    let notes: String?
-}
-
-nonisolated struct CustomerUpdateRequest: Encodable, Sendable {
-    let name: String
-    let phone: String?
-    let notes: String?
-
-    enum CodingKeys: String, CodingKey {
-        case name, phone, notes
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(name, forKey: .name)
-        if let phone {
-            try container.encode(phone, forKey: .phone)
-        } else {
-            try container.encodeNil(forKey: .phone)
-        }
-        if let notes {
-            try container.encode(notes, forKey: .notes)
-        } else {
-            try container.encodeNil(forKey: .notes)
-        }
-    }
-}
-
-// MARK: - Vista de Formulario de Cliente
-
-/// Hoja para crear o editar un cliente según Bloque I7a.
+/// Hoja para crear o editar un cliente (Bloque I18 local-first).
 struct CustomerFormView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let customer: RemoteCustomer?
-    private let isMock: Bool
-    private let onSave: (RemoteCustomer) -> Void
+    private let customerId: String?
+    private let store: LocalStore
+    private let onSave: ((Customer) -> Void)?
 
     @State private var name: String
     @State private var phone: String
@@ -50,21 +16,41 @@ struct CustomerFormView: View {
     @State private var errorMessage: String?
 
     init(
-        customer: RemoteCustomer? = nil,
+        customerId: String? = nil,
         initialName: String = "",
-        isMock: Bool = false,
-        onSave: @escaping (RemoteCustomer) -> Void
+        store: LocalStore = .shared,
+        onSave: ((Customer) -> Void)? = nil
     ) {
-        self.customer = customer
-        self.isMock = isMock
+        self.customerId = customerId
+        self.store = store
         self.onSave = onSave
-        self._name = State(initialValue: customer?.name ?? initialName)
-        self._phone = State(initialValue: customer?.phone ?? "")
-        self._notes = State(initialValue: customer?.notes ?? "")
+
+        if let customerId, let existing = try? store.data.customer(id: customerId) {
+            self._name = State(initialValue: existing.name)
+            self._phone = State(initialValue: existing.phone ?? "")
+            self._notes = State(initialValue: existing.notes ?? "")
+        } else {
+            self._name = State(initialValue: initialName)
+            self._phone = State(initialValue: "")
+            self._notes = State(initialValue: "")
+        }
+    }
+
+    init(
+        customer: Customer?,
+        store: LocalStore = .shared,
+        onSave: ((Customer) -> Void)? = nil
+    ) {
+        self.init(
+            customerId: customer?.id,
+            initialName: customer?.name ?? "",
+            store: store,
+            onSave: onSave
+        )
     }
 
     private var isEditing: Bool {
-        customer != nil
+        customerId != nil
     }
 
     private var canSave: Bool {
@@ -88,7 +74,7 @@ struct CustomerFormView: View {
                     }
 
                     Button {
-                        Task { await save() }
+                        save()
                     } label: {
                         if isSaving {
                             ProgressView()
@@ -147,7 +133,7 @@ struct CustomerFormView: View {
         }
     }
 
-    private func save() async {
+    private func save() {
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
         guard trimmedName.count >= 1 && trimmedName.count <= 120 else { return }
 
@@ -157,49 +143,40 @@ struct CustomerFormView: View {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespaces)
         let notesToSend = trimmedNotes.isEmpty ? nil : trimmedNotes
 
-        if isMock || customer?.id.hasPrefix("mock") == true {
-            let saved = RemoteCustomer(
-                id: customer?.id ?? "mock_\(UUID().uuidString.prefix(6))",
-                name: trimmedName,
-                phone: phoneToSend,
-                notes: notesToSend,
-                createdAt: customer?.createdAt ?? Date(),
-                updatedAt: Date()
-            )
-            onSave(saved)
-            dismiss()
-            return
-        }
-
         isSaving = true
         errorMessage = nil
 
         do {
-            let result: RemoteCustomer
-            if let customer {
-                let body = CustomerUpdateRequest(name: trimmedName, phone: phoneToSend, notes: notesToSend)
-                result = try await NetworkService.shared.request(
-                    .patch,
-                    "/customers/\(customer.id)",
-                    body: body
-                )
+            let result: Customer
+            if let customerId {
+                result = try store.mutate { data, ctx in
+                    try data.updateCustomer(
+                        id: customerId,
+                        name: trimmedName,
+                        phone: phoneToSend,
+                        notes: notesToSend,
+                        ctx: ctx
+                    )
+                }
             } else {
-                let body = CustomerCreateRequest(name: trimmedName, phone: phoneToSend, notes: notesToSend)
-                result = try await NetworkService.shared.request(
-                    .post,
-                    "/customers/",
-                    body: body
-                )
+                result = try store.mutate { data, ctx in
+                    try data.createCustomer(
+                        name: trimmedName,
+                        phone: phoneToSend,
+                        notes: notesToSend,
+                        ctx: ctx
+                    )
+                }
             }
             isSaving = false
-            onSave(result)
+            onSave?(result)
             dismiss()
-        } catch let apiError as APIError {
+        } catch let domainError as DomainError {
             isSaving = false
-            if apiError.code == "DUPLICATE_NAME" {
+            if domainError.code == "DUPLICATE_NAME" {
                 errorMessage = "Ya tienes un cliente con ese nombre."
             } else {
-                errorMessage = apiError.localizedDescription
+                errorMessage = domainError.detail
             }
         } catch {
             isSaving = false
@@ -208,28 +185,12 @@ struct CustomerFormView: View {
     }
 }
 
-// MARK: - Previews
-
 #if DEBUG
-private let mockCustomerForEdit = RemoteCustomer(
-    id: "mock_edit_1",
-    name: "Ana Ruiz",
-    phone: "55 1234 5678",
-    notes: "Le gusta poco dulce, recoge en la tarde",
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
 #Preview("Nuevo cliente") {
-    CustomerFormView(isMock: true) { _ in }
+    CustomerFormView(store: .preview())
 }
 
 #Preview("Editar cliente") {
-    CustomerFormView(customer: mockCustomerForEdit, isMock: true) { _ in }
-}
-
-#Preview("Letra AX3") {
-    CustomerFormView(customer: mockCustomerForEdit, isMock: true) { _ in }
-        .dynamicTypeSize(.accessibility3)
+    CustomerFormView(customerId: "cus-ana", store: .preview())
 }
 #endif

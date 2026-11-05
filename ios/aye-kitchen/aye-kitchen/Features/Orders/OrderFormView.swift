@@ -1,26 +1,43 @@
 import SwiftUI
+import KitchenDomain
 
-/// Formulario para crear o editar un pedido según Bloque I2.
+/// Formulario para crear o editar un pedido (Bloque I18 local-first).
 struct OrderFormView: View {
+    typealias Mode = OrderFormModel.Mode
+
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: OrderFormModel
     @State private var showingRecipePicker = false
     @State private var showingCustomerPicker = false
-    let onSave: @MainActor @Sendable (RemoteOrder) -> Void
+    let onSave: (@MainActor @Sendable (Order) -> Void)?
 
-    init(order: RemoteOrder? = nil, onSave: @escaping @MainActor @Sendable (RemoteOrder) -> Void) {
-        _model = State(initialValue: OrderFormModel(order: order))
+    init(
+        _ mode: Mode = .create,
+        store: LocalStore = .shared,
+        onSave: (@MainActor @Sendable (Order) -> Void)? = nil
+    ) {
+        self._model = State(initialValue: OrderFormModel(mode: mode, store: store))
         self.onSave = onSave
     }
 
-#if DEBUG
-    init(model: OrderFormModel, onSave: @escaping @MainActor @Sendable (RemoteOrder) -> Void = { _ in }) {
-        _model = State(initialValue: model)
-        self.onSave = onSave
+    init(
+        mode: Mode,
+        store: LocalStore = .shared,
+        onSave: (@MainActor @Sendable (Order) -> Void)? = nil
+    ) {
+        self.init(mode, store: store, onSave: onSave)
     }
-#endif
+
+    init(
+        orderId: String?,
+        store: LocalStore = .shared,
+        onSave: (@MainActor @Sendable (Order) -> Void)? = nil
+    ) {
+        let mode: Mode = orderId.map { .edit(orderId: $0) } ?? .create
+        self.init(mode, store: store, onSave: onSave)
+    }
 
     var body: some View {
         NavigationStack {
@@ -39,7 +56,7 @@ struct OrderFormView: View {
                     }
 
                     Button {
-                        Task { await saveOrder() }
+                        saveOrder()
                     } label: {
                         if model.isSaving {
                             ProgressView()
@@ -67,19 +84,14 @@ struct OrderFormView: View {
                 }
             }
             .sheet(isPresented: $showingRecipePicker) {
-                RecipePickerSheet { selectedRecipe in
-                    Task {
-                        await model.addRecipe(selectedRecipe)
-                    }
+                RecipePickerSheet(store: model.store) { selectedRecipe in
+                    model.addRecipe(selectedRecipe)
                 }
             }
             .sheet(isPresented: $showingCustomerPicker) {
-                CustomerPickerSheet { selectedCustomer in
+                CustomerPickerSheet(store: model.store) { selectedCustomer in
                     model.selectCustomer(selectedCustomer)
                 }
-            }
-            .task {
-                await model.loadRecipeDetailsForEditing()
             }
         }
     }
@@ -250,8 +262,8 @@ struct OrderFormView: View {
                     get: { item.wrappedValue.soldBy },
                     set: { item.wrappedValue.changeMode(to: $0) }
                 )) {
-                    Text(item.wrappedValue.unitOptionTitle).tag(RemoteOrderSoldBy.unit)
-                    Text("Por tanda").tag(RemoteOrderSoldBy.batch)
+                    Text(item.wrappedValue.unitOptionTitle).tag(OrderSoldBy.unit)
+                    Text("Por tanda").tag(OrderSoldBy.batch)
                 }
                 .pickerStyle(.segmented)
             }
@@ -335,10 +347,10 @@ struct OrderFormView: View {
         .padding(Spacing.lg)
     }
 
-    private func saveOrder() async {
+    private func saveOrder() {
         do {
-            let saved = try await model.save()
-            onSave(saved)
+            let saved = try model.save()
+            onSave?(saved)
             dismiss()
         } catch {
             // El error ya se procesa y muestra en model.errorMessage
@@ -346,171 +358,19 @@ struct OrderFormView: View {
     }
 }
 
-/// Hoja para buscar y seleccionar una receta del catálogo.
-struct RecipePickerSheet: View {
-    @Environment(\.dismiss) private var dismiss
-
-    let onSelect: (RemoteRecipeListItem) -> Void
-
-    @State private var model: RecipePickerModel
-
-    init(model: RecipePickerModel = RecipePickerModel(), onSelect: @escaping (RemoteRecipeListItem) -> Void) {
-        _model = State(initialValue: model)
-        self.onSelect = onSelect
-    }
-
-    var body: some View {
-        NavigationStack {
-            content
-                .background(.canvasBackground)
-                .navigationTitle("Productos")
-                .navigationBarTitleDisplayMode(.inline)
-                .searchable(text: $model.query, prompt: "Buscar receta")
-                .onChange(of: model.query) { _, _ in
-                    Task { await model.searchRecipes() }
-                }
-                .task {
-                    await model.searchRecipes()
-                }
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Cancelar") {
-                            dismiss()
-                        }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.tint)
-                    }
-                }
-        }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if model.isLoading && model.recipes.isEmpty {
-            ProgressView()
-                .tint(.accentInk)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let errorMessage = model.errorMessage, model.recipes.isEmpty {
-            ErrorStateView(message: errorMessage) {
-                Task { await model.searchRecipes() }
-            }
-        } else if model.recipes.isEmpty {
-            ContentUnavailableView(
-                "No hay recetas",
-                systemImage: "magnifyingglass",
-                description: Text("No se encontraron recetas con ese nombre.")
-            )
-        } else {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.md) {
-                    RowGroup {
-                        ForEach(model.recipes) { item in
-                            Button {
-                                select(item)
-                            } label: {
-                                HStack(spacing: Spacing.md) {
-                                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                                        Text(item.recipe.name)
-                                            .font(.body.weight(.semibold))
-                                            .foregroundStyle(.inkPrimary)
-                                    }
-
-                                    Spacer()
-
-                                    if !item.complete {
-                                        Chip("Falta precio", tone: .warning)
-                                    }
-
-                                    if model.selectingId == item.id {
-                                        ProgressView()
-                                            .tint(.accentInk)
-                                    } else {
-                                        Image(systemName: "chevron.right")
-                                            .font(.footnote.weight(.semibold))
-                                            .foregroundStyle(.inkMuted)
-                                    }
-                                }
-                                .padding(Spacing.lg)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(model.selectingId != nil)
-                        }
-                    }
-                }
-                .padding(Spacing.xl)
-            }
-        }
-    }
-
-    private func select(_ item: RemoteRecipeListItem) {
-        model.selectingId = item.id
-        onSelect(item)
-        dismiss()
-    }
-}
+// MARK: - Previews
 
 #if DEBUG
-private func makeMockOrderFormModel() -> OrderFormModel {
-    OrderFormModel(
-        draftItems: [
-            DraftOrderItem(
-                recipeId: "rec-1",
-                recipeName: "Galletas con chispas",
-                soldBy: .unit,
-                yieldQuantity: 12,
-                yieldUnit: .pz,
-                quantityText: "4",
-                unitPriceText: "13",
-                suggestedPriceBatchCents: 15600,
-                suggestedPriceUnitCents: 1300
-            ),
-            DraftOrderItem(
-                recipeId: "rec-2",
-                recipeName: "Pastel de zanahoria",
-                soldBy: .batch,
-                yieldQuantity: 12,
-                yieldUnit: .pz,
-                quantityText: "1",
-                unitPriceText: "156",
-                suggestedPriceBatchCents: 15600,
-                suggestedPriceUnitCents: 1300
-            )
-        ]
-    )
+#Preview("Nuevo pedido") {
+    OrderFormView(.create, store: .preview())
 }
 
-#Preview("Formulario con pieza y tanda — Normal") {
-    OrderFormView(model: makeMockOrderFormModel()) { _ in }
+#Preview("Editar pedido — ord-2") {
+    OrderFormView(.edit(orderId: "ord-2"), store: .preview())
 }
 
-#Preview("Formulario con pieza y tanda — AX3") {
-    OrderFormView(model: makeMockOrderFormModel()) { _ in }
+#Preview("Letra AX3") {
+    OrderFormView(.create, store: .preview())
         .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Nuevo pedido — Claro") {
-    OrderFormView(order: nil) { _ in }
-}
-
-#Preview("Nuevo pedido — Letra AX3") {
-    OrderFormView(order: nil) { _ in }
-        .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Editar pedido — Claro") {
-    OrderFormView(order: .mockPendingToday) { _ in }
-}
-
-#Preview("Editar pedido con cliente — Claro") {
-    var order = RemoteOrder.mockPendingToday
-    order.customerId = "c-1"
-    return OrderFormView(order: order) { _ in }
-}
-
-#Preview("Selector de receta") {
-    RecipePickerSheet(
-        model: RecipePickerModel(recipes: [.mockChocolate, .mockVainilla, .mockIncomplete])
-    ) { _ in }
 }
 #endif

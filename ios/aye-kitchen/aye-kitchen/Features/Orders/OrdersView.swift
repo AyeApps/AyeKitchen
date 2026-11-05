@@ -1,12 +1,51 @@
 import SwiftUI
+import KitchenDomain
 
-/// Lista de pedidos según Bloque I2 y artboard "Inicio — iPhone".
+// MARK: - Chips de Estado de Pedido
+
+extension OrderStatus {
+    var label: String {
+        switch self {
+        case .pendiente: "Pendiente"
+        case .enProceso: "En proceso"
+        case .entregado: "Entregado"
+        case .cancelado: "Cancelado"
+        }
+    }
+
+    var chipTone: ChipTone {
+        switch self {
+        case .pendiente, .cancelado: .neutral
+        case .enProceso: .inProgress
+        case .entregado: .success
+        }
+    }
+}
+
+struct OrderStatusChip: View {
+    let status: OrderStatus
+
+    var body: some View {
+        Chip(status.label, tone: status.chipTone)
+            .accessibilityLabel("Estado: \(status.label)")
+    }
+}
+
+// MARK: - Vista Principal de Pedidos
+
+/// Lista de pedidos (Bloque I18 local-first).
 struct OrdersView: View {
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var model = OrdersModel()
+    @State private var model: OrdersModel
     @State private var showingNewOrder = false
     @State private var showingCustomers = false
-    @State private var isVisible = false
+
+    init(store: LocalStore = .shared) {
+        self._model = State(initialValue: OrdersModel(store: store))
+    }
+
+    init(model: OrdersModel) {
+        self._model = State(initialValue: model)
+    }
 
     var body: some View {
         NavigationStack {
@@ -29,90 +68,35 @@ struct OrdersView: View {
                         }
                     }
                 }
-                .navigationDestination(for: RemoteOrder.self) { order in
-                    OrderDetailView(
-                        order: order,
-                        onOrderUpdated: { updated in
-                            model.updateOrder(updated)
-                        },
-                        onOrderDeleted: { id in
-                            model.removeOrder(id: id)
-                        }
-                    )
-                }
                 .sheet(isPresented: $showingCustomers) {
-                    CustomersView()
+                    CustomersView(store: model.store)
                 }
                 .sheet(isPresented: $showingNewOrder) {
-                    OrderFormView(order: nil) { newOrder in
-                        model.updateOrder(newOrder)
-                    }
-                }
-                .task {
-                    await model.load()
-                }
-                .onAppear {
-                    isVisible = true
-                }
-                .onDisappear {
-                    isVisible = false
-                }
-                .onChange(of: scenePhase) { _, newPhase in
-                    guard newPhase == .active, isVisible else { return }
-                    Task {
-                        await model.reloadIfStale()
-                    }
+                    OrderFormView(.create, store: model.store)
                 }
         }
     }
 
     @ViewBuilder
     private var content: some View {
-        switch model.state {
-        case .loading where model.isEmpty:
-            VStack {
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.section) {
                 pickerView
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.top, Spacing.md)
-                Spacer()
-                ProgressView()
-                    .tint(Color.accentColor)
-                Spacer()
-            }
-        case .error(let message) where model.isEmpty:
-            VStack {
-                pickerView
-                    .padding(.horizontal, Spacing.xl)
-                    .padding(.top, Spacing.md)
-                Spacer()
-                ErrorStateView(message: message) {
-                    Task { await model.load() }
-                }
-                Spacer()
-            }
-        default:
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    pickerView
 
-                    if model.isEmpty {
-                        ContentUnavailableView(
-                            "Todavía no hay pedidos",
-                            systemImage: "list.clipboard",
-                            description: Text("Toca + para anotar el primero.")
-                        )
-                        .padding(.top, 40)
-                    } else {
-                        ordersList
-                    }
+                if model.isEmpty {
+                    ContentUnavailableView(
+                        "Todavía no hay pedidos",
+                        systemImage: "list.clipboard",
+                        description: Text("Toca + para anotar el primero.")
+                    )
+                    .padding(.top, 40)
+                } else {
+                    ordersList
                 }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.top, Spacing.sm)
-                .padding(.bottom, Spacing.xxl)
             }
-            .refreshable {
-                await model.refresh()
-            }
+            .padding(.horizontal, Spacing.xl)
+            .padding(.top, Spacing.sm)
+            .padding(.bottom, Spacing.xxl)
         }
     }
 
@@ -133,7 +117,9 @@ struct OrdersView: View {
 
                 RowGroup {
                     ForEach(section.orders) { order in
-                        NavigationLink(value: order) {
+                        NavigationLink {
+                            OrderDetailView(orderId: order.id, store: model.store)
+                        } label: {
                             OrderRow(order: order)
                         }
                         .buttonStyle(.plain)
@@ -144,27 +130,49 @@ struct OrdersView: View {
     }
 }
 
+// MARK: - Fila de Pedido
+
 /// Fila individual de pedido con soporte para Dynamic Type y accesibilidad.
 struct OrderRow: View {
-    let order: RemoteOrder
+    let order: Order?
+    let orderId: String
+    private let store: LocalStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    var body: some View {
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                accessibilityLayout
-            } else {
-                standardLayout
-            }
-        }
-        .padding(.horizontal, Spacing.lg)
-        .padding(.vertical, Spacing.md)
-        .contentShape(Rectangle())
+    init(order: Order, store: LocalStore = .shared) {
+        self.order = order
+        self.orderId = order.id
+        self.store = store
     }
 
-    private var standardLayout: some View {
+    init(orderId: String, store: LocalStore = .shared) {
+        self.order = nil
+        self.orderId = orderId
+        self.store = store
+    }
+
+    private var currentOrder: Order? {
+        order ?? (try? store.data.order(id: orderId))
+    }
+
+    var body: some View {
+        if let currentOrder {
+            Group {
+                if dynamicTypeSize.isAccessibilitySize {
+                    accessibilityLayout(order: currentOrder)
+                } else {
+                    standardLayout(order: currentOrder)
+                }
+            }
+            .padding(.horizontal, Spacing.lg)
+            .padding(.vertical, Spacing.md)
+            .contentShape(Rectangle())
+        }
+    }
+
+    private func standardLayout(order: Order) -> some View {
         HStack(alignment: .center, spacing: Spacing.md) {
-            dateColumn
+            dateColumn(order: order)
                 .frame(width: 44)
 
             VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -173,20 +181,20 @@ struct OrderRow: View {
                     .foregroundStyle(.inkPrimary)
                     .multilineTextAlignment(.leading)
 
-                Text(subtitle)
+                Text(subtitle(order: order))
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
                     .multilineTextAlignment(.leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            StatusChip(status: order.status)
+            OrderStatusChip(status: order.status)
         }
     }
 
-    private var accessibilityLayout: some View {
+    private func accessibilityLayout(order: Order) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            dateBadge
+            dateBadge(order: order)
 
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(order.customerName)
@@ -194,17 +202,17 @@ struct OrderRow: View {
                     .foregroundStyle(.inkPrimary)
                     .multilineTextAlignment(.leading)
 
-                Text(subtitle)
+                Text(subtitle(order: order))
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
                     .multilineTextAlignment(.leading)
             }
 
-            StatusChip(status: order.status)
+            OrderStatusChip(status: order.status)
         }
     }
 
-    private var dateColumn: some View {
+    private func dateColumn(order: Order) -> some View {
         VStack(spacing: 2) {
             Text(OrderDateFormatter.dayAbbreviation(for: order.deliveryAt))
                 .font(.footnote.weight(.heavy))
@@ -215,7 +223,7 @@ struct OrderRow: View {
         }
     }
 
-    private var dateBadge: some View {
+    private func dateBadge(order: Order) -> some View {
         HStack(spacing: Spacing.xs) {
             Text(OrderDateFormatter.dayAbbreviation(for: order.deliveryAt))
                 .font(.subheadline.weight(.heavy))
@@ -226,7 +234,7 @@ struct OrderRow: View {
         }
     }
 
-    private var subtitle: String {
+    private func subtitle(order: Order) -> String {
         let time = OrderDateFormatter.timeString(for: order.deliveryAt)
         guard let first = order.items.first else {
             return time
@@ -241,60 +249,15 @@ struct OrderRow: View {
     }
 }
 
+// MARK: - Previews
+
 #if DEBUG
 #Preview("Claro") {
-    OrdersViewMockContainer()
+    OrdersView(store: .preview())
 }
 
 #Preview("Letra AX3") {
-    OrdersViewMockContainer()
+    OrdersView(store: .preview())
         .dynamicTypeSize(.accessibility3)
-}
-
-private struct OrdersViewMockContainer: View {
-    @State private var model = OrdersModel(mockOrders: [
-        .mockOverdue,
-        .mockPendingToday,
-        .mockPendingTomorrow,
-        .mockDelivered
-    ])
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Spacing.section) {
-                    Picker("Filtro de pedidos", selection: $model.filter) {
-                        ForEach(OrdersFilter.allCases) { filter in
-                            Text(filter.label).tag(filter)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    ForEach(model.sections) { section in
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            Text(section.title)
-                                .sectionTitleStyle()
-
-                            RowGroup {
-                                ForEach(section.orders) { order in
-                                    OrderRow(order: order)
-                                }
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, Spacing.xl)
-                .padding(.top, Spacing.sm)
-                .padding(.bottom, Spacing.xxl)
-            }
-            .background(.canvasBackground)
-            .navigationTitle("Pedidos")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    AddToolbarButton(label: "Nuevo pedido") {}
-                }
-            }
-        }
-    }
 }
 #endif

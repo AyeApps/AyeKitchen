@@ -1,104 +1,66 @@
 import Foundation
-import SwiftUI
+import KitchenDomain
+import Observation
 
-/// Cuerpo de la petición para cambiar de estado un pedido.
-nonisolated struct OrderStatusPatch: Encodable, Sendable {
-    let status: RemoteOrderStatus
-}
-
-/// Cuerpo de la petición para registrar un pago.
-nonisolated struct PaymentCreateBody: Encodable, Sendable {
-    let amountCents: Int
-    let method: String?
-}
-
-/// Modelo de presentación para el detalle de un pedido (MVVM, Regla 5).
+/// Modelo de presentación para el detalle de un pedido (MVVM, Regla 5 / Bloque I18 local-first).
 @Observable
 final class OrderDetailModel {
-    var order: RemoteOrder
+    let orderId: String
+    var store: LocalStore
     var isWorking = false
     var errorMessage: String?
 
-    init(order: RemoteOrder) {
-        self.order = order
+    init(orderId: String, store: LocalStore = .shared) {
+        self.orderId = orderId
+        self.store = store
     }
 
-    /// Cambia el estado del pedido:
-    /// PATCH /orders/{id} solo con status.
-    func updateStatus(_ newStatus: RemoteOrderStatus) async throws {
+    var order: Order? {
+        try? store.data.order(id: orderId)
+    }
+
+    /// Cambia el estado del pedido.
+    func updateStatus(_ newStatus: OrderStatus) {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
         do {
-            let body = OrderStatusPatch(status: newStatus)
-            let updated: RemoteOrder = try await NetworkService.shared.request(
-                .patch,
-                "/orders/\(order.id)",
-                body: body
-            )
-            self.order = updated
+            try store.mutate { data, ctx in
+                try data.updateOrder(id: orderId, status: newStatus, ctx: ctx)
+            }
+        } catch let domainError as DomainError {
+            errorMessage = domainError.detail
         } catch {
-            self.errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
-            throw error
+            errorMessage = error.localizedDescription
         }
     }
 
-    /// Borra el pedido:
-    /// DELETE /orders/{id} (204)
-    func deleteOrder() async throws {
+    /// Borra el pedido en modo soft delete.
+    func deleteOrder() throws {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
-        do {
-            try await NetworkService.shared.requestNoContent(.delete, "/orders/\(order.id)")
-        } catch {
-            self.errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
-            throw error
+        try store.mutate { data, ctx in
+            try data.deleteOrder(id: orderId, ctx: ctx)
         }
     }
 
-    /// Borra un pago registrado:
-    /// DELETE /orders/{id}/payments/{payment_id} (devuelve el RemoteOrder actualizado)
-    func deletePayment(id: String) async throws {
+    /// Borra un pago registrado.
+    func deletePayment(id: String) {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
         do {
-            let updated: RemoteOrder = try await NetworkService.shared.request(
-                .delete,
-                "/orders/\(order.id)/payments/\(id)"
-            )
-            self.order = updated
+            try store.mutate { data, ctx in
+                try data.deletePayment(orderId: orderId, paymentId: id, ctx: ctx)
+            }
+        } catch let domainError as DomainError {
+            errorMessage = domainError.detail
         } catch {
-            self.errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
-            throw error
-        }
-    }
-
-    /// Registra un nuevo pago en el pedido:
-    /// POST /orders/{id}/payments (devuelve el RemoteOrder actualizado)
-    func addPayment(amountCents: Int, method: String) async throws {
-        isWorking = true
-        errorMessage = nil
-        defer { isWorking = false }
-
-        do {
-            let body = PaymentCreateBody(
-                amountCents: amountCents,
-                method: method
-            )
-            let updated: RemoteOrder = try await NetworkService.shared.request(
-                .post,
-                "/orders/\(order.id)/payments",
-                body: body
-            )
-            self.order = updated
-        } catch {
-            self.errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
-            throw error
+            errorMessage = error.localizedDescription
         }
     }
 }

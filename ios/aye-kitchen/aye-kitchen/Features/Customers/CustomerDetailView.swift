@@ -1,29 +1,42 @@
 import SwiftUI
+import KitchenDomain
 
-/// Vista de Detalle de Cliente según Bloque I7a.
+/// Vista de Detalle de Cliente (Bloque I18 local-first).
 struct CustomerDetailView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: CustomerDetailModel
     @State private var showingEditSheet = false
 
-    var onCustomerUpdated: ((RemoteCustomer) -> Void)?
+    var onCustomerUpdated: ((Customer) -> Void)?
     var onCustomerDeleted: ((String) -> Void)?
 
     init(
-        customer: RemoteCustomer,
-        mockOrders: [RemoteOrder]? = nil,
-        isMock: Bool = false,
-        onCustomerUpdated: ((RemoteCustomer) -> Void)? = nil,
+        customerId: String,
+        store: LocalStore = .shared,
+        onCustomerUpdated: ((Customer) -> Void)? = nil,
         onCustomerDeleted: ((String) -> Void)? = nil
     ) {
         self._model = State(initialValue: CustomerDetailModel(
-            customer: customer,
-            mockOrders: mockOrders,
-            isMock: isMock
+            customerId: customerId,
+            store: store
         ))
         self.onCustomerUpdated = onCustomerUpdated
         self.onCustomerDeleted = onCustomerDeleted
+    }
+
+    init(
+        customer: Customer,
+        store: LocalStore = .shared,
+        onCustomerUpdated: ((Customer) -> Void)? = nil,
+        onCustomerDeleted: ((String) -> Void)? = nil
+    ) {
+        self.init(
+            customerId: customer.id,
+            store: store,
+            onCustomerUpdated: onCustomerUpdated,
+            onCustomerDeleted: onCustomerDeleted
+        )
     }
 
     var body: some View {
@@ -37,7 +50,7 @@ struct CustomerDetailView: View {
             .padding(.bottom, Spacing.xxl)
         }
         .background(.canvasBackground)
-        .navigationTitle(model.customer.name)
+        .navigationTitle(model.customer?.name ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -49,27 +62,11 @@ struct CustomerDetailView: View {
             }
         }
         .sheet(isPresented: $showingEditSheet) {
-            CustomerFormView(customer: model.customer, isMock: model.isMock) { updated in
-                model.updateCustomer(updated)
-                onCustomerUpdated?(updated)
-            }
-        }
-        .navigationDestination(for: RemoteOrder.self) { order in
-            OrderDetailView(
-                order: order,
-                onOrderUpdated: { _ in
-                    Task { await model.loadOrders() }
-                },
-                onOrderDeleted: { _ in
-                    Task { await model.loadOrders() }
+            if let customer = model.customer {
+                CustomerFormView(customer: customer, store: model.store) { updated in
+                    onCustomerUpdated?(updated)
                 }
-            )
-        }
-        .task {
-            await model.loadOrders()
-        }
-        .refreshable {
-            await model.loadOrders()
+            }
         }
     }
 
@@ -77,33 +74,36 @@ struct CustomerDetailView: View {
 
     @ViewBuilder
     private var headerSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
-            if let phone = model.customer.phone, !phone.trimmingCharacters(in: .whitespaces).isEmpty {
-                let cleanedPhone = phone.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
-                if let url = URL(string: "tel:\(cleanedPhone)") {
-                    Link(destination: url) {
-                        HStack(spacing: Spacing.xs) {
-                            Image(systemName: "phone.fill")
-                                .imageScale(.small)
-                            Text(phone)
+        if let customer = model.customer {
+            VStack(alignment: .leading, spacing: Spacing.md) {
+                if let phone = customer.phone, !phone.trimmingCharacters(in: .whitespaces).isEmpty {
+                    let cleanedPhone = phone.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
+                    if let url = URL(string: "tel:\(cleanedPhone)") {
+                        Link(destination: url) {
+                            HStack(spacing: Spacing.xs) {
+                                Image(systemName: "phone.fill")
+                                    .imageScale(.small)
+                                Text(phone)
+                            }
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.tint)
                         }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.tint)
                     }
                 }
-            }
 
-            if let notes = model.customer.notes, !notes.trimmingCharacters(in: .whitespaces).isEmpty {
-                VStack(alignment: .leading, spacing: Spacing.xs) {
-                    Text("Notas")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.inkMuted)
-                    Text(notes)
-                        .font(.body)
-                        .foregroundStyle(.inkPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                if let notes = customer.notes, !notes.trimmingCharacters(in: .whitespaces).isEmpty {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Text("Notas")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.inkMuted)
+
+                        Text(notes)
+                            .font(.body)
+                            .foregroundStyle(.inkPrimary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .softCard()
                 }
-                .softCard()
             }
         }
     }
@@ -114,19 +114,7 @@ struct CustomerDetailView: View {
             Text("Pedidos")
                 .sectionTitleStyle()
 
-            if model.isLoadingOrders && model.orders.isEmpty {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .tint(Color.accentColor)
-                    Spacer()
-                }
-                .padding(.vertical, Spacing.lg)
-            } else if let error = model.ordersErrorMessage, model.orders.isEmpty {
-                ErrorStateView(message: error) {
-                    Task { await model.loadOrders() }
-                }
-            } else if model.orders.isEmpty {
+            if model.orders.isEmpty {
                 Text("Todavía no tiene pedidos.")
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
@@ -135,7 +123,9 @@ struct CustomerDetailView: View {
             } else {
                 RowGroup {
                     ForEach(model.orders) { order in
-                        NavigationLink(value: order) {
+                        NavigationLink {
+                            OrderDetailView(orderId: order.id, store: model.store)
+                        } label: {
                             orderRow(order)
                                 .padding(.horizontal, Spacing.lg)
                                 .padding(.vertical, Spacing.md)
@@ -149,23 +139,24 @@ struct CustomerDetailView: View {
     }
 
     @ViewBuilder
-    private func orderRow(_ order: RemoteOrder) -> some View {
+    private func orderRow(_ order: Order) -> some View {
+        let totals = order.totals
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: Spacing.xs) {
-                StatusChip(status: order.status)
+                OrderStatusChip(status: order.status)
 
                 Text(OrderDateFormatter.fullDateTime(for: order.deliveryAt))
                     .font(.headline)
                     .foregroundStyle(.inkPrimary)
 
                 HStack(spacing: Spacing.sm) {
-                    Text(Money.format(cents: order.totalCents))
+                    Text(Money.format(cents: totals.totalCents))
                         .font(.body.weight(.bold))
                         .monospacedDigit()
                         .foregroundStyle(.inkPrimary)
 
-                    if order.balanceCents > 0 {
-                        Text("Saldo: \(Money.format(cents: order.balanceCents))")
+                    if totals.balanceCents > 0 {
+                        Text("Saldo: \(Money.format(cents: totals.balanceCents))")
                             .font(.body.weight(.semibold))
                             .monospacedDigit()
                             .foregroundStyle(.warningText)
@@ -181,17 +172,17 @@ struct CustomerDetailView: View {
 
                     Spacer()
 
-                    StatusChip(status: order.status)
+                    OrderStatusChip(status: order.status)
                 }
 
                 HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
-                    Text(Money.format(cents: order.totalCents))
+                    Text(Money.format(cents: totals.totalCents))
                         .font(.body.weight(.bold))
                         .monospacedDigit()
                         .foregroundStyle(.inkPrimary)
 
-                    if order.balanceCents > 0 {
-                        Text("Saldo: \(Money.format(cents: order.balanceCents))")
+                    if totals.balanceCents > 0 {
+                        Text("Saldo: \(Money.format(cents: totals.balanceCents))")
                             .font(.subheadline.weight(.semibold))
                             .monospacedDigit()
                             .foregroundStyle(.warningText)
@@ -207,82 +198,16 @@ struct CustomerDetailView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockCustomerPreview = RemoteCustomer(
-    id: "mock_cust_preview",
-    name: "Ana Ruiz",
-    phone: "55 1234 5678",
-    notes: "Le gusta poco dulce, recoge en la tarde",
-    createdAt: Date(),
-    updatedAt: Date()
-)
-
-private let mockOrdersSample: [RemoteOrder] = [
-    RemoteOrder(
-        id: "mock_ord_1",
-        customerId: "mock_cust_preview",
-        customerName: "Ana Ruiz",
-        customerPhone: "55 1234 5678",
-        deliveryAt: Calendar.current.date(byAdding: .day, value: 2, to: Date()) ?? Date(),
-        status: .inProgress,
-        notes: nil,
-        items: [],
-        payments: [],
-        totalCents: 85000,
-        paidCents: 50000,
-        balanceCents: 35000,
-        costCents: 32000,
-        profitCents: 53000,
-        createdAt: Date(),
-        updatedAt: Date()
-    ),
-    RemoteOrder(
-        id: "mock_ord_2",
-        customerId: "mock_cust_preview",
-        customerName: "Ana Ruiz",
-        customerPhone: "55 1234 5678",
-        deliveryAt: Calendar.current.date(byAdding: .day, value: -5, to: Date()) ?? Date(),
-        status: .delivered,
-        notes: nil,
-        items: [],
-        payments: [],
-        totalCents: 120000,
-        paidCents: 120000,
-        balanceCents: 0,
-        costCents: 45000,
-        profitCents: 75000,
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-]
-
-#Preview("Detalle con pedidos") {
+#Preview("Detalle de cliente") {
     NavigationStack {
-        CustomerDetailView(
-            customer: mockCustomerPreview,
-            mockOrders: mockOrdersSample,
-            isMock: true
-        )
+        CustomerDetailView(customerId: "cus-ana", store: .preview())
     }
 }
 
-#Preview("Sin pedidos") {
+#Preview("Detalle AX3") {
     NavigationStack {
-        CustomerDetailView(
-            customer: mockCustomerPreview,
-            mockOrders: [],
-            isMock: true
-        )
+        CustomerDetailView(customerId: "cus-ana", store: .preview())
     }
-}
-
-#Preview("Letra AX3") {
-    NavigationStack {
-        CustomerDetailView(
-            customer: mockCustomerPreview,
-            mockOrders: mockOrdersSample,
-            isMock: true
-        )
-        .dynamicTypeSize(.accessibility3)
-    }
+    .dynamicTypeSize(.accessibility3)
 }
 #endif

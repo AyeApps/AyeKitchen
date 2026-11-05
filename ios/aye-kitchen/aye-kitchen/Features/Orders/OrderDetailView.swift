@@ -1,6 +1,7 @@
 import SwiftUI
+import KitchenDomain
 
-/// Detalle del pedido según Bloque I2.
+/// Detalle del pedido (Bloque I18 local-first).
 struct OrderDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -9,120 +10,137 @@ struct OrderDetailView: View {
     @State private var showingEditSheet = false
     @State private var showingDeleteOrderConfirmation = false
     @State private var showingRecordPaymentSheet = false
-    @State private var paymentToDelete: RemotePayment?
+    @State private var paymentToDelete: Payment?
 
-    var onOrderUpdated: ((RemoteOrder) -> Void)?
+    var onOrderUpdated: ((Order) -> Void)?
     var onOrderDeleted: ((String) -> Void)?
 
     init(
-        order: RemoteOrder,
-        onOrderUpdated: ((RemoteOrder) -> Void)? = nil,
+        orderId: String,
+        store: LocalStore = .shared,
+        onOrderUpdated: ((Order) -> Void)? = nil,
         onOrderDeleted: ((String) -> Void)? = nil
     ) {
-        _model = State(initialValue: OrderDetailModel(order: order))
+        self._model = State(initialValue: OrderDetailModel(orderId: orderId, store: store))
         self.onOrderUpdated = onOrderUpdated
         self.onOrderDeleted = onOrderDeleted
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Spacing.section) {
-                headerSection
-                productsSection
-                financialSummaryCard
-                paymentsSection
-                notesSection
-            }
-            .padding(.horizontal, Spacing.xl)
-            .padding(.top, Spacing.sm)
-            .padding(.bottom, Spacing.xxl)
-        }
-        .background(.canvasBackground)
-        .navigationTitle(model.order.customerName)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        showingEditSheet = true
-                    } label: {
-                        Label("Editar pedido", systemImage: "pencil")
-                    }
+    init(
+        order: Order,
+        store: LocalStore = .shared,
+        onOrderUpdated: ((Order) -> Void)? = nil,
+        onOrderDeleted: ((String) -> Void)? = nil
+    ) {
+        self.init(
+            orderId: order.id,
+            store: store,
+            onOrderUpdated: onOrderUpdated,
+            onOrderDeleted: onOrderDeleted
+        )
+    }
 
-                    Button(role: .destructive) {
-                        showingDeleteOrderConfirmation = true
-                    } label: {
-                        Label("Borrar pedido", systemImage: "trash")
+    var body: some View {
+        Group {
+            if let order = model.order {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Spacing.section) {
+                        headerSection(order: order)
+                        productsSection(order: order)
+                        financialSummaryCard(order: order)
+                        paymentsSection(order: order)
+                        notesSection(order: order)
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.tint)
-                        .frame(width: 34, height: 34)
+                    .padding(.horizontal, Spacing.xl)
+                    .padding(.top, Spacing.sm)
+                    .padding(.bottom, Spacing.xxl)
                 }
-                .accessibilityLabel("Opciones del pedido")
-            }
-        }
-        .confirmationDialog(
-            "¿Borrar este pedido?",
-            isPresented: $showingDeleteOrderConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Borrar pedido", role: .destructive) {
-                Task {
-                    do {
-                        let id = model.order.id
-                        try await model.deleteOrder()
-                        onOrderDeleted?(id)
-                        dismiss()
-                    } catch {
-                        // Error visualizable
+                .background(.canvasBackground)
+                .navigationTitle(order.customerName)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button {
+                                showingEditSheet = true
+                            } label: {
+                                Label("Editar pedido", systemImage: "pencil")
+                            }
+
+                            Button(role: .destructive) {
+                                showingDeleteOrderConfirmation = true
+                            } label: {
+                                Label("Borrar pedido", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.tint)
+                                .frame(width: 34, height: 34)
+                        }
+                        .accessibilityLabel("Opciones del pedido")
                     }
                 }
-            }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Se eliminará el pedido de \(model.order.customerName). Esta acción no se puede deshacer.")
-        }
-        .confirmationDialog(
-            "¿Borrar este pago?",
-            isPresented: Binding(
-                get: { paymentToDelete != nil },
-                set: { if !$0 { paymentToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Borrar pago", role: .destructive) {
-                if let payment = paymentToDelete {
-                    paymentToDelete = nil
-                    Task {
+                .confirmationDialog(
+                    "¿Borrar este pedido?",
+                    isPresented: $showingDeleteOrderConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Borrar pedido", role: .destructive) {
                         do {
-                            try await model.deletePayment(id: payment.id)
-                            onOrderUpdated?(model.order)
+                            let id = order.id
+                            try model.deleteOrder()
+                            onOrderDeleted?(id)
+                            dismiss()
                         } catch {
-                            // model.errorMessage ya fue asignado en model.deletePayment
+                            // Error visualizable
                         }
                     }
+                    Button("Cancelar", role: .cancel) {}
+                } message: {
+                    Text("Se eliminará el pedido de \(order.customerName). Esta acción no se puede deshacer.")
                 }
-            }
-            Button("Cancelar", role: .cancel) {
-                paymentToDelete = nil
-            }
-        } message: {
-            if let payment = paymentToDelete {
-                Text("Se eliminará el pago de \(Money.format(cents: payment.amountCents)).")
-            }
-        }
-        .sheet(isPresented: $showingEditSheet) {
-            OrderFormView(order: model.order) { updated in
-                model.order = updated
-                onOrderUpdated?(updated)
-            }
-        }
-        .sheet(isPresented: $showingRecordPaymentSheet) {
-            RecordPaymentSheet(order: model.order) { updated in
-                model.order = updated
-                onOrderUpdated?(updated)
+                .confirmationDialog(
+                    "¿Borrar este pago?",
+                    isPresented: Binding(
+                        get: { paymentToDelete != nil },
+                        set: { if !$0 { paymentToDelete = nil } }
+                    ),
+                    titleVisibility: .visible
+                ) {
+                    Button("Borrar pago", role: .destructive) {
+                        if let payment = paymentToDelete {
+                            paymentToDelete = nil
+                            model.deletePayment(id: payment.id)
+                            if let refreshed = model.order {
+                                onOrderUpdated?(refreshed)
+                            }
+                        }
+                    }
+                    Button("Cancelar", role: .cancel) {
+                        paymentToDelete = nil
+                    }
+                } message: {
+                    if let payment = paymentToDelete {
+                        Text("Se eliminará el pago de \(Money.format(cents: payment.amountCents)).")
+                    }
+                }
+                .sheet(isPresented: $showingEditSheet) {
+                    OrderFormView(mode: .edit(orderId: order.id), store: model.store) { updated in
+                        onOrderUpdated?(updated)
+                    }
+                }
+                .sheet(isPresented: $showingRecordPaymentSheet) {
+                    RecordPaymentSheet(orderId: order.id, store: model.store) { updated in
+                        onOrderUpdated?(updated)
+                    }
+                }
+            } else {
+                ContentUnavailableView(
+                    "Pedido no encontrado",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text("Este pedido fue eliminado.")
+                )
             }
         }
         .alert("No se pudo guardar", isPresented: Binding(
@@ -141,14 +159,14 @@ struct OrderDetailView: View {
 
     // MARK: - Encabezado
 
-    private var headerSection: some View {
+    private func headerSection(order: Order) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text(OrderDateFormatter.fullDateTime(for: model.order.deliveryAt))
+            Text(OrderDateFormatter.fullDateTime(for: order.deliveryAt))
                 .font(.title2.weight(.heavy))
                 .foregroundStyle(.inkPrimary)
 
             HStack(spacing: Spacing.md) {
-                if let phone = model.order.customerPhone, !phone.trimmingCharacters(in: .whitespaces).isEmpty {
+                if let phone = order.customerPhone, !phone.trimmingCharacters(in: .whitespaces).isEmpty {
                     let cleanedPhone = phone.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
                     if let url = URL(string: "tel:\(cleanedPhone)") {
                         Link(destination: url) {
@@ -165,27 +183,23 @@ struct OrderDetailView: View {
 
                 Spacer()
 
-                statusMenu
+                statusMenu(order: order)
             }
         }
     }
 
-    private var statusMenu: some View {
+    private func statusMenu(order: Order) -> some View {
         Menu {
-            ForEach(RemoteOrderStatus.allCases, id: \.self) { status in
+            ForEach(OrderStatus.allCases, id: \.self) { status in
                 Button {
-                    Task {
-                        do {
-                            try await model.updateStatus(status)
-                            onOrderUpdated?(model.order)
-                        } catch {
-                            // model.errorMessage ya fue asignado en model.updateStatus
-                        }
+                    model.updateStatus(status)
+                    if let refreshed = model.order {
+                        onOrderUpdated?(refreshed)
                     }
                 } label: {
                     HStack {
                         Text(status.label)
-                        if status == model.order.status {
+                        if status == order.status {
                             Image(systemName: "checkmark")
                         }
                     }
@@ -193,24 +207,24 @@ struct OrderDetailView: View {
             }
         } label: {
             HStack(spacing: Spacing.xs) {
-                StatusChip(status: model.order.status)
+                OrderStatusChip(status: order.status)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.inkMuted)
             }
         }
-        .accessibilityLabel("Cambiar estado: \(model.order.status.label)")
+        .accessibilityLabel("Cambiar estado: \(order.status.label)")
     }
 
     // MARK: - Productos
 
-    private var productsSection: some View {
+    private func productsSection(order: Order) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("Productos")
                 .sectionTitleStyle()
 
             RowGroup {
-                ForEach(model.order.items, id: \.self) { item in
+                ForEach(order.items, id: \.self) { item in
                     let subtotal = CurrencyMath.calculateSubtotalCents(
                         quantity: item.quantity,
                         unitPriceCents: item.unitPriceCents
@@ -259,8 +273,8 @@ struct OrderDetailView: View {
         }
     }
 
-    private func itemQuantityPriceDescription(for item: RemoteOrderItem) -> String {
-        let mode = item.soldBy ?? .batch
+    private func itemQuantityPriceDescription(for item: OrderItem) -> String {
+        let mode = item.soldBy
         let qtyFormatted = Quantity.format(item.quantity)
         let priceFormatted = Money.format(cents: item.unitPriceCents)
         switch mode {
@@ -275,17 +289,18 @@ struct OrderDetailView: View {
         }
     }
 
-    // MARK: - Tarjeta crema de balance y costo
+    // MARK: - Tarjeta de balance y costo
 
-    private var financialSummaryCard: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
+    private func financialSummaryCard(order: Order) -> some View {
+        let totals = order.totals
+        return VStack(alignment: .leading, spacing: Spacing.md) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     VStack(alignment: .leading, spacing: Spacing.xs) {
                         Text("Total")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: model.order.totalCents))
+                        Text(Money.format(cents: totals.totalCents))
                             .font(.title2.weight(.heavy))
                             .monospacedDigit()
                             .foregroundStyle(.inkPrimary)
@@ -295,7 +310,7 @@ struct OrderDetailView: View {
                         Text("Ya te pagaron")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: model.order.paidCents))
+                        Text(Money.format(cents: totals.paidCents))
                             .font(.title3.weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(.inkPrimary)
@@ -305,10 +320,10 @@ struct OrderDetailView: View {
                         Text("Te falta cobrar")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: model.order.balanceCents))
+                        Text(Money.format(cents: totals.balanceCents))
                             .font(.title2.weight(.heavy))
                             .monospacedDigit()
-                            .foregroundStyle(model.order.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
+                            .foregroundStyle(totals.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
                     }
                 }
             } else {
@@ -317,7 +332,7 @@ struct OrderDetailView: View {
                         Text("Total")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: model.order.totalCents))
+                        Text(Money.format(cents: totals.totalCents))
                             .font(.title3.weight(.heavy))
                             .monospacedDigit()
                             .foregroundStyle(.inkPrimary)
@@ -329,7 +344,7 @@ struct OrderDetailView: View {
                         Text("Ya te pagaron")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: model.order.paidCents))
+                        Text(Money.format(cents: totals.paidCents))
                             .font(.body.weight(.bold))
                             .monospacedDigit()
                             .foregroundStyle(.inkPrimary)
@@ -341,10 +356,10 @@ struct OrderDetailView: View {
                         Text("Te falta cobrar")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: model.order.balanceCents))
+                        Text(Money.format(cents: totals.balanceCents))
                             .font(.title3.weight(.heavy))
                             .monospacedDigit()
-                            .foregroundStyle(model.order.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
+                            .foregroundStyle(totals.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
                     }
                 }
             }
@@ -353,7 +368,7 @@ struct OrderDetailView: View {
                 .fill(.dividerLine)
                 .frame(height: 1)
 
-            Text("Te cuesta \(Money.format(cents: model.order.costCents)) · Ganas \(Money.format(cents: model.order.profitCents))")
+            Text("Te cuesta \(Money.format(cents: totals.costCents)) · Ganas \(Money.format(cents: totals.profitCents))")
                 .font(.subheadline)
                 .foregroundStyle(.inkMuted)
         }
@@ -362,18 +377,19 @@ struct OrderDetailView: View {
 
     // MARK: - Pagos
 
-    private var paymentsSection: some View {
-        VStack(alignment: .leading, spacing: Spacing.md) {
+    private func paymentsSection(order: Order) -> some View {
+        let totals = order.totals
+        return VStack(alignment: .leading, spacing: Spacing.md) {
             Text("Pagos")
                 .sectionTitleStyle()
 
-            if model.order.payments.isEmpty {
+            if order.payments.isEmpty {
                 Text("No hay pagos registrados todavía.")
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
             } else {
                 RowGroup {
-                    ForEach(model.order.payments) { payment in
+                    ForEach(order.payments) { payment in
                         paymentRow(payment: payment)
                             .contextMenu {
                                 Button(role: .destructive) {
@@ -389,7 +405,7 @@ struct OrderDetailView: View {
                 }
             }
 
-            if model.order.balanceCents > 0 {
+            if totals.balanceCents > 0 {
                 Button("Registrar pago") {
                     showingRecordPaymentSheet = true
                 }
@@ -398,7 +414,7 @@ struct OrderDetailView: View {
         }
     }
 
-    private func paymentRow(payment: RemotePayment) -> some View {
+    private func paymentRow(payment: Payment) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(Money.format(cents: payment.amountCents))
@@ -435,8 +451,8 @@ struct OrderDetailView: View {
     // MARK: - Notas
 
     @ViewBuilder
-    private var notesSection: some View {
-        if let notes = model.order.notes, !notes.trimmingCharacters(in: .whitespaces).isEmpty {
+    private func notesSection(order: Order) -> some View {
+        if let notes = order.notes, !notes.trimmingCharacters(in: .whitespaces).isEmpty {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 Text("Notas")
                     .sectionTitleStyle()
@@ -456,68 +472,30 @@ struct OrderDetailView: View {
     }
 }
 
+// MARK: - Previews
+
 #if DEBUG
-private let mockOrderWithPieceAndBatch = RemoteOrder(
-    id: "order-preview-piece-batch",
-    customerName: "Mariana Rojas",
-    customerPhone: "5512345678",
-    deliveryAt: Date.now,
-    status: .inProgress,
-    notes: "Entregar en caja de regalo.",
-    items: [
-        RemoteOrderItem(
-            recipeId: "rec-1",
-            recipeName: "Galletas con chispas",
-            quantity: "4",
-            unitPriceCents: 1300,
-            unitCostCentsSnapshot: 500,
-            soldBy: .unit,
-            unitLabel: .pz
-        ),
-        RemoteOrderItem(
-            recipeId: "rec-2",
-            recipeName: "Pastel de zanahoria",
-            quantity: "1",
-            unitPriceCents: 15600,
-            unitCostCentsSnapshot: 6000,
-            soldBy: .batch,
-            unitLabel: nil
-        )
-    ],
-    payments: [
-        RemotePayment(id: "pay-1", amountCents: 10000, paidAt: Date.now, method: "transferencia")
-    ],
-    totalCents: 20800,
-    paidCents: 10000,
-    balanceCents: 10800,
-    costCents: 8000,
-    profitCents: 12800,
-    createdAt: Date.now,
-    updatedAt: Date.now
-)
-
-#Preview("Detalle con pieza y tanda — Normal") {
+#Preview("Detalle con pago parcial — ord-1") {
     NavigationStack {
-        OrderDetailView(order: mockOrderWithPieceAndBatch)
+        OrderDetailView(orderId: "ord-1", store: .preview())
     }
 }
 
-#Preview("Detalle con pieza y tanda — AX3") {
+#Preview("Detalle por pieza — ord-2") {
     NavigationStack {
-        OrderDetailView(order: mockOrderWithPieceAndBatch)
-    }
-    .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Claro") {
-    NavigationStack {
-        OrderDetailView(order: .mockPendingToday)
+        OrderDetailView(orderId: "ord-2", store: .preview())
     }
 }
 
-#Preview("Letra AX3") {
+#Preview("Detalle entregado — ord-3") {
     NavigationStack {
-        OrderDetailView(order: .mockPendingToday)
+        OrderDetailView(orderId: "ord-3", store: .preview())
+    }
+}
+
+#Preview("Detalle AX3") {
+    NavigationStack {
+        OrderDetailView(orderId: "ord-1", store: .preview())
     }
     .dynamicTypeSize(.accessibility3)
 }

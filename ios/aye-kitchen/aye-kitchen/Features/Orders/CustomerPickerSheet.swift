@@ -1,22 +1,21 @@
 import SwiftUI
+import KitchenDomain
 
-/// Hoja para buscar y seleccionar un cliente para el pedido según Bloque I7b.
+/// Hoja para buscar y seleccionar un cliente para el pedido (Bloque I18 local-first).
 struct CustomerPickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var model: CustomersModel
+    private let store: LocalStore
     @State private var searchText = ""
-    @State private var searchTask: Task<Void, Never>?
     @State private var showingNewCustomerSheet = false
-    @State private var pendingCustomer: RemoteCustomer?
 
-    let onSelect: (RemoteCustomer) -> Void
+    let onSelect: (Customer) -> Void
 
     init(
-        model: CustomersModel = CustomersModel(),
-        onSelect: @escaping (RemoteCustomer) -> Void
+        store: LocalStore = .shared,
+        onSelect: @escaping (Customer) -> Void
     ) {
-        _model = State(initialValue: model)
+        self.store = store
         self.onSelect = onSelect
     }
 
@@ -27,15 +26,6 @@ struct CustomerPickerSheet: View {
                 .navigationTitle("Cliente")
                 .navigationBarTitleDisplayMode(.inline)
                 .searchable(text: $searchText, prompt: "Buscar cliente")
-                .onChange(of: searchText) { _, newValue in
-                    searchTask?.cancel()
-                    searchTask = Task {
-                        try? await Task.sleep(nanoseconds: 300_000_000)
-                        if !Task.isCancelled {
-                            await model.load(query: newValue)
-                        }
-                    }
-                }
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Cancelar") {
@@ -45,24 +35,13 @@ struct CustomerPickerSheet: View {
                         .foregroundStyle(.tint)
                     }
                 }
-                .sheet(isPresented: $showingNewCustomerSheet, onDismiss: {
-                    if let pending = pendingCustomer {
-                        pendingCustomer = nil
-                        onSelect(pending)
-                        dismiss()
-                    }
-                }) {
+                .sheet(isPresented: $showingNewCustomerSheet) {
                     CustomerFormView(
                         initialName: searchText.trimmingCharacters(in: .whitespaces),
-                        isMock: model.isMock
+                        store: store
                     ) { savedCustomer in
-                        model.upsertCustomer(savedCustomer)
-                        pendingCustomer = savedCustomer
-                    }
-                }
-                .task {
-                    if model.state == .idle {
-                        await model.load()
+                        onSelect(savedCustomer)
+                        dismiss()
                     }
                 }
         }
@@ -70,39 +49,21 @@ struct CustomerPickerSheet: View {
 
     @ViewBuilder
     private var content: some View {
+        let customers = store.data.listCustomers(query: searchText)
         List {
             newCustomerButton
                 .listRowBackground(Color.surfaceCard)
 
-            if model.state == .loading && model.customers.isEmpty {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                        .tint(Color.accentColor)
-                    Spacer()
-                }
-                .padding(.vertical, Spacing.xl)
-                .listRowBackground(Color.clear)
-            } else if case .error(let message) = model.state, model.customers.isEmpty {
-                ErrorStateView(message: message) {
-                    Task {
-                        await model.load(query: searchText)
-                    }
-                }
-                .listRowBackground(Color.clear)
-            } else if model.customers.isEmpty {
+            if customers.isEmpty {
                 emptyState
             } else {
-                ForEach(model.customers) { customer in
+                ForEach(customers) { customer in
                     customerRow(customer)
                 }
             }
         }
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
-        .refreshable {
-            await model.load(query: searchText)
-        }
     }
 
     private var newCustomerButton: some View {
@@ -147,7 +108,7 @@ struct CustomerPickerSheet: View {
         }
     }
 
-    private func customerRow(_ customer: RemoteCustomer) -> some View {
+    private func customerRow(_ customer: Customer) -> some View {
         Button {
             onSelect(customer)
             dismiss()
@@ -174,41 +135,12 @@ struct CustomerPickerSheet: View {
 // MARK: - Previews
 
 #if DEBUG
-private let previewCustomers: [RemoteCustomer] = [
-    RemoteCustomer(
-        id: "c-1",
-        name: "Mariana Rojas",
-        phone: "5512345678",
-        notes: nil,
-        createdAt: Date.now,
-        updatedAt: Date.now
-    ),
-    RemoteCustomer(
-        id: "c-2",
-        name: "Carlos Benítez",
-        phone: nil,
-        notes: nil,
-        createdAt: Date.now,
-        updatedAt: Date.now
-    )
-]
-
-#Preview("Selector de cliente — Con clientes") {
-    CustomerPickerSheet(
-        model: CustomersModel(mockCustomers: previewCustomers)
-    ) { _ in }
+#Preview("Selector de cliente") {
+    CustomerPickerSheet(store: .preview()) { _ in }
 }
 
-#Preview("Selector de cliente — Letra AX3") {
-    CustomerPickerSheet(
-        model: CustomersModel(mockCustomers: previewCustomers)
-    ) { _ in }
-    .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Selector de cliente — Vacío") {
-    CustomerPickerSheet(
-        model: CustomersModel(mockCustomers: [])
-    ) { _ in }
+#Preview("Selector de cliente — AX3") {
+    CustomerPickerSheet(store: .preview()) { _ in }
+        .dynamicTypeSize(.accessibility3)
 }
 #endif

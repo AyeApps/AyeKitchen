@@ -1,51 +1,23 @@
 import Foundation
+import KitchenDomain
 import Observation
 
-/// ViewModel para la pantalla de detalle de cliente (`CustomerDetailView`).
-@Observable final class CustomerDetailModel {
-    var customer: RemoteCustomer
-    var orders: [RemoteOrder] = []
-    var isLoadingOrders: Bool = false
-    var ordersErrorMessage: String? = nil
-    private(set) var isMock: Bool = false
+/// ViewModel para la pantalla de detalle de cliente (`CustomerDetailView`, Bloque I18 local-first).
+@Observable
+final class CustomerDetailModel {
+    let customerId: String
+    var store: LocalStore
 
-    init(customer: RemoteCustomer, mockOrders: [RemoteOrder]? = nil, isMock: Bool = false) {
-        self.customer = customer
-        if let mockOrders {
-            self.orders = mockOrders
-            self.isMock = true
-        } else if isMock {
-            self.isMock = true
-        }
+    init(customerId: String, store: LocalStore = .shared) {
+        self.customerId = customerId
+        self.store = store
     }
 
-    func updateCustomer(_ updated: RemoteCustomer) {
-        self.customer = updated
+    var customer: Customer? {
+        try? store.data.customer(id: customerId)
     }
 
-    func loadOrders() async {
-        guard !isMock else { return }
-        isLoadingOrders = true
-        ordersErrorMessage = nil
-        do {
-            let page: Page<RemoteOrder> = try await NetworkService.shared.request(
-                .get,
-                "/orders/",
-                query: [
-                    URLQueryItem(name: "customer_id", value: customer.id),
-                    URLQueryItem(name: "limit", value: "100")
-                ]
-            )
-            self.orders = page.items
-            self.isLoadingOrders = false
-        } catch where error.isCancellation {
-            self.isLoadingOrders = false
-        } catch let apiError as APIError {
-            self.isLoadingOrders = false
-            self.ordersErrorMessage = apiError.localizedDescription
-        } catch {
-            self.isLoadingOrders = false
-            self.ordersErrorMessage = error.localizedDescription
-        }
+    var orders: [Order] {
+        store.data.listOrders(customerId: customerId)
     }
 }

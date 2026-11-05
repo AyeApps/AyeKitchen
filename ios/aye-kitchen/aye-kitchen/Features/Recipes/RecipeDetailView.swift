@@ -123,21 +123,9 @@ struct RecipeDetailView: View {
             .navigationDestination(item: $model.activeDestination) { destination in
                 switch destination {
                 case .presentation(let presentation):
-                    BrandDetailView(presentation: presentation) {
-                        Task {
-                            await model.load()
-                        }
-                    }
+                    BrandDetailView(presentationId: presentation.id)
                 case .ingredient(let ingredient):
-                    IngredientDetailView(
-                        ingredient: ingredient,
-                        onUpdate: { _ in
-                            Task { await model.load() }
-                        },
-                        onDelete: { _ in
-                            Task { await model.load() }
-                        }
-                    )
+                    IngredientDetailView(ingredientId: ingredient.id)
                 }
             }
             .onChange(of: model.activeDestination) { oldValue, newValue in

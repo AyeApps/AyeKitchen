@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import KitchenDomain
+import Observation
 
 enum PaymentMethodOption: String, CaseIterable, Identifiable, Sendable {
     case cash = "efectivo"
@@ -17,19 +19,31 @@ enum PaymentMethodOption: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-/// Modelo de presentación para registrar un pago a un pedido (MVVM, Regla 5).
+/// Modelo de presentación para registrar un pago a un pedido (MVVM, Regla 5 / Bloque I18 local-first).
 @Observable
 final class RecordPaymentModel {
-    let order: RemoteOrder
+    let orderId: String
+    var store: LocalStore
 
     var amountText: String
     var selectedMethod: PaymentMethodOption = .cash
     var isSaving: Bool = false
     var errorMessage: String? = nil
 
-    init(order: RemoteOrder) {
-        self.order = order
-        self.amountText = CurrencyMath.formatForInput(cents: order.balanceCents)
+    init(orderId: String, store: LocalStore = .shared) {
+        self.orderId = orderId
+        self.store = store
+
+        if let ord = try? store.data.order(id: orderId) {
+            let balance = ord.totals.balanceCents
+            self.amountText = CurrencyMath.formatForInput(cents: max(0, balance))
+        } else {
+            self.amountText = ""
+        }
+    }
+
+    var order: Order? {
+        try? store.data.order(id: orderId)
     }
 
     var parsedCents: Int? {
@@ -41,29 +55,32 @@ final class RecordPaymentModel {
         return !isSaving
     }
 
-    func savePayment() async -> RemoteOrder? {
+    @discardableResult
+    func savePayment() -> Order? {
         guard let cents = parsedCents else { return nil }
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
 
         do {
-            let body = PaymentCreateBody(
-                amountCents: cents,
-                method: selectedMethod.rawValue
-            )
-            let updated: RemoteOrder = try await NetworkService.shared.request(
-                .post,
-                "/orders/\(order.id)/payments",
-                body: body
-            )
-            return updated
-        } catch {
-            if let apiError = error as? APIError, apiError.code == "PAYMENT_EXCEEDS_BALANCE" {
+            try store.mutate { data, ctx in
+                try data.addPayment(
+                    orderId: orderId,
+                    amountCents: cents,
+                    method: selectedMethod.rawValue,
+                    ctx: ctx
+                )
+            }
+            return try? store.data.order(id: orderId)
+        } catch let domainError as DomainError {
+            if domainError.code == "PAYMENT_EXCEEDS_BALANCE" {
                 errorMessage = "Eso es más de lo que te falta cobrar."
             } else {
-                errorMessage = error.localizedDescription
+                errorMessage = domainError.detail
             }
+            return nil
+        } catch {
+            errorMessage = error.localizedDescription
             return nil
         }
     }

@@ -75,14 +75,7 @@ struct RecipeItemPicker: View {
                     selectedTarget = .ingredient(pending)
                 }
             }) {
-                IngredientFormView(
-                    mode: .create,
-                    initialName: model.searchText.trimmingCharacters(in: .whitespaces),
-                    mockUnits: model.isMock && !allUnits.isEmpty ? allUnits : nil
-                ) { savedIngredient in
-                    model.prependIngredient(savedIngredient)
-                    pendingTargetIngredient = savedIngredient
-                }
+                IngredientFormView(mode: .create, initialName: model.searchText.trimmingCharacters(in: .whitespaces))
             }
             .task {
                 await model.loadInitialData()

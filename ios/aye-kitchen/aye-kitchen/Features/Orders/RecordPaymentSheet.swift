@@ -1,15 +1,28 @@
 import SwiftUI
+import KitchenDomain
 
-/// Hoja para registrar un pago a un pedido según Bloque I2.
+/// Hoja para registrar un pago a un pedido (Bloque I18 local-first).
 struct RecordPaymentSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: RecordPaymentModel
-    let onPaymentSaved: (RemoteOrder) -> Void
+    let onPaymentSaved: ((Order) -> Void)?
 
-    init(order: RemoteOrder, onPaymentSaved: @escaping (RemoteOrder) -> Void) {
-        _model = State(initialValue: RecordPaymentModel(order: order))
+    init(
+        orderId: String,
+        store: LocalStore = .shared,
+        onPaymentSaved: ((Order) -> Void)? = nil
+    ) {
+        self._model = State(initialValue: RecordPaymentModel(orderId: orderId, store: store))
         self.onPaymentSaved = onPaymentSaved
+    }
+
+    init(
+        order: Order,
+        store: LocalStore = .shared,
+        onPaymentSaved: ((Order) -> Void)? = nil
+    ) {
+        self.init(orderId: order.id, store: store, onPaymentSaved: onPaymentSaved)
     }
 
     var body: some View {
@@ -21,7 +34,7 @@ struct RecordPaymentSheet: View {
                             .font(.subheadline)
                             .foregroundStyle(.inkMuted)
 
-                        Text(Money.format(cents: model.order.balanceCents))
+                        Text(Money.format(cents: model.order?.totals.balanceCents ?? 0))
                             .font(.largeTitle.weight(.heavy))
                             .monospacedDigit()
                             .foregroundStyle(.tint)
@@ -58,11 +71,9 @@ struct RecordPaymentSheet: View {
                     }
 
                     Button {
-                        Task {
-                            if let updated = await model.savePayment() {
-                                onPaymentSaved(updated)
-                                dismiss()
-                            }
+                        if let updated = model.savePayment() {
+                            onPaymentSaved?(updated)
+                            dismiss()
                         }
                     } label: {
                         if model.isSaving {
@@ -95,12 +106,12 @@ struct RecordPaymentSheet: View {
 }
 
 #if DEBUG
-#Preview("Claro") {
-    RecordPaymentSheet(order: .mockPendingToday) { _ in }
+#Preview("Registrar pago — ord-1") {
+    RecordPaymentSheet(orderId: "ord-1", store: .preview())
 }
 
-#Preview("Letra AX3") {
-    RecordPaymentSheet(order: .mockPendingToday) { _ in }
+#Preview("Registrar pago — AX3") {
+    RecordPaymentSheet(orderId: "ord-1", store: .preview())
         .dynamicTypeSize(.accessibility3)
 }
 #endif
