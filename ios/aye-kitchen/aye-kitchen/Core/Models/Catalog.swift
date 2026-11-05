@@ -23,6 +23,19 @@ nonisolated struct Ingredient: Decodable, Sendable, Hashable, Identifiable {
     let conversions: [IngredientConversion]
     let createdAt: Date
     let updatedAt: Date
+    /// B6a. Marcas activas del ingrediente. Opcional para que los previews y servidores viejos sigan funcionando.
+    var brandsCount: Int? = nil
+    /// B6a. La marca vigente (la que usa el costeo por defecto); nulo si ninguna tiene precio.
+    var currentBrand: IngredientCurrentBrand? = nil
+}
+
+/// Resumen de la marca vigente de un ingrediente (B6a).
+nonisolated struct IngredientCurrentBrand: Decodable, Sendable, Hashable {
+    let presentationId: String
+    let brand: String
+    let supplierName: String?
+    /// Centavos por g/ml/pz, 6 decimales, solo para mostrar.
+    let costPerBaseUnit: String?
 }
 
 /// Equivalencia propia: "1 taza de harina = 125 g".

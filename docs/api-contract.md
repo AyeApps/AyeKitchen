@@ -25,7 +25,7 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 | `NOT_FOUND` | 404 | Recurso inexistente, borrado o de otro workspace |
 | `SYSTEM_UNIT_READONLY` | 403 | Intento de editar/borrar una unidad del sistema |
 | `UNIT_NOT_CONVERTIBLE` | 422 | La unidad no se puede llevar a la unidad base del ingrediente/subreceta |
-| `DUPLICATE_NAME` | 409 | Nombre repetido (case-insensitive) en el mismo workspace para unidades, ingredientes, proveedores, recetas o clientes |
+| `DUPLICATE_NAME` | 409 | Nombre repetido (case-insensitive) en el mismo workspace para unidades, ingredientes, proveedores, recetas o clientes; o en la misma receta para versiones de costeo |
 | `IN_USE` | 409 | Borrar algo que otra entidad activa referencia (ingrediente en receta, presentación fijada, subreceta usada, unidad usada) |
 | `RECIPE_CYCLE` | 422 | La receta se usaría a sí misma directa o indirectamente |
 | `RECIPE_TOO_DEEP` | 422 | Después de guardar, alguna cadena de subrecetas del workspace tendría más de 10 niveles (contando hacia arriba: recetas que usan a la que se guarda) |
@@ -77,7 +77,11 @@ Implementado en el esqueleto.
 
 ## /ingredients (B1)
 
-`Ingredient`: `{id, name, base_unit, group, notes, conversions: [{unit_id, unit_name, quantity_in_base}], created_at, updated_at}`
+`Ingredient`: `{id, name, base_unit, group, notes, conversions: [{unit_id, unit_name, quantity_in_base}], brands_count, current_brand, created_at, updated_at}`
+
+El ingrediente es el **general** ("Harina de trigo"); sus marcas son `Presentation` (B2). Resumen de marcas (B6a), en todas las respuestas de `/ingredients`:
+- `brands_count: int` — marcas (presentaciones) activas del ingrediente.
+- `current_brand: {presentation_id, brand, supplier_name, cost_per_base_unit} | null` — la presentación vigente (definición en B2) con su `cost_per_base_unit` igual que en `Presentation`. `null` si ninguna marca tiene precio.
 
 `conversions` = equivalencias propias: "1 taza de Harina = 125 g". Ganan sobre la tabla general.
 
@@ -163,9 +167,9 @@ Servicios que B3 consume:
 | GET | `/recipes/{id}/usable-as-subrecipe` | — | Lista `[{id, name, yield_unit}]` de recetas que se pueden agregar como subreceta de `{id}` sin crear ciclo (excluye `{id}` y a quien la usa) |
 | POST | `/recipes/` | campos de Recipe sin ids derivados | Valida referencias (`INVALID_REFERENCE`), que `pinned_presentation_id` pertenezca a ese ingrediente, que cada línea sea convertible (`UNIT_NOT_CONVERTIBLE`), ciclos (`RECIPE_CYCLE`) y profundidad (`RECIPE_TOO_DEEP`) |
 | GET | `/recipes/{id}` | — | |
-| PATCH | `/recipes/{id}` | parcial; `items` y `extra_costs` reemplazan la lista completa | Mismas validaciones |
-| DELETE | `/recipes/{id}` | — | 204. Usada como subreceta en otra receta activa → `IN_USE` |
-| GET | `/recipes/{id}/cost` | — | Desglose de costo, ver abajo |
+| PATCH | `/recipes/{id}` | parcial; `items` y `extra_costs` reemplazan la lista completa | Mismas validaciones. Si cambian `items`, de sus versiones de costeo se quitan las elecciones de ingredientes que ya no están en una línea de ingrediente de la receta |
+| DELETE | `/recipes/{id}` | — | 204. Usada como subreceta en otra receta activa → `IN_USE`. Borra (soft) sus versiones de costeo |
+| GET | `/recipes/{id}/cost` | `?version_id` | Desglose de costo, ver abajo. Con `version_id` costea con las marcas de esa versión (B6b); una versión inexistente, borrada o de otra receta → 404 `NOT_FOUND` |
 
 ### `GET /recipes/{id}/cost`
 
@@ -174,6 +178,8 @@ Servicios que B3 consume:
  lines: [{kind, ref_id, ref_name, quantity, unit_name,
           quantity_in_base: "250", base_unit: "g",
           presentation_id, presentation_label: "Marca X · Walmart · 1000 g", pinned: bool,
+          brand_source: "version"|"recipe"|"current"|null,   # B6b: de dónde salió la marca; null en subrecetas y sin marca
+
           cost_cents: 588,              # redondeado solo para mostrar
           missing_price: bool,
           price_is_stale: bool}],         # ingrediente: la presentación usada tiene precio viejo; subreceta: alguna línea suya, a cualquier profundidad, lo tiene
@@ -184,7 +190,8 @@ Servicios que B3 consume:
  margin_percent,                          # el efectivo (receta o workspace)
  suggested_price_cents,                   # batch_cost × (1 + margin/100)
  complete: bool,                          # false si alguna línea, incluso dentro de una subreceta, no tiene precio
- has_stale_prices: bool}                  # true si alguna línea, incluso dentro de una subreceta, usa un precio viejo
+ has_stale_prices: bool,                  # true si alguna línea, incluso dentro de una subreceta, usa un precio viejo
+ version_id: str | null, version_name: str | null}   # B6b: la versión con la que se costeó; null = base
 ```
 
 **Algoritmo** (todo en `Decimal` sin redondear hasta el final):
@@ -196,6 +203,31 @@ Servicios que B3 consume:
 - Defensa: si al calcular se llegara a más de 10 niveles de subrecetas (datos corruptos), se detiene la recursión y esa línea queda con `missing_price: true`; nunca un error 500.
 
 Ejemplo de verificación: Harina 1000 g a $23.50 (2350), línea de 300 g → `cost_cents` 705. Tres líneas de 0.4 centavos cada una muestran 0 cada una, pero suman 1.2 → `ingredients_cost_cents` 1.
+
+### Versiones de costeo (B6b)
+
+Para comparar cuánto sale una receta con distintas marcas sin duplicarla. La **versión base** es la receta tal cual (marca fijada en la línea, si no la vigente) y no se guarda. Cada versión guardada solo dice qué marca usar para algunos ingredientes; ingredientes, cantidades y extras son los de la receta.
+
+`CostVersion`: `{id, recipe_id, name, choices: [{ingredient_id, ingredient_name, presentation_id, brand}], created_at, updated_at}`
+
+| Método | Ruta | Body | Notas |
+|---|---|---|---|
+| GET | `/recipes/{id}/versions/` | — | Sin paginar, orden `created_at` asc |
+| POST | `/recipes/{id}/versions/` | `{name, choices?: [{ingredient_id, presentation_id}]}` | 201. `name` de 1 a 60, recortado. Repetido en la misma receta (case-insensitive) o igual a "Base" → `DUPLICATE_NAME`. Cada `ingredient_id` debe estar en una línea de ingrediente de la receta, sin repetirse; cada `presentation_id` debe ser una presentación activa de ese ingrediente → si no, `INVALID_REFERENCE` |
+| PATCH | `/recipes/{id}/versions/{version_id}` | parcial; `choices` reemplaza la lista completa | Mismas validaciones |
+| DELETE | `/recipes/{id}/versions/{version_id}` | — | 204 |
+| GET | `/recipes/{id}/versions/compare` | — | `[{version_id: null, name: "Base", batch_cost_cents, cost_per_serving_cents, suggested_price_cents, complete, has_stale_prices}, …]`: la base primero y luego cada versión en orden `created_at` asc. Cada fila sale del mismo cálculo que `/cost` |
+
+La receta o la versión inexistente, borrada o de otro workspace → 404 `NOT_FOUND`.
+
+**Costeo con versión** (`/cost?version_id=`). Para cada línea de ingrediente, en este orden:
+1. La versión elige una marca para ese ingrediente y está activa → se usa (`brand_source: "version"`). Si no tiene precio, la línea queda `missing_price: true`, costo 0, sin caer a otra marca (igual que una fijada).
+2. Si no, la marca fijada en la línea (`"recipe"`), con las reglas de arriba.
+3. Si no, la vigente (`"current"`).
+
+`pinned` es `true` cuando `brand_source` es `"version"` o `"recipe"`. La versión solo cambia las líneas directas de la receta: las subrecetas se costean con su base. Una elección cuya presentación fue borrada se ignora. Sin `version_id`, el costo es el de siempre (`version_id: null`, `version_name: null`).
+
+**Al borrar una presentación** (B2) se quita de las elecciones de todas las versiones del workspace. Las versiones no cuentan para `IN_USE` ni para `/presentations/stale`.
 
 ---
 

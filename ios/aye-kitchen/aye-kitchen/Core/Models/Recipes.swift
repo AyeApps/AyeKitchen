@@ -82,6 +82,19 @@ nonisolated struct RecipeCost: Decodable, Sendable, Hashable {
     /// Falso si alguna línea, incluso dentro de una subreceta, no tiene precio.
     let complete: Bool
     let hasStalePrices: Bool
+    /// B6b. Versión con la que se costeó; nulo = base.
+    var versionId: String? = nil
+    var versionName: String? = nil
+}
+
+/// B6b. De dónde salió la marca de una línea de costo.
+nonisolated enum BrandSource: String, Decodable, Sendable, Hashable {
+    /// La eligió la versión de costeo.
+    case version
+    /// Fijada en la línea de la receta.
+    case recipe
+    /// La vigente del ingrediente.
+    case current
 }
 
 nonisolated struct CostLine: Decodable, Sendable, Hashable {
@@ -99,4 +112,34 @@ nonisolated struct CostLine: Decodable, Sendable, Hashable {
     let costCents: Int
     let missingPrice: Bool
     let priceIsStale: Bool
+    /// B6b. Nulo en subrecetas y en líneas sin marca.
+    var brandSource: BrandSource? = nil
+}
+
+/// `GET/POST/PATCH /recipes/{id}/versions/` (B6b)
+nonisolated struct CostVersion: Decodable, Sendable, Hashable, Identifiable {
+    let id: String
+    let recipeId: String
+    let name: String
+    let choices: [CostVersionChoice]
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+nonisolated struct CostVersionChoice: Decodable, Sendable, Hashable {
+    let ingredientId: String
+    let ingredientName: String
+    let presentationId: String
+    let brand: String
+}
+
+/// Fila de `GET /recipes/{id}/versions/compare` (B6b). `versionId` nulo = la base.
+nonisolated struct CostVersionComparison: Decodable, Sendable, Hashable {
+    let versionId: String?
+    let name: String
+    let batchCostCents: Int
+    let costPerServingCents: Int?
+    let suggestedPriceCents: Int
+    let complete: Bool
+    let hasStalePrices: Bool
 }
