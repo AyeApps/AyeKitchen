@@ -1,7 +1,11 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from bson import ObjectId
 from httpx import AsyncClient
+
+from app.models.cost_version import CostVersion, CostVersionChoice
+from app.models.recipe import Recipe
 
 
 @pytest.mark.asyncio
@@ -53,6 +57,15 @@ async def test_cost_version_crud_and_duplicate_name(client: AsyncClient, auth_he
     )
     assert rec_resp.status_code == 201
     recipe_id = rec_resp.json()["id"]
+
+    # Name with only spaces responds 422 standard and does not create version
+    for empty_name in [" ", "   ", "\t  \n"]:
+        resp = await client.post(
+            f"/api/v1/recipes/{recipe_id}/versions/",
+            headers=auth_headers,
+            json={"name": empty_name},
+        )
+        assert resp.status_code == 422
 
     # Name "Base" (case-insensitive) is forbidden -> 409 DUPLICATE_NAME
     for invalid_name in ["Base", "base", " BASE "]:
@@ -228,7 +241,7 @@ async def test_cost_version_invalid_reference_validations(client: AsyncClient, a
     )
     assert r3.status_code == 422
     assert r3.json()["code"] == "INVALID_REFERENCE"
-    assert "harina de trigo" in r3.json()["detail"].lower()
+    assert r3.json()["detail"] == "Esa marca no es de Harina de trigo"
 
     # 4. Nonexistent presentation
     r4 = await client.post(
@@ -879,3 +892,31 @@ async def test_cost_version_workspace_isolation(
     )
     assert foreign_p_choice.status_code == 422
     assert foreign_p_choice.json()["code"] == "INVALID_REFERENCE"
+
+    # User 2 has presentation
+    u2_p = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers_user_2,
+        json={"ingredient_id": u2_ing_id, "brand": "Marca Secreta U2", "package_quantity": "1000", "price_cents": 1500},
+    )
+    u2_p_id = u2_p.json()["id"]
+
+    # Even if DB has a version with foreign ingredient/presentation IDs,
+    # serialize_cost_version and list_cost_versions never reveal names from another workspace.
+    u1_rec = await Recipe.get(ObjectId(rec_id))
+    injected_cv = CostVersion(
+        workspace_id=u1_rec.workspace_id,
+        recipe_id=rec_id,
+        name="Versión con IDs de U2",
+        choices=[CostVersionChoice(ingredient_id=u2_ing_id, presentation_id=u2_p_id)],
+    )
+    await injected_cv.insert()
+
+    u1_versions_resp = await client.get(
+        f"/api/v1/recipes/{rec_id}/versions/",
+        headers=auth_headers,
+    )
+    assert u1_versions_resp.status_code == 200
+    injected_data = next(v for v in u1_versions_resp.json() if v["id"] == str(injected_cv.id))
+    assert injected_data["choices"][0]["ingredient_name"] == ""
+    assert injected_data["choices"][0]["brand"] == ""

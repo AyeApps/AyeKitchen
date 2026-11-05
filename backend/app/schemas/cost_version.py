@@ -1,6 +1,12 @@
 from datetime import datetime
+from typing import Annotated
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+
+CostVersionName = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=60),
+]
 
 
 class CostVersionChoiceInput(BaseModel):
@@ -9,12 +15,12 @@ class CostVersionChoiceInput(BaseModel):
 
 
 class CostVersionCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=60)
+    name: CostVersionName
     choices: list[CostVersionChoiceInput] = Field(default_factory=list)
 
 
 class CostVersionUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=60)
+    name: CostVersionName | None = None
     choices: list[CostVersionChoiceInput] | None = None
 
 

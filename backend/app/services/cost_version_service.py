@@ -88,20 +88,11 @@ async def _validate_choices(
                 else None
             )
 
-            if ing:
-                lower = ing.name.strip().lower()
-                if lower.startswith(("el ", "la ", "los ", "las ")):
-                    article = lower
-                else:
-                    first_word = lower.split()[0]
-                    article = (
-                        f"la {lower}"
-                        if first_word.endswith("a")
-                        else f"el {lower}"
-                    )
-                detail = f"Esa marca no es de {article}"
-            else:
-                detail = "Esa marca no es de este ingrediente"
+            detail = (
+                f"Esa marca no es de {ing.name}"
+                if ing
+                else "Esa marca no es de este ingrediente"
+            )
 
             raise AppError(
                 status_code=422,
@@ -126,12 +117,18 @@ async def serialize_cost_version(
     ]
 
     ingredients = (
-        await Ingredient.find({"_id": {"$in": ing_ids}}).to_list()
+        await Ingredient.find(
+            {"_id": {"$in": ing_ids}},
+            Ingredient.workspace_id == workspace_id,
+        ).to_list()
         if ing_ids
         else []
     )
     presentations = (
-        await Presentation.find({"_id": {"$in": pres_ids}}).to_list()
+        await Presentation.find(
+            {"_id": {"$in": pres_ids}},
+            Presentation.workspace_id == workspace_id,
+        ).to_list()
         if pres_ids
         else []
     )
@@ -214,12 +211,18 @@ async def list_cost_versions(
                 all_pres_ids.append(ObjectId(c.presentation_id))
 
     ingredients = (
-        await Ingredient.find({"_id": {"$in": all_ing_ids}}).to_list()
+        await Ingredient.find(
+            {"_id": {"$in": all_ing_ids}},
+            Ingredient.workspace_id == workspace_id,
+        ).to_list()
         if all_ing_ids
         else []
     )
     presentations = (
-        await Presentation.find({"_id": {"$in": all_pres_ids}}).to_list()
+        await Presentation.find(
+            {"_id": {"$in": all_pres_ids}},
+            Presentation.workspace_id == workspace_id,
+        ).to_list()
         if all_pres_ids
         else []
     )
