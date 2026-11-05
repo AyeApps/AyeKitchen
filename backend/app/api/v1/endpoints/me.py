@@ -1,7 +1,8 @@
 from fastapi import APIRouter
 
 from app.core.deps import CurrentUser, CurrentWorkspace
-from app.schemas.me import MeResponse, WorkspaceResponse
+from app.schemas.me import ChangesResponse, MeResponse, WorkspaceResponse
+from app.services.changes_service import get_workspace_changes
 
 router = APIRouter()
 
@@ -21,3 +22,9 @@ async def get_me(current_user: CurrentUser, workspace: CurrentWorkspace):
             price_stale_days=workspace.price_stale_days,
         ),
     )
+
+
+@router.get("/changes", response_model=ChangesResponse)
+async def get_changes(workspace: CurrentWorkspace):
+    return await get_workspace_changes(str(workspace.id))
+

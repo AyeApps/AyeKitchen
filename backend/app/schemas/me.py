@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel
 
 
@@ -15,3 +17,12 @@ class MeResponse(BaseModel):
     name: str
     avatar_url: str | None = None
     workspace: WorkspaceResponse
+
+
+class ChangesResponse(BaseModel):
+    home: datetime | None = None
+    orders: datetime | None = None
+    recipes: datetime | None = None
+    catalog: datetime | None = None
+    customers: datetime | None = None
+
