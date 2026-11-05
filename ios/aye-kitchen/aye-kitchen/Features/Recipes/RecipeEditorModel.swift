@@ -296,6 +296,8 @@ final class RecipeEditorModel {
             let units: [MeasureUnit] = try await NetworkService.shared.request(.get, "/units/")
             self.allUnits = units
             await resolvePinnedBrandNames()
+        } catch where error.isCancellation {
+            // Ignorar cancelación: no mostrar error
         } catch {
             self.unitsError = error.localizedDescription
         }
@@ -345,6 +347,8 @@ final class RecipeEditorModel {
                 )
                 return .subrecipe(id: rec.id, name: rec.name, yieldUnit: rec.yieldUnit)
             }
+        } catch where error.isCancellation {
+            return nil
         } catch {
             self.lineLoadErrorMessage = "No pudimos abrir este ingrediente. Revisa tu conexión e intenta de nuevo."
             return nil

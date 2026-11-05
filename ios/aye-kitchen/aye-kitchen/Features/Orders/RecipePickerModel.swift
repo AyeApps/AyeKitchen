@@ -32,6 +32,8 @@ final class RecipePickerModel {
                 query: queryItems
             )
             self.recipes = page.items
+        } catch where error.isCancellation {
+            // Cancelado: no mostrar error ni cambiar datos existentes
         } catch {
             self.errorMessage = (error as? APIError)?.localizedDescription ?? error.localizedDescription
         }

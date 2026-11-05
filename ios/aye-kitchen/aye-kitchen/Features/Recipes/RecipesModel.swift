@@ -113,6 +113,10 @@ final class RecipesModel {
             self.items = page.items
             self.totalPages = page.pages
             self.state = .loaded
+        } catch where error.isCancellation {
+            if !items.isEmpty {
+                self.state = .loaded
+            }
         } catch {
             self.state = .error(error.localizedDescription)
         }
@@ -131,6 +135,8 @@ final class RecipesModel {
             self.items.append(contentsOf: page.items)
             self.currentPage = nextPage
             self.totalPages = page.pages
+        } catch where error.isCancellation {
+            // Silencioso al paginar, mantiene los items existentes
         } catch {
             // Silencioso al paginar, mantiene los items existentes
         }
@@ -180,6 +186,11 @@ final class RecipesModel {
             self.hasLoadedOnce = true
             self.state = .loaded
             return true
+        } catch where error.isCancellation {
+            if hasLoadedOnce {
+                self.state = .loaded
+            }
+            return false
         } catch {
             if !hasLoadedOnce {
                 self.state = .error(error.localizedDescription)

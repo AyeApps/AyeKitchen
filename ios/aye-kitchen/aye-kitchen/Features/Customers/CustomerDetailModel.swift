@@ -38,6 +38,8 @@ import Observation
             )
             self.orders = page.items
             self.isLoadingOrders = false
+        } catch where error.isCancellation {
+            self.isLoadingOrders = false
         } catch let apiError as APIError {
             self.isLoadingOrders = false
             self.ordersErrorMessage = apiError.localizedDescription

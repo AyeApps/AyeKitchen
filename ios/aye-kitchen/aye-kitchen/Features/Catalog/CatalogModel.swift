@@ -224,6 +224,11 @@ enum CatalogLoadingState: Equatable, Sendable {
             self.hasLoadedOnce = true
             self.state = .loaded
             return true
+        } catch where error.isCancellation {
+            if !hasLoadedOnce {
+                self.state = .idle
+            }
+            return false
         } catch {
             if !hasLoadedOnce {
                 self.state = .error(error.localizedDescription)
@@ -266,6 +271,12 @@ enum CatalogLoadingState: Equatable, Sendable {
             }
             hasLoadedOnce = true
             state = .loaded
+        } catch where error.isCancellation {
+            if !hasLoadedOnce {
+                state = .idle
+            } else if state == .loading {
+                state = .loaded
+            }
         } catch let apiError as APIError {
             if !hasLoadedOnce {
                 state = .error(apiError.localizedDescription)

@@ -122,6 +122,10 @@ final class OrdersModel {
                     try await fetchDelivered()
                     rebuildSections()
                     state = .loaded
+                } catch where error.isCancellation {
+                    if hasLoadedPending {
+                        state = .loaded
+                    }
                 } catch {
                     if !hasLoadedDelivered {
                         state = .error(error.localizedDescription)
@@ -175,6 +179,12 @@ final class OrdersModel {
             rebuildSections()
             self.state = .loaded
             return true
+        } catch where error.isCancellation {
+            let hasData = filter == .delivered ? hasLoadedDelivered : hasLoadedPending
+            if hasData {
+                self.state = .loaded
+            }
+            return false
         } catch {
             let hasData = filter == .delivered ? hasLoadedDelivered : hasLoadedPending
             if !hasData {

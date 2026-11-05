@@ -26,6 +26,8 @@ import SwiftUI
             )
             self.prices = list
             self.isLoadingPrices = false
+        } catch where error.isCancellation {
+            self.isLoadingPrices = false
         } catch {
             self.isLoadingPrices = false
             self.errorMessage = error.localizedDescription
@@ -46,6 +48,8 @@ import SwiftUI
             let (updatedPres, updatedPrices) = try await (presTask, pricesTask)
             self.presentation = updatedPres
             self.prices = updatedPrices
+        } catch where error.isCancellation {
+            // Cancelado: no mostrar error ni cambiar datos existentes
         } catch {
             self.errorMessage = error.localizedDescription
         }

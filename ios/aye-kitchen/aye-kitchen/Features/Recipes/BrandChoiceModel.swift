@@ -40,6 +40,10 @@ final class BrandChoiceModel {
             )
             self.presentations = page.items
             self.state = .loaded
+        } catch where error.isCancellation {
+            if !presentations.isEmpty {
+                self.state = .loaded
+            }
         } catch {
             self.state = .error(error.localizedDescription)
         }

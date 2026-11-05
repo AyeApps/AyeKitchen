@@ -166,6 +166,10 @@ final class RecipeDetailModel {
             self.comparisons = loadedComparisons
             self.versions = loadedVersions
             self.state = .loaded
+        } catch where error.isCancellation {
+            if recipe != nil {
+                self.state = .loaded
+            }
         } catch {
             self.state = .error(error.localizedDescription)
         }
@@ -188,6 +192,9 @@ final class RecipeDetailModel {
                 query: costQuery
             )
             self.cost = loadedCost
+        } catch where error.isCancellation {
+            isLoadingCost = false
+            return
         } catch {
             self.actionErrorMessage = error.localizedDescription
         }
@@ -439,6 +446,8 @@ final class RecipeDetailModel {
                 )
                 self.activeDestination = .ingredient(ingredient)
             }
+        } catch where error.isCancellation {
+            return
         } catch {
             self.lineErrorMessage = error.localizedDescription
         }

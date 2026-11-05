@@ -186,6 +186,9 @@ import Foundation
             self.errorMessage = nil
             self.isLoading = false
             return true
+        } catch where error.isCancellation {
+            self.isLoading = false
+            return false
         } catch {
             self.isLoading = false
             if !hasLoadedOnce {

@@ -67,6 +67,12 @@ enum CustomersLoadingState: Equatable, Sendable {
                 )
                 self.customers = list
                 self.state = .loaded
+            } catch where error.isCancellation {
+                if !hasLoadedOnce && customers.isEmpty {
+                    self.state = .idle
+                } else if self.state == .loading {
+                    self.state = .loaded
+                }
             } catch let apiError as APIError {
                 self.state = .error(apiError.localizedDescription)
             } catch {
@@ -137,6 +143,11 @@ enum CustomersLoadingState: Equatable, Sendable {
             self.hasLoadedOnce = true
             self.state = .loaded
             return true
+        } catch where error.isCancellation {
+            if !hasLoadedOnce {
+                self.state = .idle
+            }
+            return false
         } catch {
             if !hasLoadedOnce {
                 self.state = .error(error.localizedDescription)

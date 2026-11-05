@@ -59,6 +59,8 @@ final class RecipeItemPickerModel {
                     "/recipes/\(editingRecipeId)/usable-as-subrecipe"
                 )
                 self.usableSubrecipes = subrecipes
+            } catch where error.isCancellation {
+                // Cancelado: no mostrar error ni cambiar datos existentes
             } catch {
                 self.errorMessage = error.localizedDescription
             }
@@ -70,6 +72,8 @@ final class RecipeItemPickerModel {
                     query: [URLQueryItem(name: "limit", value: "100")]
                 )
                 self.allRecipes = page.items
+            } catch where error.isCancellation {
+                // Cancelado: no mostrar error ni cambiar datos existentes
             } catch {
                 self.errorMessage = error.localizedDescription
             }
@@ -101,6 +105,8 @@ final class RecipeItemPickerModel {
                 query: queryItems
             )
             self.ingredients = page.items
+        } catch where error.isCancellation {
+            // Cancelado: no mostrar error ni cambiar datos existentes
         } catch {
             if !Task.isCancelled {
                 self.errorMessage = error.localizedDescription

@@ -334,6 +334,8 @@ final class OrderFormModel {
                         )
                         let (recipe, cost) = try await (recipeReq, costReq)
                         return (item.id, recipe, cost)
+                    } catch where error.isCancellation {
+                        return (item.id, nil, nil)
                     } catch {
                         return (item.id, nil, nil)
                     }
@@ -391,6 +393,8 @@ final class OrderFormModel {
                 costCalculationFailed: false
             )
             items.append(draft)
+        } catch where error.isCancellation {
+            return
         } catch {
             let draft = DraftOrderItem(
                 recipeId: recipe.id,
