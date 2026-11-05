@@ -9,6 +9,7 @@ from bson import ObjectId
 
 from app.core.errors import AppError
 from app.models.base import parse_decimal
+from app.models.cost_version import CostVersion
 from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation
 from app.models.recipe import ExtraCost, Recipe, RecipeItem, RecipeItemKind
@@ -533,6 +534,20 @@ async def update_recipe(
             )
             for it in data.items
         ]
+        active_ing_ids = {
+            it.ref_id for it in recipe.items if it.kind == RecipeItemKind.ingredient
+        }
+        active_versions = await CostVersion.find(
+            CostVersion.workspace_id == workspace_id,
+            CostVersion.recipe_id == str(recipe.id),
+            CostVersion.deleted_at == None,  # noqa: E711
+        ).to_list()
+        for v in active_versions:
+            new_choices = [c for c in v.choices if c.ingredient_id in active_ing_ids]
+            if len(new_choices) != len(v.choices):
+                v.choices = new_choices
+                v.updated_at = datetime.now(UTC)
+                await v.save()
     elif "yield_quantity" in data.model_fields_set and data.yield_quantity is not None:
         if yield_qty <= Decimal("0"):
             raise AppError(
@@ -583,6 +598,14 @@ async def delete_recipe(workspace_id: str, recipe_id: str) -> None:
         )
 
     await recipe.soft_delete()
+
+    versions = await CostVersion.find(
+        CostVersion.workspace_id == workspace_id,
+        CostVersion.recipe_id == str(recipe.id),
+        CostVersion.deleted_at == None,  # noqa: E711
+    ).to_list()
+    for v in versions:
+        await v.soft_delete()
 
 
 async def get_usable_as_subrecipe(

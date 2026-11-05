@@ -94,6 +94,7 @@ class CostLineResponse(BaseModel):
     presentation_id: str | None = None
     presentation_label: str | None = None
     pinned: bool = False
+    brand_source: str | None = None
     cost_cents: int
     missing_price: bool
     price_is_stale: bool = False
@@ -111,3 +112,5 @@ class RecipeCostResponse(BaseModel):
     suggested_price_cents: int
     complete: bool
     has_stale_prices: bool = False
+    version_id: str | None = None
+    version_name: str | None = None

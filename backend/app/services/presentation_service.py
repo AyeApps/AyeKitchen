@@ -8,6 +8,7 @@ from bson import ObjectId
 
 from app.core.errors import AppError
 from app.models.base import parse_decimal
+from app.models.cost_version import CostVersion
 from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation, PriceRecord
 from app.models.recipe import Recipe, RecipeItemKind
@@ -411,6 +412,18 @@ async def delete_presentation(workspace_id: str, presentation_id: str) -> None:
         )
 
     await presentation.soft_delete()
+
+    active_versions = await CostVersion.find(
+        CostVersion.workspace_id == workspace_id,
+        CostVersion.deleted_at == None,  # noqa: E711
+        {"choices.presentation_id": str(presentation.id)},
+    ).to_list()
+    for cv in active_versions:
+        cv.choices = [
+            c for c in cv.choices if c.presentation_id != str(presentation.id)
+        ]
+        cv.updated_at = datetime.now(UTC)
+        await cv.save()
 
 
 async def list_prices(workspace_id: str, presentation_id: str) -> list[PriceRecord]:

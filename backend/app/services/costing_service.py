@@ -4,6 +4,7 @@ from typing import Any, NamedTuple
 from bson import ObjectId
 
 from app.models.base import parse_decimal, round_to_cents
+from app.models.cost_version import CostVersion
 from app.models.ingredient import Ingredient
 from app.models.presentation import Presentation, PriceRecord
 from app.models.recipe import Recipe, RecipeItem, RecipeItemKind
@@ -26,6 +27,7 @@ class _IngredientCostResult(NamedTuple):
     price_cents: int | None
     unrounded_cost: Decimal
     price_is_stale: bool
+    brand_source: str | None
 
 
 async def _resolve_workspace(workspace_or_id: Workspace | str) -> Workspace:
@@ -45,12 +47,17 @@ async def _compute_ingredient_line_cost(
     workspace_or_id: Workspace | str,
     item: RecipeItem,
     ingredient: Ingredient,
+    chosen_presentation_id: str | None = None,
 ) -> _IngredientCostResult:
     """Función interna única para calcular el costo de una línea de ingrediente.
 
-    Devuelve: (quantity_in_base, presentation, pinned, price_cents, unrounded_cost, price_is_stale).
-    Si la presentación fijada está activa pero no tiene precio, se mantiene pinned=True,
-    sin usar la vigente, con costo 0, price_cents=None y price_is_stale=False.
+    Orden de resolución de marca:
+    i.   La elegida por la versión, si está activa y es de ese ingrediente.
+    ii.  Si no, la fijada en la línea de la receta.
+    iii. Si no, la vigente.
+
+    Si la elegida o la fijada está activa pero no tiene precio, se mantiene con costo 0,
+    price_cents=None y missing_price=True, sin caer a otra marca.
     """
     workspace = await _resolve_workspace(workspace_or_id)
     workspace_id = str(workspace.id) if workspace.id else str(workspace_or_id)
@@ -63,11 +70,29 @@ async def _compute_ingredient_line_cost(
     )
 
     pinned = False
+    brand_source: str | None = None
     pres: Presentation | None = None
     price_record: PriceRecord | None = None
     price_cents: int | None = None
 
-    if item.pinned_presentation_id and ObjectId.is_valid(item.pinned_presentation_id):
+    # i. La elegida por la versión, si está activa y es de ese ingrediente
+    if chosen_presentation_id and ObjectId.is_valid(chosen_presentation_id):
+        chosen_p = await Presentation.find_one(
+            Presentation.id == ObjectId(chosen_presentation_id),
+            Presentation.workspace_id == workspace_id,
+            Presentation.deleted_at == None,  # noqa: E711
+        )
+        if chosen_p and str(chosen_p.ingredient_id) == str(ingredient.id):
+            pres = chosen_p
+            brand_source = "version"
+            pinned = True
+            pr = await get_latest_price(workspace_id, str(chosen_p.id))
+            if pr:
+                price_record = pr
+                price_cents = pr.price_cents
+
+    # ii. Si no, la fijada en la línea
+    if pres is None and item.pinned_presentation_id and ObjectId.is_valid(item.pinned_presentation_id):
         pinned_p = await Presentation.find_one(
             Presentation.id == ObjectId(item.pinned_presentation_id),
             Presentation.workspace_id == workspace_id,
@@ -75,21 +100,26 @@ async def _compute_ingredient_line_cost(
         )
         if pinned_p and str(pinned_p.ingredient_id) == str(ingredient.id):
             pres = pinned_p
+            brand_source = "recipe"
             pinned = True
             pr = await get_latest_price(workspace_id, str(pinned_p.id))
             if pr:
                 price_record = pr
                 price_cents = pr.price_cents
 
-    if not pinned or pres is None:
-        pinned = False
+    # iii. Si no, la vigente
+    if pres is None:
         curr = await get_current_presentation(workspace_id, str(ingredient.id))
         if curr:
             pres = curr.presentation
+            brand_source = "current"
+            pinned = False
             price_record = curr.price_record
             price_cents = curr.price_record.price_cents
         else:
             pres = None
+            brand_source = None
+            pinned = False
             price_record = None
             price_cents = None
 
@@ -114,6 +144,7 @@ async def _compute_ingredient_line_cost(
         price_cents=price_cents,
         unrounded_cost=unrounded_cost,
         price_is_stale=price_is_stale,
+        brand_source=brand_source,
     )
 
 
@@ -234,6 +265,7 @@ async def calculate_recipe_cost(
     workspace_id: str,
     recipe: Recipe,
     cache: dict[str, Any] | None = None,
+    version: CostVersion | None = None,
 ) -> RecipeCostResponse:
     """Calcula el costo detallado de una receta según el contrato de la API.
 
@@ -245,6 +277,12 @@ async def calculate_recipe_cost(
 
     workspace = await _resolve_workspace(workspace_id)
     ws_id = str(workspace.id) if workspace.id else str(workspace_id)
+
+    version_choices: dict[str, str] = (
+        {c.ingredient_id: c.presentation_id for c in version.choices}
+        if version
+        else {}
+    )
 
     lines: list[CostLineResponse] = []
     unrounded_line_costs: list[Decimal] = []
@@ -276,6 +314,7 @@ async def calculate_recipe_cost(
                         presentation_id=None,
                         presentation_label=None,
                         pinned=False,
+                        brand_source=None,
                         cost_cents=0,
                         missing_price=True,
                         price_is_stale=False,
@@ -284,10 +323,12 @@ async def calculate_recipe_cost(
                 unrounded_line_costs.append(Decimal("0"))
                 continue
 
+            chosen_pres_id = version_choices.get(item.ref_id)
             cost_res = await _compute_ingredient_line_cost(
                 workspace,
                 item,
                 ingredient,
+                chosen_presentation_id=chosen_pres_id,
             )
 
             presentation_label: str | None = None
@@ -339,6 +380,7 @@ async def calculate_recipe_cost(
                     presentation_id=presentation_id,
                     presentation_label=presentation_label,
                     pinned=cost_res.pinned,
+                    brand_source=cost_res.brand_source,
                     cost_cents=round_to_cents(cost_res.unrounded_cost),
                     missing_price=missing_price,
                     price_is_stale=cost_res.price_is_stale,
@@ -365,6 +407,7 @@ async def calculate_recipe_cost(
                         presentation_id=None,
                         presentation_label=None,
                         pinned=False,
+                        brand_source=None,
                         cost_cents=0,
                         missing_price=True,
                         price_is_stale=False,
@@ -408,6 +451,7 @@ async def calculate_recipe_cost(
                     presentation_id=None,
                     presentation_label=None,
                     pinned=False,
+                    brand_source=None,
                     cost_cents=round_to_cents(line_unrounded_cost),
                     missing_price=missing_price,
                     price_is_stale=sub_stale,
@@ -455,8 +499,11 @@ async def calculate_recipe_cost(
     complete = all(not line.missing_price for line in lines)
     has_stale_prices = any(line.price_is_stale for line in lines)
 
-    if recipe.id:
+    if recipe.id and version is None:
         cache[str(recipe.id)] = (unrounded_batch_cost, complete, has_stale_prices)
+
+    version_id = str(version.id) if (version and version.id) else None
+    version_name = version.name if version else None
 
     return RecipeCostResponse(
         recipe_id=str(recipe.id) if recipe.id else "",
@@ -470,4 +517,6 @@ async def calculate_recipe_cost(
         suggested_price_cents=suggested_price_cents,
         complete=complete,
         has_stale_prices=has_stale_prices,
+        version_id=version_id,
+        version_name=version_name,
     )
