@@ -1,4 +1,5 @@
 import Foundation
+import KitchenDomain
 
 /// El dinero viaja en centavos enteros (`*_cents`) y solo se convierte a texto para mostrarlo.
 nonisolated enum Money {
@@ -10,6 +11,11 @@ nonisolated enum Money {
     /// Precio por unidad comparable entre marcas, desde `cost_per_base_unit` (centavos por g/ml/pz).
     /// g → "$23.50 el kg", ml → "$23.50 el litro", pz → "$3.20 la pieza". Nulo si el texto no es un número.
     static func formatPerUnit(costPerBaseUnit: String, baseUnit: RemoteBaseUnit) -> String? {
+        formatPerUnit(costPerBaseUnit: costPerBaseUnit, baseUnit: BaseUnit(rawValue: baseUnit.rawValue) ?? .g)
+    }
+
+    /// Igual, con la unidad de KitchenDomain (pantallas locales).
+    static func formatPerUnit(costPerBaseUnit: String, baseUnit: BaseUnit) -> String? {
         guard let perBase = Decimal(string: costPerBaseUnit, locale: Locale(identifier: "en_US_POSIX")) else {
             return nil
         }
