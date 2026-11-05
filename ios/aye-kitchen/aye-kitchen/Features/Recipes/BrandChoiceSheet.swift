@@ -43,7 +43,7 @@ struct BrandChoiceSheet: View {
                         baseVersionWarning
                     }
 
-                    if let error = actionErrorMessage ?? loadErrorMessage {
+                    if let error = actionErrorMessage ?? bannerLoadErrorMessage {
                         HStack(alignment: .top, spacing: Spacing.sm) {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .foregroundStyle(.warningText)
@@ -106,6 +106,12 @@ struct BrandChoiceSheet: View {
             return msg
         }
         return nil
+    }
+
+    /// Con la lista vacía, el error de carga ya lo muestra `ErrorStateView`; el aviso solo
+    /// aparece si había marcas en pantalla y falló una recarga.
+    private var bannerLoadErrorMessage: String? {
+        model.presentations.isEmpty ? nil : loadErrorMessage
     }
 
     // MARK: - Subvistas
