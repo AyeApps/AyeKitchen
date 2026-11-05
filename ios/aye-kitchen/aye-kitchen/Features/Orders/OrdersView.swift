@@ -29,7 +29,7 @@ struct OrdersView: View {
                         }
                     }
                 }
-                .navigationDestination(for: Order.self) { order in
+                .navigationDestination(for: RemoteOrder.self) { order in
                     OrderDetailView(
                         order: order,
                         onOrderUpdated: { updated in
@@ -146,7 +146,7 @@ struct OrdersView: View {
 
 /// Fila individual de pedido con soporte para Dynamic Type y accesibilidad.
 struct OrderRow: View {
-    let order: Order
+    let order: RemoteOrder
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {

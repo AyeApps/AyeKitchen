@@ -15,11 +15,11 @@ nonisolated struct SupplierUpdateRequest: Encodable, Sendable {
 // MARK: - Modelo de Tiendas
 
 @Observable final class SuppliersModel {
-    var suppliers: [Supplier] = []
+    var suppliers: [RemoteSupplier] = []
     var isLoading = false
     var errorMessage: String?
 
-    init(mockSuppliers: [Supplier]? = nil) {
+    init(mockSuppliers: [RemoteSupplier]? = nil) {
         if let mockSuppliers {
             self.suppliers = mockSuppliers
         }
@@ -29,7 +29,7 @@ nonisolated struct SupplierUpdateRequest: Encodable, Sendable {
         isLoading = true
         errorMessage = nil
         do {
-            let list: [Supplier] = try await NetworkService.shared.request(.get, "/suppliers/")
+            let list: [RemoteSupplier] = try await NetworkService.shared.request(.get, "/suppliers/")
             self.suppliers = list
             self.isLoading = false
         } catch {
@@ -44,7 +44,7 @@ nonisolated struct SupplierUpdateRequest: Encodable, Sendable {
         errorMessage = nil
         do {
             let body = SupplierCreateRequest(name: trimmed, notes: nil)
-            let created: Supplier = try await NetworkService.shared.request(.post, "/suppliers/", body: body)
+            let created: RemoteSupplier = try await NetworkService.shared.request(.post, "/suppliers/", body: body)
             suppliers.append(created)
             suppliers.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
         } catch {
@@ -58,7 +58,7 @@ nonisolated struct SupplierUpdateRequest: Encodable, Sendable {
         errorMessage = nil
         do {
             let body = SupplierUpdateRequest(name: trimmed, notes: nil)
-            let updated: Supplier = try await NetworkService.shared.request(.patch, "/suppliers/\(id)", body: body)
+            let updated: RemoteSupplier = try await NetworkService.shared.request(.patch, "/suppliers/\(id)", body: body)
             if let index = suppliers.firstIndex(where: { $0.id == id }) {
                 suppliers[index] = updated
                 suppliers.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
@@ -89,17 +89,17 @@ struct SuppliersView: View {
     @State private var searchText = ""
     @State private var showingAddAlert = false
     @State private var newSupplierName = ""
-    @State private var supplierToRename: Supplier?
+    @State private var supplierToRename: RemoteSupplier?
     @State private var showingRenameAlert = false
     @State private var renameSupplierName = ""
-    @State private var supplierToDelete: Supplier?
+    @State private var supplierToDelete: RemoteSupplier?
     @State private var showingDeleteConfirmation = false
 
     init(model: SuppliersModel = SuppliersModel()) {
         self._model = State(initialValue: model)
     }
 
-    var filteredSuppliers: [Supplier] {
+    var filteredSuppliers: [RemoteSupplier] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
             return model.suppliers
@@ -247,22 +247,22 @@ struct SuppliersView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockSuppliersData: [Supplier] = [
-    Supplier(
+private let mockSuppliersData: [RemoteSupplier] = [
+    RemoteSupplier(
         id: "sup_1",
         name: "Costco",
         notes: nil,
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Supplier(
+    RemoteSupplier(
         id: "sup_2",
         name: "Mercado Central",
         notes: nil,
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Supplier(
+    RemoteSupplier(
         id: "sup_3",
         name: "Walmart",
         notes: nil,

@@ -12,6 +12,6 @@ nonisolated struct Page<Item: Decodable & Sendable>: Decodable, Sendable {
 }
 
 /// Unidad base de ingredientes, presentaciones y rendimiento de recetas.
-nonisolated enum BaseUnit: String, Codable, Sendable, Hashable, CaseIterable {
+nonisolated enum RemoteBaseUnit: String, Codable, Sendable, Hashable, CaseIterable {
     case g, ml, pz
 }

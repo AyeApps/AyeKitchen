@@ -51,6 +51,17 @@ actor NetworkService {
         return decoded
     }
 
+    /// JSON crudo de ida y vuelta, sin convertir llaves ni fechas: para el respaldo, que ya viene
+    /// codificado por `KitchenCoding` y debe llegar al servidor y volver byte por byte.
+    func requestRawJSON(
+        _ method: HTTPMethod,
+        _ path: String,
+        query: [URLQueryItem] = [],
+        json: Data? = nil
+    ) async throws -> Data {
+        try await perform(method, AppConfig.apiBaseURL, path, query: query, body: json.map(RawJSONBody.init), authorized: true)
+    }
+
     /// Guarda la cuenta en la caché como si viniera de `GET /me/`, una vez elegida la carpeta de
     /// esa cuenta (así abre sin red la próxima vez).
     func cacheMe(_ me: Me) async {
@@ -134,7 +145,10 @@ actor NetworkService {
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let body {
+        if let raw = body as? RawJSONBody {
+            request.httpBody = raw.data
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        } else if let body {
             request.httpBody = try JSONCoding.encode(body)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
@@ -238,4 +252,15 @@ private nonisolated struct RefreshBody: Encodable, Sendable {
 private nonisolated struct TokenResponse: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String
+}
+
+/// Cuerpo que ya es JSON: `perform` lo manda tal cual.
+nonisolated struct RawJSONBody: Encodable, Sendable {
+    let data: Data
+
+    func encode(to encoder: Encoder) throws {
+        // Nunca se codifica: `perform` reconoce el tipo y usa `data` directo.
+        var container = encoder.singleValueContainer()
+        try container.encodeNil()
+    }
 }

@@ -10,11 +10,11 @@ enum CustomersLoadingState: Equatable, Sendable {
 
 /// ViewModel para la lista de clientes (`CustomersView`, MVVM, Regla 5 / Bloque I13).
 @Observable final class CustomersModel {
-    var customers: [Customer] = []
+    var customers: [RemoteCustomer] = []
     var state: CustomersLoadingState = .idle
     var actionErrorMessage: String? = nil
     private(set) var isMock: Bool = false
-    private var allMockCustomers: [Customer] = []
+    private var allMockCustomers: [RemoteCustomer] = []
     private var hasLoadedOnce: Bool = false
     private(set) var currentSearchQuery: String? = nil
 
@@ -25,7 +25,7 @@ enum CustomersLoadingState: Equatable, Sendable {
         return !query.isEmpty
     }
 
-    init(mockCustomers: [Customer]? = nil) {
+    init(mockCustomers: [RemoteCustomer]? = nil) {
         if let mockCustomers {
             self.customers = mockCustomers.sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
             self.allMockCustomers = self.customers
@@ -60,7 +60,7 @@ enum CustomersLoadingState: Equatable, Sendable {
             }
             actionErrorMessage = nil
             do {
-                let list: [Customer] = try await NetworkService.shared.request(
+                let list: [RemoteCustomer] = try await NetworkService.shared.request(
                     .get,
                     "/customers/",
                     query: [URLQueryItem(name: "q", value: trimmed!)]
@@ -121,7 +121,7 @@ enum CustomersLoadingState: Equatable, Sendable {
     /// Lee la copia guardada en disco de la primera pantalla sin búsqueda.
     private func loadFromCache() async -> Bool {
         guard !isMock else { return true }
-        guard let list: [Customer] = await NetworkService.shared.cached("/customers/", query: []) else {
+        guard let list: [RemoteCustomer] = await NetworkService.shared.cached("/customers/", query: []) else {
             return false
         }
         self.customers = list
@@ -135,7 +135,7 @@ enum CustomersLoadingState: Equatable, Sendable {
     func reloadSilently() async -> Bool {
         guard !isMock else { return true }
         do {
-            let list: [Customer] = try await NetworkService.shared.requestCaching(
+            let list: [RemoteCustomer] = try await NetworkService.shared.requestCaching(
                 "/customers/",
                 query: []
             )
@@ -174,7 +174,7 @@ enum CustomersLoadingState: Equatable, Sendable {
     }
 
     /// Agrega o reemplaza un cliente por id, manteniendo la lista ordenada por nombre. Usado por I7b.
-    func upsertCustomer(_ customer: Customer) {
+    func upsertCustomer(_ customer: RemoteCustomer) {
         if let index = customers.firstIndex(where: { $0.id == customer.id }) {
             customers[index] = customer
         } else {

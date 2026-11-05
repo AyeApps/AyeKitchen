@@ -7,7 +7,7 @@ struct RecipeItemPicker: View {
     @State private var model: RecipeItemPickerModel
     @State private var selectedTarget: LineTarget?
     @State private var showingNewIngredientSheet = false
-    @State private var pendingTargetIngredient: Ingredient?
+    @State private var pendingTargetIngredient: RemoteIngredient?
 
     let allUnits: [MeasureUnit]
     let onSelectLine: @MainActor @Sendable (RecipeEditorLine) -> Void
@@ -15,9 +15,9 @@ struct RecipeItemPicker: View {
     init(
         editingRecipeId: String? = nil,
         allUnits: [MeasureUnit],
-        mockIngredients: [Ingredient]? = nil,
+        mockIngredients: [RemoteIngredient]? = nil,
         mockSubrecipes: [UsableSubrecipe]? = nil,
-        mockAllRecipes: [RecipeListItem]? = nil,
+        mockAllRecipes: [RemoteRecipeListItem]? = nil,
         onSelectLine: @escaping @MainActor @Sendable (RecipeEditorLine) -> Void
     ) {
         _model = State(initialValue: RecipeItemPickerModel(
@@ -245,7 +245,7 @@ private let previewUnits: [MeasureUnit] = [
 
 #Preview("Selector de ingredientes y recetas") {
     let mockIngredients = [
-        Ingredient(
+        RemoteIngredient(
             id: "ing-1",
             name: "Harina de trigo",
             baseUnit: .g,
@@ -255,7 +255,7 @@ private let previewUnits: [MeasureUnit] = [
             createdAt: .now,
             updatedAt: .now
         ),
-        Ingredient(
+        RemoteIngredient(
             id: "ing-2",
             name: "Leche entera",
             baseUnit: .ml,
@@ -265,7 +265,7 @@ private let previewUnits: [MeasureUnit] = [
             createdAt: .now,
             updatedAt: .now
         ),
-        Ingredient(
+        RemoteIngredient(
             id: "ing-3",
             name: "Huevo",
             baseUnit: .pz,
@@ -289,7 +289,7 @@ private let previewUnits: [MeasureUnit] = [
 
 #Preview("Selector - Accesibilidad AX3") {
     let mockIngredients = [
-        Ingredient(
+        RemoteIngredient(
             id: "ing-1",
             name: "Harina de trigo",
             baseUnit: .g,

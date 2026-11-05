@@ -13,10 +13,10 @@ enum BrandChoiceLoadingState: Equatable, Sendable {
 final class BrandChoiceModel {
     let ingredientId: String
 
-    var presentations: [Presentation] = []
+    var presentations: [RemotePresentation] = []
     var state: BrandChoiceLoadingState = .loading
 
-    init(ingredientId: String, mockPresentations: [Presentation]? = nil) {
+    init(ingredientId: String, mockPresentations: [RemotePresentation]? = nil) {
         self.ingredientId = ingredientId
         if let mockPresentations {
             self.presentations = mockPresentations
@@ -30,7 +30,7 @@ final class BrandChoiceModel {
         state = .loading
 
         do {
-            let page: Page<Presentation> = try await NetworkService.shared.request(
+            let page: Page<RemotePresentation> = try await NetworkService.shared.request(
                 .get,
                 "/presentations/",
                 query: [

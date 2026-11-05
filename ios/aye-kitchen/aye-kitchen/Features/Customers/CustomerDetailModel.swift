@@ -3,13 +3,13 @@ import Observation
 
 /// ViewModel para la pantalla de detalle de cliente (`CustomerDetailView`).
 @Observable final class CustomerDetailModel {
-    var customer: Customer
-    var orders: [Order] = []
+    var customer: RemoteCustomer
+    var orders: [RemoteOrder] = []
     var isLoadingOrders: Bool = false
     var ordersErrorMessage: String? = nil
     private(set) var isMock: Bool = false
 
-    init(customer: Customer, mockOrders: [Order]? = nil, isMock: Bool = false) {
+    init(customer: RemoteCustomer, mockOrders: [RemoteOrder]? = nil, isMock: Bool = false) {
         self.customer = customer
         if let mockOrders {
             self.orders = mockOrders
@@ -19,7 +19,7 @@ import Observation
         }
     }
 
-    func updateCustomer(_ updated: Customer) {
+    func updateCustomer(_ updated: RemoteCustomer) {
         self.customer = updated
     }
 
@@ -28,7 +28,7 @@ import Observation
         isLoadingOrders = true
         ordersErrorMessage = nil
         do {
-            let page: Page<Order> = try await NetworkService.shared.request(
+            let page: Page<RemoteOrder> = try await NetworkService.shared.request(
                 .get,
                 "/orders/",
                 query: [

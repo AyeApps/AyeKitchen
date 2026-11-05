@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Cuerpo de la petición para cambiar de estado un pedido.
 nonisolated struct OrderStatusPatch: Encodable, Sendable {
-    let status: OrderStatus
+    let status: RemoteOrderStatus
 }
 
 /// Cuerpo de la petición para registrar un pago.
@@ -15,24 +15,24 @@ nonisolated struct PaymentCreateBody: Encodable, Sendable {
 /// Modelo de presentación para el detalle de un pedido (MVVM, Regla 5).
 @Observable
 final class OrderDetailModel {
-    var order: Order
+    var order: RemoteOrder
     var isWorking = false
     var errorMessage: String?
 
-    init(order: Order) {
+    init(order: RemoteOrder) {
         self.order = order
     }
 
     /// Cambia el estado del pedido:
     /// PATCH /orders/{id} solo con status.
-    func updateStatus(_ newStatus: OrderStatus) async throws {
+    func updateStatus(_ newStatus: RemoteOrderStatus) async throws {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
         do {
             let body = OrderStatusPatch(status: newStatus)
-            let updated: Order = try await NetworkService.shared.request(
+            let updated: RemoteOrder = try await NetworkService.shared.request(
                 .patch,
                 "/orders/\(order.id)",
                 body: body
@@ -60,14 +60,14 @@ final class OrderDetailModel {
     }
 
     /// Borra un pago registrado:
-    /// DELETE /orders/{id}/payments/{payment_id} (devuelve el Order actualizado)
+    /// DELETE /orders/{id}/payments/{payment_id} (devuelve el RemoteOrder actualizado)
     func deletePayment(id: String) async throws {
         isWorking = true
         errorMessage = nil
         defer { isWorking = false }
 
         do {
-            let updated: Order = try await NetworkService.shared.request(
+            let updated: RemoteOrder = try await NetworkService.shared.request(
                 .delete,
                 "/orders/\(order.id)/payments/\(id)"
             )
@@ -79,7 +79,7 @@ final class OrderDetailModel {
     }
 
     /// Registra un nuevo pago en el pedido:
-    /// POST /orders/{id}/payments (devuelve el Order actualizado)
+    /// POST /orders/{id}/payments (devuelve el RemoteOrder actualizado)
     func addPayment(amountCents: Int, method: String) async throws {
         isWorking = true
         errorMessage = nil
@@ -90,7 +90,7 @@ final class OrderDetailModel {
                 amountCents: amountCents,
                 method: method
             )
-            let updated: Order = try await NetworkService.shared.request(
+            let updated: RemoteOrder = try await NetworkService.shared.request(
                 .post,
                 "/orders/\(order.id)/payments",
                 body: body

@@ -2,20 +2,20 @@ import Foundation
 
 // Recetas y costo según docs/api-contract.md (B3).
 
-nonisolated enum RecipeItemKind: String, Codable, Sendable, Hashable {
+nonisolated enum RemoteRecipeItemKind: String, Codable, Sendable, Hashable {
     case ingredient
     case recipe
 }
 
 /// `/recipes/{id}`
-nonisolated struct Recipe: Decodable, Sendable, Hashable, Identifiable {
+nonisolated struct RemoteRecipe: Decodable, Sendable, Hashable, Identifiable {
     let id: String
     let name: String
     let description: String?
-    let items: [RecipeItem]
-    let extraCosts: [ExtraCost]
+    let items: [RemoteRecipeItem]
+    let extraCosts: [RemoteExtraCost]
     let yieldQuantity: String
-    let yieldUnit: BaseUnit
+    let yieldUnit: RemoteBaseUnit
     let servings: Int?
     /// Nulo = usa el margen del workspace.
     let marginPercent: Int?
@@ -23,8 +23,8 @@ nonisolated struct Recipe: Decodable, Sendable, Hashable, Identifiable {
     let updatedAt: Date
 }
 
-nonisolated struct RecipeItem: Decodable, Sendable, Hashable {
-    let kind: RecipeItemKind
+nonisolated struct RemoteRecipeItem: Decodable, Sendable, Hashable {
+    let kind: RemoteRecipeItemKind
     let refId: String
     let refName: String
     let quantity: String
@@ -34,14 +34,14 @@ nonisolated struct RecipeItem: Decodable, Sendable, Hashable {
 }
 
 /// Costos fijos de la receta (caja, gas).
-nonisolated struct ExtraCost: Decodable, Sendable, Hashable {
+nonisolated struct RemoteExtraCost: Decodable, Sendable, Hashable {
     let name: String
     let costCents: Int
 }
 
 /// Item de `GET /recipes/`: la receta más su costo de tanda.
-nonisolated struct RecipeListItem: Decodable, Sendable, Hashable, Identifiable {
-    let recipe: Recipe
+nonisolated struct RemoteRecipeListItem: Decodable, Sendable, Hashable, Identifiable {
+    let recipe: RemoteRecipe
     /// Nulo si el costo no se pudo calcular.
     let batchCostCents: Int?
     let complete: Bool
@@ -53,7 +53,7 @@ nonisolated struct RecipeListItem: Decodable, Sendable, Hashable, Identifiable {
     }
 
     init(from decoder: Decoder) throws {
-        recipe = try Recipe(from: decoder)
+        recipe = try RemoteRecipe(from: decoder)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         batchCostCents = try container.decodeIfPresent(Int.self, forKey: .batchCostCents)
         complete = try container.decode(Bool.self, forKey: .complete)
@@ -64,11 +64,11 @@ nonisolated struct RecipeListItem: Decodable, Sendable, Hashable, Identifiable {
 nonisolated struct UsableSubrecipe: Decodable, Sendable, Hashable, Identifiable {
     let id: String
     let name: String
-    let yieldUnit: BaseUnit
+    let yieldUnit: RemoteBaseUnit
 }
 
 /// `GET /recipes/{id}/cost`
-nonisolated struct RecipeCost: Decodable, Sendable, Hashable {
+nonisolated struct RemoteRecipeCost: Decodable, Sendable, Hashable {
     let recipeId: String
     let lines: [CostLine]
     let ingredientsCostCents: Int
@@ -90,7 +90,7 @@ nonisolated struct RecipeCost: Decodable, Sendable, Hashable {
 }
 
 /// B6b. De dónde salió la marca de una línea de costo.
-nonisolated enum BrandSource: String, Decodable, Sendable, Hashable {
+nonisolated enum RemoteBrandSource: String, Decodable, Sendable, Hashable {
     /// La eligió la versión de costeo.
     case version
     /// Fijada en la línea de la receta.
@@ -100,13 +100,13 @@ nonisolated enum BrandSource: String, Decodable, Sendable, Hashable {
 }
 
 nonisolated struct CostLine: Decodable, Sendable, Hashable {
-    let kind: RecipeItemKind
+    let kind: RemoteRecipeItemKind
     let refId: String
     let refName: String
     let quantity: String
     let unitName: String?
     let quantityInBase: String
-    let baseUnit: BaseUnit
+    let baseUnit: RemoteBaseUnit
     let presentationId: String?
     /// "Marca X · Walmart · 1000 g"
     let presentationLabel: String?
@@ -115,20 +115,20 @@ nonisolated struct CostLine: Decodable, Sendable, Hashable {
     let missingPrice: Bool
     let priceIsStale: Bool
     /// B6b. Nulo en subrecetas y en líneas sin marca.
-    var brandSource: BrandSource? = nil
+    var brandSource: RemoteBrandSource? = nil
 }
 
 /// `GET/POST/PATCH /recipes/{id}/versions/` (B6b)
-nonisolated struct CostVersion: Decodable, Sendable, Hashable, Identifiable {
+nonisolated struct RemoteCostVersion: Decodable, Sendable, Hashable, Identifiable {
     let id: String
     let recipeId: String
     let name: String
-    let choices: [CostVersionChoice]
+    let choices: [RemoteCostVersionChoice]
     let createdAt: Date
     let updatedAt: Date
 }
 
-nonisolated struct CostVersionChoice: Decodable, Sendable, Hashable {
+nonisolated struct RemoteCostVersionChoice: Decodable, Sendable, Hashable {
     let ingredientId: String
     let ingredientName: String
     let presentationId: String
@@ -136,7 +136,7 @@ nonisolated struct CostVersionChoice: Decodable, Sendable, Hashable {
 }
 
 /// Fila de `GET /recipes/{id}/versions/compare` (B6b). `versionId` nulo = la base.
-nonisolated struct CostVersionComparison: Decodable, Sendable, Hashable {
+nonisolated struct RemoteCostVersionComparison: Decodable, Sendable, Hashable {
     let versionId: String?
     let name: String
     let batchCostCents: Int

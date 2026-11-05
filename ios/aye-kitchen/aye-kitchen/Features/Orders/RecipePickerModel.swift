@@ -5,12 +5,12 @@ import SwiftUI
 @Observable
 final class RecipePickerModel {
     var query: String = ""
-    var recipes: [RecipeListItem] = []
+    var recipes: [RemoteRecipeListItem] = []
     var isLoading: Bool = false
     var errorMessage: String?
     var selectingId: String?
 
-    init(recipes: [RecipeListItem] = []) {
+    init(recipes: [RemoteRecipeListItem] = []) {
         self.recipes = recipes
     }
 
@@ -26,7 +26,7 @@ final class RecipePickerModel {
         }
 
         do {
-            let page: Page<RecipeListItem> = try await NetworkService.shared.request(
+            let page: Page<RemoteRecipeListItem> = try await NetworkService.shared.request(
                 .get,
                 "/recipes/",
                 query: queryItems

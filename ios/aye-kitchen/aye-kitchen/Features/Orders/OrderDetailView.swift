@@ -9,14 +9,14 @@ struct OrderDetailView: View {
     @State private var showingEditSheet = false
     @State private var showingDeleteOrderConfirmation = false
     @State private var showingRecordPaymentSheet = false
-    @State private var paymentToDelete: Payment?
+    @State private var paymentToDelete: RemotePayment?
 
-    var onOrderUpdated: ((Order) -> Void)?
+    var onOrderUpdated: ((RemoteOrder) -> Void)?
     var onOrderDeleted: ((String) -> Void)?
 
     init(
-        order: Order,
-        onOrderUpdated: ((Order) -> Void)? = nil,
+        order: RemoteOrder,
+        onOrderUpdated: ((RemoteOrder) -> Void)? = nil,
         onOrderDeleted: ((String) -> Void)? = nil
     ) {
         _model = State(initialValue: OrderDetailModel(order: order))
@@ -172,7 +172,7 @@ struct OrderDetailView: View {
 
     private var statusMenu: some View {
         Menu {
-            ForEach(OrderStatus.allCases, id: \.self) { status in
+            ForEach(RemoteOrderStatus.allCases, id: \.self) { status in
                 Button {
                     Task {
                         do {
@@ -259,7 +259,7 @@ struct OrderDetailView: View {
         }
     }
 
-    private func itemQuantityPriceDescription(for item: OrderItem) -> String {
+    private func itemQuantityPriceDescription(for item: RemoteOrderItem) -> String {
         let mode = item.soldBy ?? .batch
         let qtyFormatted = Quantity.format(item.quantity)
         let priceFormatted = Money.format(cents: item.unitPriceCents)
@@ -398,7 +398,7 @@ struct OrderDetailView: View {
         }
     }
 
-    private func paymentRow(payment: Payment) -> some View {
+    private func paymentRow(payment: RemotePayment) -> some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 Text(Money.format(cents: payment.amountCents))
@@ -457,7 +457,7 @@ struct OrderDetailView: View {
 }
 
 #if DEBUG
-private let mockOrderWithPieceAndBatch = Order(
+private let mockOrderWithPieceAndBatch = RemoteOrder(
     id: "order-preview-piece-batch",
     customerName: "Mariana Rojas",
     customerPhone: "5512345678",
@@ -465,7 +465,7 @@ private let mockOrderWithPieceAndBatch = Order(
     status: .inProgress,
     notes: "Entregar en caja de regalo.",
     items: [
-        OrderItem(
+        RemoteOrderItem(
             recipeId: "rec-1",
             recipeName: "Galletas con chispas",
             quantity: "4",
@@ -474,7 +474,7 @@ private let mockOrderWithPieceAndBatch = Order(
             soldBy: .unit,
             unitLabel: .pz
         ),
-        OrderItem(
+        RemoteOrderItem(
             recipeId: "rec-2",
             recipeName: "Pastel de zanahoria",
             quantity: "1",
@@ -485,7 +485,7 @@ private let mockOrderWithPieceAndBatch = Order(
         )
     ],
     payments: [
-        Payment(id: "pay-1", amountCents: 10000, paidAt: Date.now, method: "transferencia")
+        RemotePayment(id: "pay-1", amountCents: 10000, paidAt: Date.now, method: "transferencia")
     ],
     totalCents: 20800,
     paidCents: 10000,

@@ -13,12 +13,12 @@ struct RecipeEditorView: View {
     @State private var editingTarget: LineTarget?
     @State private var editingExistingLine: RecipeEditorLine?
 
-    let onSave: @MainActor @Sendable (Recipe) -> Void
+    let onSave: @MainActor @Sendable (RemoteRecipe) -> Void
 
     init(
-        recipe: Recipe? = nil,
+        recipe: RemoteRecipe? = nil,
         mockUnits: [MeasureUnit]? = nil,
-        onSave: @escaping @MainActor @Sendable (Recipe) -> Void
+        onSave: @escaping @MainActor @Sendable (RemoteRecipe) -> Void
     ) {
         _model = State(initialValue: RecipeEditorModel(recipe: recipe, mockUnits: mockUnits))
         self.onSave = onSave
@@ -183,18 +183,18 @@ struct RecipeEditorView: View {
 
                 if dynamicTypeSize.isAccessibilitySize {
                     Picker("Unidad de rendimiento", selection: $model.yieldUnit) {
-                        Text("Piezas").tag(BaseUnit.pz)
-                        Text("Gramos").tag(BaseUnit.g)
-                        Text("Mililitros").tag(BaseUnit.ml)
+                        Text("Piezas").tag(RemoteBaseUnit.pz)
+                        Text("Gramos").tag(RemoteBaseUnit.g)
+                        Text("Mililitros").tag(RemoteBaseUnit.ml)
                     }
                     .pickerStyle(.menu)
                     .font(.body.weight(.bold))
                     .tint(Color.accentColor)
                 } else {
                     Picker("Unidad de rendimiento", selection: $model.yieldUnit) {
-                        Text("Piezas").tag(BaseUnit.pz)
-                        Text("Gramos").tag(BaseUnit.g)
-                        Text("Mililitros").tag(BaseUnit.ml)
+                        Text("Piezas").tag(RemoteBaseUnit.pz)
+                        Text("Gramos").tag(RemoteBaseUnit.g)
+                        Text("Mililitros").tag(RemoteBaseUnit.ml)
                     }
                     .pickerStyle(.segmented)
                 }
@@ -372,7 +372,7 @@ struct RecipeEditorView: View {
         }
     }
 
-    private func extraCostRow(_ cost: ExtraCost) -> some View {
+    private func extraCostRow(_ cost: RemoteExtraCost) -> some View {
         HStack(spacing: Spacing.sm) {
             Button {
                 model.removeExtraCost(cost)

@@ -23,7 +23,7 @@ private struct DesignGallery: View {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     Text("Esta semana").sectionTitleStyle()
                     RowGroup {
-                        ForEach(OrderStatus.allCases, id: \.self) { status in
+                        ForEach(RemoteOrderStatus.allCases, id: \.self) { status in
                             HStack {
                                 Text("Pedido de ejemplo").font(.headline)
                                 Spacer()

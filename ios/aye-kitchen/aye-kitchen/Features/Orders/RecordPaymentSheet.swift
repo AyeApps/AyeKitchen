@@ -5,9 +5,9 @@ struct RecordPaymentSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var model: RecordPaymentModel
-    let onPaymentSaved: (Order) -> Void
+    let onPaymentSaved: (RemoteOrder) -> Void
 
-    init(order: Order, onPaymentSaved: @escaping (Order) -> Void) {
+    init(order: RemoteOrder, onPaymentSaved: @escaping (RemoteOrder) -> Void) {
         _model = State(initialValue: RecordPaymentModel(order: order))
         self.onPaymentSaved = onPaymentSaved
     }

@@ -3,7 +3,7 @@ import SwiftUI
 /// Modo del formulario de ingrediente.
 enum IngredientFormMode: Sendable {
     case create
-    case edit(Ingredient)
+    case edit(RemoteIngredient)
 
     var title: String {
         switch self {
@@ -32,7 +32,7 @@ nonisolated struct IngredientConversionInput: Encodable, Sendable {
 
 nonisolated struct IngredientCreateRequest: Encodable, Sendable {
     let name: String
-    let baseUnit: BaseUnit
+    let baseUnit: RemoteBaseUnit
     let group: String?
     let notes: String?
     let conversions: [IngredientConversionInput]
@@ -65,7 +65,7 @@ nonisolated struct IngredientCreateRequest: Encodable, Sendable {
 
 nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
     let name: String
-    let baseUnit: BaseUnit
+    let baseUnit: RemoteBaseUnit
     let group: String?
     let notes: String?
     let conversions: [IngredientConversionInput]
@@ -101,7 +101,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
 @Observable final class IngredientFormModel {
     let mode: IngredientFormMode
     var name: String = ""
-    var baseUnit: BaseUnit = .g
+    var baseUnit: RemoteBaseUnit = .g
     var group: String = ""
     var notes: String = ""
     var conversions: [FormConversion] = []
@@ -209,7 +209,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         }
     }
 
-    func onBaseUnitChanged(to newBaseUnit: BaseUnit) {
+    func onBaseUnitChanged(to newBaseUnit: RemoteBaseUnit) {
         self.baseUnit = newBaseUnit
         // Se descartan equivalencias cuya unidad base ahora coincide con la nueva baseUnit
         let matchingIds = Set(allUnits.filter { $0.baseUnit == newBaseUnit }.map(\.id))
@@ -250,7 +250,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
         conversions.removeAll { $0.id == id }
     }
 
-    func save(onIngredientCreated: ((Ingredient) -> Void)? = nil) async -> Ingredient? {
+    func save(onIngredientCreated: ((RemoteIngredient) -> Void)? = nil) async -> RemoteIngredient? {
         errorMessage = nil
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -317,7 +317,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
             case .create: mockId = "mock_\(UUID().uuidString.prefix(6))"
             case .edit(let existing): mockId = existing.id
             }
-            return Ingredient(
+            return RemoteIngredient(
                 id: mockId,
                 name: trimmedName,
                 baseUnit: baseUnit,
@@ -325,7 +325,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                 notes: finalNotes,
                 conversions: conversionInputs.map { input in
                     let name = allUnits.first(where: { $0.id == input.unitId })?.name ?? "unidad"
-                    return IngredientConversion(
+                    return RemoteIngredientConversion(
                         unitId: input.unitId,
                         unitName: name,
                         quantityInBase: input.quantityInBase
@@ -349,7 +349,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                     notes: finalNotes,
                     conversions: conversionInputs
                 )
-                let createdIngredient: Ingredient = try await NetworkService.shared.request(
+                let createdIngredient: RemoteIngredient = try await NetworkService.shared.request(
                     .post,
                     "/ingredients/",
                     body: body
@@ -367,7 +367,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                         priceCents: presentationPriceCents
                     )
                     do {
-                        let _: Presentation = try await NetworkService.shared.request(
+                        let _: RemotePresentation = try await NetworkService.shared.request(
                             .post,
                             "/presentations/",
                             body: presBody
@@ -391,7 +391,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
                     notes: finalNotes,
                     conversions: conversionInputs
                 )
-                let response: Ingredient = try await NetworkService.shared.request(
+                let response: RemoteIngredient = try await NetworkService.shared.request(
                     .patch,
                     "/ingredients/\(existing.id)",
                     body: body
@@ -432,7 +432,7 @@ struct IngredientFormView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: IngredientFormModel
-    var onSave: ((Ingredient) -> Void)?
+    var onSave: ((RemoteIngredient) -> Void)?
 
     @State private var showingUnitPicker = false
     @State private var showingBaseUnitHelp = false
@@ -441,7 +441,7 @@ struct IngredientFormView: View {
         mode: IngredientFormMode,
         initialName: String = "",
         mockUnits: [MeasureUnit]? = nil,
-        onSave: ((Ingredient) -> Void)? = nil
+        onSave: ((RemoteIngredient) -> Void)? = nil
     ) {
         self._model = State(initialValue: IngredientFormModel(mode: mode, initialName: initialName, mockUnits: mockUnits))
         self.onSave = onSave
@@ -599,9 +599,9 @@ struct IngredientFormView: View {
                     get: { model.baseUnit },
                     set: { model.onBaseUnitChanged(to: $0) }
                 )) {
-                    Text("Se pesa (g)").tag(BaseUnit.g)
-                    Text("Es líquido (ml)").tag(BaseUnit.ml)
-                    Text("Se cuenta (piezas)").tag(BaseUnit.pz)
+                    Text("Se pesa (g)").tag(RemoteBaseUnit.g)
+                    Text("Es líquido (ml)").tag(RemoteBaseUnit.ml)
+                    Text("Se cuenta (piezas)").tag(RemoteBaseUnit.pz)
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal, Spacing.md)
@@ -616,9 +616,9 @@ struct IngredientFormView: View {
                     get: { model.baseUnit },
                     set: { model.onBaseUnitChanged(to: $0) }
                 )) {
-                    Text("Se pesa").tag(BaseUnit.g)
-                    Text("Es líquido").tag(BaseUnit.ml)
-                    Text("Se cuenta").tag(BaseUnit.pz)
+                    Text("Se pesa").tag(RemoteBaseUnit.g)
+                    Text("Es líquido").tag(RemoteBaseUnit.ml)
+                    Text("Se cuenta").tag(RemoteBaseUnit.pz)
                 }
                 .pickerStyle(.segmented)
             }
@@ -929,14 +929,14 @@ private let previewUnits: [MeasureUnit] = [
     MeasureUnit(id: "u_pz", name: "pieza", abbreviation: "pz", baseUnit: .pz, factorToBase: "1", isSystem: true)
 ]
 
-private let previewIngredient = Ingredient(
+private let previewIngredient = RemoteIngredient(
     id: "ing_preview_1",
     name: "Harina de trigo",
     baseUnit: .g,
     group: "Harinas",
     notes: "Comprar en bulto de 25 kg para mejor precio en la central de abastos.",
     conversions: [
-        IngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
+        RemoteIngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
     ],
     createdAt: Date(),
     updatedAt: Date()

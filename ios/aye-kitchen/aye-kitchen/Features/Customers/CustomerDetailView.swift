@@ -7,14 +7,14 @@ struct CustomerDetailView: View {
     @State private var model: CustomerDetailModel
     @State private var showingEditSheet = false
 
-    var onCustomerUpdated: ((Customer) -> Void)?
+    var onCustomerUpdated: ((RemoteCustomer) -> Void)?
     var onCustomerDeleted: ((String) -> Void)?
 
     init(
-        customer: Customer,
-        mockOrders: [Order]? = nil,
+        customer: RemoteCustomer,
+        mockOrders: [RemoteOrder]? = nil,
         isMock: Bool = false,
-        onCustomerUpdated: ((Customer) -> Void)? = nil,
+        onCustomerUpdated: ((RemoteCustomer) -> Void)? = nil,
         onCustomerDeleted: ((String) -> Void)? = nil
     ) {
         self._model = State(initialValue: CustomerDetailModel(
@@ -54,7 +54,7 @@ struct CustomerDetailView: View {
                 onCustomerUpdated?(updated)
             }
         }
-        .navigationDestination(for: Order.self) { order in
+        .navigationDestination(for: RemoteOrder.self) { order in
             OrderDetailView(
                 order: order,
                 onOrderUpdated: { _ in
@@ -149,7 +149,7 @@ struct CustomerDetailView: View {
     }
 
     @ViewBuilder
-    private func orderRow(_ order: Order) -> some View {
+    private func orderRow(_ order: RemoteOrder) -> some View {
         if dynamicTypeSize.isAccessibilitySize {
             VStack(alignment: .leading, spacing: Spacing.xs) {
                 StatusChip(status: order.status)
@@ -207,7 +207,7 @@ struct CustomerDetailView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockCustomerPreview = Customer(
+private let mockCustomerPreview = RemoteCustomer(
     id: "mock_cust_preview",
     name: "Ana Ruiz",
     phone: "55 1234 5678",
@@ -216,8 +216,8 @@ private let mockCustomerPreview = Customer(
     updatedAt: Date()
 )
 
-private let mockOrdersSample: [Order] = [
-    Order(
+private let mockOrdersSample: [RemoteOrder] = [
+    RemoteOrder(
         id: "mock_ord_1",
         customerId: "mock_cust_preview",
         customerName: "Ana Ruiz",
@@ -235,7 +235,7 @@ private let mockOrdersSample: [Order] = [
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Order(
+    RemoteOrder(
         id: "mock_ord_2",
         customerId: "mock_cust_preview",
         customerName: "Ana Ruiz",

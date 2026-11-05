@@ -20,14 +20,14 @@ enum PaymentMethodOption: String, CaseIterable, Identifiable, Sendable {
 /// Modelo de presentación para registrar un pago a un pedido (MVVM, Regla 5).
 @Observable
 final class RecordPaymentModel {
-    let order: Order
+    let order: RemoteOrder
 
     var amountText: String
     var selectedMethod: PaymentMethodOption = .cash
     var isSaving: Bool = false
     var errorMessage: String? = nil
 
-    init(order: Order) {
+    init(order: RemoteOrder) {
         self.order = order
         self.amountText = CurrencyMath.formatForInput(cents: order.balanceCents)
     }
@@ -41,7 +41,7 @@ final class RecordPaymentModel {
         return !isSaving
     }
 
-    func savePayment() async -> Order? {
+    func savePayment() async -> RemoteOrder? {
         guard let cents = parsedCents else { return nil }
         isSaving = true
         errorMessage = nil
@@ -52,7 +52,7 @@ final class RecordPaymentModel {
                 amountCents: cents,
                 method: selectedMethod.rawValue
             )
-            let updated: Order = try await NetworkService.shared.request(
+            let updated: RemoteOrder = try await NetworkService.shared.request(
                 .post,
                 "/orders/\(order.id)/payments",
                 body: body

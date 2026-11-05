@@ -4,12 +4,12 @@ import SwiftUI
 // MARK: - Modelo de Detalle de Marca
 
 @Observable final class BrandDetailModel {
-    var presentation: Presentation
-    var prices: [PriceRecord] = []
+    var presentation: RemotePresentation
+    var prices: [RemotePriceRecord] = []
     var isLoadingPrices = false
     var errorMessage: String?
 
-    init(presentation: Presentation, mockPrices: [PriceRecord]? = nil) {
+    init(presentation: RemotePresentation, mockPrices: [RemotePriceRecord]? = nil) {
         self.presentation = presentation
         if let mockPrices {
             self.prices = mockPrices
@@ -20,7 +20,7 @@ import SwiftUI
         isLoadingPrices = true
         errorMessage = nil
         do {
-            let list: [PriceRecord] = try await NetworkService.shared.request(
+            let list: [RemotePriceRecord] = try await NetworkService.shared.request(
                 .get,
                 "/presentations/\(presentation.id)/prices"
             )
@@ -36,11 +36,11 @@ import SwiftUI
 
     func reload() async {
         do {
-            async let presTask: Presentation = NetworkService.shared.request(
+            async let presTask: RemotePresentation = NetworkService.shared.request(
                 .get,
                 "/presentations/\(presentation.id)"
             )
-            async let pricesTask: [PriceRecord] = NetworkService.shared.request(
+            async let pricesTask: [RemotePriceRecord] = NetworkService.shared.request(
                 .get,
                 "/presentations/\(presentation.id)/prices"
             )

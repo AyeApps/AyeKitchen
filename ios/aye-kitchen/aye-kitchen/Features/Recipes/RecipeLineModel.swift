@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Destino de la línea: ingrediente o subreceta.
 enum LineTarget: Hashable, Sendable, Identifiable {
-    case ingredient(Ingredient)
-    case subrecipe(id: String, name: String, yieldUnit: BaseUnit)
+    case ingredient(RemoteIngredient)
+    case subrecipe(id: String, name: String, yieldUnit: RemoteBaseUnit)
 
     var id: String {
         switch self {
@@ -20,14 +20,14 @@ enum LineTarget: Hashable, Sendable, Identifiable {
         }
     }
 
-    var baseUnit: BaseUnit {
+    var baseUnit: RemoteBaseUnit {
         switch self {
         case .ingredient(let ing): ing.baseUnit
         case .subrecipe(_, _, let yieldUnit): yieldUnit
         }
     }
 
-    var kind: RecipeItemKind {
+    var kind: RemoteRecipeItemKind {
         switch self {
         case .ingredient: .ingredient
         case .subrecipe: .recipe
@@ -79,7 +79,7 @@ func unitDisplayPlural(for unit: MeasureUnit, qty: String) -> String {
     return unit.abbreviation
 }
 
-func equivalenceQuestionText(ingredientName: String, baseUnit: BaseUnit, unitName: String) -> String {
+func equivalenceQuestionText(ingredientName: String, baseUnit: RemoteBaseUnit, unitName: String) -> String {
     let lowerName = ingredientName.lowercased()
     let basePlural: String = switch baseUnit {
     case .g: "gramos"
@@ -112,7 +112,7 @@ final class RecipeLineModel {
     var quantityText: String = "1"
     var selectedUnitId: String = ""
     var pinnedPresentationId: String? = nil
-    var presentations: [Presentation] = []
+    var presentations: [RemotePresentation] = []
     var isLoadingPresentations: Bool = false
 
     var equivalenceQuantity: String = ""
@@ -125,7 +125,7 @@ final class RecipeLineModel {
         target: LineTarget,
         existingLine: RecipeEditorLine? = nil,
         allUnits: [MeasureUnit],
-        mockPresentations: [Presentation]? = nil
+        mockPresentations: [RemotePresentation]? = nil
     ) {
         self.target = target
         self.existingLine = existingLine
@@ -269,7 +269,7 @@ final class RecipeLineModel {
         defer { isLoadingPresentations = false }
 
         do {
-            let page: Page<Presentation> = try await NetworkService.shared.request(
+            let page: Page<RemotePresentation> = try await NetworkService.shared.request(
                 .get,
                 "/presentations/",
                 query: [
@@ -283,7 +283,7 @@ final class RecipeLineModel {
         }
     }
 
-    var currentOrPinnedPresentation: Presentation? {
+    var currentOrPinnedPresentation: RemotePresentation? {
         if let pinnedId = pinnedPresentationId,
            let match = presentations.first(where: { $0.id == pinnedId }) {
             return match
@@ -293,14 +293,14 @@ final class RecipeLineModel {
                presentations.first
     }
 
-    func presentationTitle(_ p: Presentation) -> String {
+    func presentationTitle(_ p: RemotePresentation) -> String {
         if let sup = p.supplierName, !sup.isEmpty {
             return "\(p.brand) · \(sup)"
         }
         return p.brand
     }
 
-    func presentationSubtitle(_ p: Presentation) -> String {
+    func presentationSubtitle(_ p: RemotePresentation) -> String {
         if let cents = p.latestPriceCents {
             let priceFormatted = Money.format(cents: cents)
             let qtyFormatted = Quantity.format(p.packageQuantity)
@@ -403,7 +403,7 @@ final class RecipeLineModel {
             let newConv = RecipeLineConversionInput(unitId: selectedUnitId, quantityInBase: eqQty)
             let patchBody = IngredientConversionsPatchRequest(conversions: existingInputs + [newConv])
 
-            let updated: Ingredient = try await NetworkService.shared.request(
+            let updated: RemoteIngredient = try await NetworkService.shared.request(
                 .patch,
                 "/ingredients/\(ing.id)",
                 body: patchBody

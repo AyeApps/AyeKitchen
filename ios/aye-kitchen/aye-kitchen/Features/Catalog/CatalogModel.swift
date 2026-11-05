@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Descripción de cómo se mide según la unidad base del contrato.
-extension Ingredient {
+extension RemoteIngredient {
     var buyingUnitDescription: String {
         switch baseUnit {
         case .g:
@@ -19,7 +19,7 @@ extension Ingredient {
 struct CatalogSection: Identifiable, Sendable {
     let id: String
     let title: String
-    let items: [Ingredient]
+    let items: [RemoteIngredient]
 }
 
 /// Estado de carga para la pantalla de catálogo.
@@ -32,7 +32,7 @@ enum CatalogLoadingState: Equatable, Sendable {
 
 /// ViewModel para la lista de ingredientes (`CatalogView`, MVVM, Regla 5 / Bloque I13).
 @Observable final class CatalogModel {
-    var ingredients: [Ingredient] = []
+    var ingredients: [RemoteIngredient] = []
     var state: CatalogLoadingState = .idle
     var currentPage: Int = 1
     var hasMore: Bool = false
@@ -53,7 +53,7 @@ enum CatalogLoadingState: Equatable, Sendable {
         return !query.isEmpty
     }
 
-    init(mockIngredients: [Ingredient]? = nil) {
+    init(mockIngredients: [RemoteIngredient]? = nil) {
         if let mockIngredients {
             self.ingredients = mockIngredients
             self.state = .loaded
@@ -64,8 +64,8 @@ enum CatalogLoadingState: Equatable, Sendable {
 
     /// Agrupa por `group` en secciones ordenadas por nombre; los que no tienen grupo van al final en "Otros".
     var sections: [CatalogSection] {
-        var groups: [String: [Ingredient]] = [:]
-        var others: [Ingredient] = []
+        var groups: [String: [RemoteIngredient]] = [:]
+        var others: [RemoteIngredient] = []
 
         for item in ingredients {
             if let groupName = item.group?.trimmingCharacters(in: .whitespacesAndNewlines), !groupName.isEmpty {
@@ -163,7 +163,7 @@ enum CatalogLoadingState: Equatable, Sendable {
     }
 
     /// Borrado del ingrediente. Lanza error para que la vista decida cómo mostrarlo (p. ej. IN_USE).
-    func deleteIngredient(_ ingredient: Ingredient) async throws {
+    func deleteIngredient(_ ingredient: RemoteIngredient) async throws {
         if isMock {
             removeIngredient(id: ingredient.id)
             return
@@ -173,7 +173,7 @@ enum CatalogLoadingState: Equatable, Sendable {
     }
 
     /// Agrega un ingrediente recién creado a la lista local.
-    func addIngredient(_ ingredient: Ingredient) {
+    func addIngredient(_ ingredient: RemoteIngredient) {
         if let index = ingredients.firstIndex(where: { $0.id == ingredient.id }) {
             ingredients[index] = ingredient
         } else {
@@ -182,7 +182,7 @@ enum CatalogLoadingState: Equatable, Sendable {
     }
 
     /// Actualiza un ingrediente existente en la lista local.
-    func updateIngredient(_ ingredient: Ingredient) {
+    func updateIngredient(_ ingredient: RemoteIngredient) {
         if let index = ingredients.firstIndex(where: { $0.id == ingredient.id }) {
             ingredients[index] = ingredient
         }
@@ -198,7 +198,7 @@ enum CatalogLoadingState: Equatable, Sendable {
     /// Lee la copia guardada en disco de la primera pantalla sin búsqueda.
     private func loadFromCache() async -> Bool {
         guard !isMock else { return true }
-        guard let page: Page<Ingredient> = await NetworkService.shared.cached("/ingredients/", query: firstPageQuery) else {
+        guard let page: Page<RemoteIngredient> = await NetworkService.shared.cached("/ingredients/", query: firstPageQuery) else {
             return false
         }
         self.ingredients = page.items
@@ -214,7 +214,7 @@ enum CatalogLoadingState: Equatable, Sendable {
     func reloadSilently() async -> Bool {
         guard !isMock else { return true }
         do {
-            let page: Page<Ingredient> = try await NetworkService.shared.requestCaching(
+            let page: Page<RemoteIngredient> = try await NetworkService.shared.requestCaching(
                 "/ingredients/",
                 query: firstPageQuery
             )
@@ -249,7 +249,7 @@ enum CatalogLoadingState: Equatable, Sendable {
         }
 
         do {
-            let page: Page<Ingredient>
+            let page: Page<RemoteIngredient>
             if !hasQuery && pageNumber == 1 {
                 page = try await NetworkService.shared.requestCaching(
                     "/ingredients/",

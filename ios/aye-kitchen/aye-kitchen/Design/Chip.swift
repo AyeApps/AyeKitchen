@@ -56,7 +56,7 @@ struct Chip: View {
 }
 
 struct StatusChip: View {
-    let status: OrderStatus
+    let status: RemoteOrderStatus
 
     var body: some View {
         Chip(status.label, tone: tone)

@@ -2,15 +2,15 @@ import SwiftUI
 
 /// Detalle del ingrediente (especificación B1 / I1).
 struct IngredientDetailView: View {
-    @State private var ingredient: Ingredient
-    var onUpdate: ((Ingredient) -> Void)?
+    @State private var ingredient: RemoteIngredient
+    var onUpdate: ((RemoteIngredient) -> Void)?
     var onDelete: ((String) -> Void)?
 
     @State private var showingEditSheet = false
 
     init(
-        ingredient: Ingredient,
-        onUpdate: ((Ingredient) -> Void)? = nil,
+        ingredient: RemoteIngredient,
+        onUpdate: ((RemoteIngredient) -> Void)? = nil,
         onDelete: ((String) -> Void)? = nil
     ) {
         self._ingredient = State(initialValue: ingredient)
@@ -80,14 +80,14 @@ struct IngredientDetailView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let detailPreviewIngredient = Ingredient(
+private let detailPreviewIngredient = RemoteIngredient(
     id: "ing_preview_detail",
     name: "Harina de trigo",
     baseUnit: .g,
     group: "Harinas",
     notes: "Comprar en bulto de 25 kg para mejor precio en la central de abastos.",
     conversions: [
-        IngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
+        RemoteIngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
     ],
     createdAt: Date(),
     updatedAt: Date()

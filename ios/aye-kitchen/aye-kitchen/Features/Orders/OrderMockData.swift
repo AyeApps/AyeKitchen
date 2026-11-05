@@ -1,8 +1,8 @@
 #if DEBUG
 import Foundation
 
-extension Order {
-    static let mockPendingToday = Order(
+extension RemoteOrder {
+    static let mockPendingToday = RemoteOrder(
         id: "order-pending-1",
         customerName: "Mariana Rojas",
         customerPhone: "5512345678",
@@ -10,14 +10,14 @@ extension Order {
         status: .inProgress,
         notes: "Sin nueces, muy importante por alergia.",
         items: [
-            OrderItem(
+            RemoteOrderItem(
                 recipeId: "rec-1",
                 recipeName: "Pastel de chocolate",
                 quantity: "2",
                 unitPriceCents: 45000,
                 unitCostCentsSnapshot: 18000
             ),
-            OrderItem(
+            RemoteOrderItem(
                 recipeId: "rec-2",
                 recipeName: "Cupcakes de vainilla",
                 quantity: "12",
@@ -26,7 +26,7 @@ extension Order {
             )
         ],
         payments: [
-            Payment(
+            RemotePayment(
                 id: "pay-1",
                 amountCents: 50000,
                 paidAt: Date.now.addingTimeInterval(-86400),
@@ -42,7 +42,7 @@ extension Order {
         updatedAt: Date.now
     )
 
-    static let mockPendingTomorrow = Order(
+    static let mockPendingTomorrow = RemoteOrder(
         id: "order-pending-2",
         customerName: "Carlos Benítez",
         customerPhone: "5587654321",
@@ -53,7 +53,7 @@ extension Order {
         status: .pending,
         notes: "Pagar con tarjeta al recibir.",
         items: [
-            OrderItem(
+            RemoteOrderItem(
                 recipeId: "rec-3",
                 recipeName: "Tres leches tradicional",
                 quantity: "1",
@@ -71,7 +71,7 @@ extension Order {
         updatedAt: Date.now
     )
 
-    static let mockOverdue = Order(
+    static let mockOverdue = RemoteOrder(
         id: "order-overdue-1",
         customerName: "Lucía Morales",
         customerPhone: "5599887766",
@@ -79,7 +79,7 @@ extension Order {
         status: .pending,
         notes: nil,
         items: [
-            OrderItem(
+            RemoteOrderItem(
                 recipeId: "rec-4",
                 recipeName: "Cheesecake de frutos rojos",
                 quantity: "1",
@@ -88,7 +88,7 @@ extension Order {
             )
         ],
         payments: [
-            Payment(
+            RemotePayment(
                 id: "pay-overdue-1",
                 amountCents: 20000,
                 paidAt: Date.now.addingTimeInterval(-100000),
@@ -104,7 +104,7 @@ extension Order {
         updatedAt: Date.now
     )
 
-    static let mockDelivered = Order(
+    static let mockDelivered = RemoteOrder(
         id: "order-delivered-1",
         customerName: "Andrea Gómez",
         customerPhone: nil,
@@ -112,7 +112,7 @@ extension Order {
         status: .delivered,
         notes: "Cliente frecuente.",
         items: [
-            OrderItem(
+            RemoteOrderItem(
                 recipeId: "rec-1",
                 recipeName: "Pastel de chocolate",
                 quantity: "1",
@@ -121,7 +121,7 @@ extension Order {
             )
         ],
         payments: [
-            Payment(
+            RemotePayment(
                 id: "pay-del-1",
                 amountCents: 45000,
                 paidAt: Date.now.addingTimeInterval(-172800),
@@ -138,29 +138,29 @@ extension Order {
     )
 }
 
-extension RecipeListItem {
-    static let mockChocolate = RecipeListItem.makeMock(
+extension RemoteRecipeListItem {
+    static let mockChocolate = RemoteRecipeListItem.makeMock(
         id: "rec-1",
         name: "Pastel de chocolate",
         batchCostCents: 18000,
         complete: true
     )
 
-    static let mockVainilla = RecipeListItem.makeMock(
+    static let mockVainilla = RemoteRecipeListItem.makeMock(
         id: "rec-2",
         name: "Cupcakes de vainilla",
         batchCostCents: 1500,
         complete: true
     )
 
-    static let mockIncomplete = RecipeListItem.makeMock(
+    static let mockIncomplete = RemoteRecipeListItem.makeMock(
         id: "rec-incomplete",
         name: "Pastel de zanahoria",
         batchCostCents: nil,
         complete: false
     )
 
-    private static func makeMock(id: String, name: String, batchCostCents: Int?, complete: Bool) -> RecipeListItem {
+    private static func makeMock(id: String, name: String, batchCostCents: Int?, complete: Bool) -> RemoteRecipeListItem {
         let json = """
         {
             "id": "\(id)",
@@ -178,7 +178,7 @@ extension RecipeListItem {
             "complete": \(complete)
         }
         """.data(using: .utf8)!
-        return try! JSONCoding.decode(RecipeListItem.self, from: json)
+        return try! JSONCoding.decode(RemoteRecipeListItem.self, from: json)
     }
 }
 #endif

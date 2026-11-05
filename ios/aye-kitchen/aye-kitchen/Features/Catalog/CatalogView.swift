@@ -9,7 +9,7 @@ struct CatalogView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var showingNewIngredient = false
     @State private var showingSuppliers = false
-    @State private var ingredientToDelete: Ingredient?
+    @State private var ingredientToDelete: RemoteIngredient?
     @State private var showingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
     @State private var isVisible = false
@@ -204,7 +204,7 @@ struct CatalogView: View {
     }
 
     @ViewBuilder
-    private func ingredientSubtitle(for ingredient: Ingredient) -> some View {
+    private func ingredientSubtitle(for ingredient: RemoteIngredient) -> some View {
         if let brandsCount = ingredient.brandsCount {
             if brandsCount > 0 {
                 let countText = brandsCount == 1 ? "1 marca" : "\(brandsCount) marcas"
@@ -250,7 +250,7 @@ struct CatalogView: View {
         }
     }
 
-    private func performDelete(_ ingredient: Ingredient) async {
+    private func performDelete(_ ingredient: RemoteIngredient) async {
         do {
             try await model.deleteIngredient(ingredient)
             ingredientToDelete = nil
@@ -269,15 +269,15 @@ struct CatalogView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockCatalogIngredients: [Ingredient] = [
-    Ingredient(
+private let mockCatalogIngredients: [RemoteIngredient] = [
+    RemoteIngredient(
         id: "ing_1",
         name: "Harina de trigo",
         baseUnit: .g,
         group: "Harinas",
         notes: nil,
         conversions: [
-            IngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
+            RemoteIngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
         ],
         createdAt: Date(),
         updatedAt: Date(),
@@ -289,7 +289,7 @@ private let mockCatalogIngredients: [Ingredient] = [
             costPerBaseUnit: "2.350000"
         )
     ),
-    Ingredient(
+    RemoteIngredient(
         id: "ing_2",
         name: "Harina de almendra",
         baseUnit: .g,
@@ -301,7 +301,7 @@ private let mockCatalogIngredients: [Ingredient] = [
         brandsCount: 0,
         currentBrand: nil
     ),
-    Ingredient(
+    RemoteIngredient(
         id: "ing_3",
         name: "Leche entera",
         baseUnit: .ml,
@@ -313,7 +313,7 @@ private let mockCatalogIngredients: [Ingredient] = [
         brandsCount: nil,
         currentBrand: nil
     ),
-    Ingredient(
+    RemoteIngredient(
         id: "ing_4",
         name: "Huevo",
         baseUnit: .pz,
@@ -330,7 +330,7 @@ private let mockCatalogIngredients: [Ingredient] = [
             costPerBaseUnit: "3.200000"
         )
     ),
-    Ingredient(
+    RemoteIngredient(
         id: "ing_5",
         name: "Vainilla líquida",
         baseUnit: .ml,

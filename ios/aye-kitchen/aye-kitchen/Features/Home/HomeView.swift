@@ -411,11 +411,11 @@ private func makeMockOrder(
     id: String,
     customer: String,
     date: Date,
-    status: OrderStatus,
+    status: RemoteOrderStatus,
     recipe: String,
     quantity: String
-) -> Order {
-    Order(
+) -> RemoteOrder {
+    RemoteOrder(
         id: id,
         customerName: customer,
         customerPhone: nil,
@@ -423,7 +423,7 @@ private func makeMockOrder(
         status: status,
         notes: nil,
         items: [
-            OrderItem(recipeId: "r_1", recipeName: recipe, quantity: quantity, unitPriceCents: 0, unitCostCentsSnapshot: 0)
+            RemoteOrderItem(recipeId: "r_1", recipeName: recipe, quantity: quantity, unitPriceCents: 0, unitCostCentsSnapshot: 0)
         ],
         payments: [],
         totalCents: 0,
@@ -436,7 +436,7 @@ private func makeMockOrder(
     )
 }
 
-private func makeMockRecipeListItem(id: String, name: String, complete: Bool) -> RecipeListItem {
+private func makeMockRecipeListItem(id: String, name: String, complete: Bool) -> RemoteRecipeListItem {
     let json = """
     {
         "id": "\(id)",
@@ -453,7 +453,7 @@ private func makeMockRecipeListItem(id: String, name: String, complete: Bool) ->
         "complete": \(complete)
     }
     """.data(using: .utf8)!
-    return try! JSONCoding.decode(RecipeListItem.self, from: json)
+    return try! JSONCoding.decode(RemoteRecipeListItem.self, from: json)
 }
 
 private func makeMockStalePresentation(id: String, ingredient: String, brand: String, days: Int) -> StalePresentation {

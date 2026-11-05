@@ -39,9 +39,9 @@ nonisolated struct CustomerUpdateRequest: Encodable, Sendable {
 struct CustomerFormView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let customer: Customer?
+    private let customer: RemoteCustomer?
     private let isMock: Bool
-    private let onSave: (Customer) -> Void
+    private let onSave: (RemoteCustomer) -> Void
 
     @State private var name: String
     @State private var phone: String
@@ -50,10 +50,10 @@ struct CustomerFormView: View {
     @State private var errorMessage: String?
 
     init(
-        customer: Customer? = nil,
+        customer: RemoteCustomer? = nil,
         initialName: String = "",
         isMock: Bool = false,
-        onSave: @escaping (Customer) -> Void
+        onSave: @escaping (RemoteCustomer) -> Void
     ) {
         self.customer = customer
         self.isMock = isMock
@@ -158,7 +158,7 @@ struct CustomerFormView: View {
         let notesToSend = trimmedNotes.isEmpty ? nil : trimmedNotes
 
         if isMock || customer?.id.hasPrefix("mock") == true {
-            let saved = Customer(
+            let saved = RemoteCustomer(
                 id: customer?.id ?? "mock_\(UUID().uuidString.prefix(6))",
                 name: trimmedName,
                 phone: phoneToSend,
@@ -175,7 +175,7 @@ struct CustomerFormView: View {
         errorMessage = nil
 
         do {
-            let result: Customer
+            let result: RemoteCustomer
             if let customer {
                 let body = CustomerUpdateRequest(name: trimmedName, phone: phoneToSend, notes: notesToSend)
                 result = try await NetworkService.shared.request(
@@ -211,7 +211,7 @@ struct CustomerFormView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockCustomerForEdit = Customer(
+private let mockCustomerForEdit = RemoteCustomer(
     id: "mock_edit_1",
     name: "Ana Ruiz",
     phone: "55 1234 5678",

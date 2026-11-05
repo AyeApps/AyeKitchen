@@ -57,7 +57,7 @@ nonisolated struct PriceRecordCreateRequest: Encodable, Sendable {
         )
 
         do {
-            let _: PriceRecord = try await NetworkService.shared.request(
+            let _: RemotePriceRecord = try await NetworkService.shared.request(
                 .post,
                 "/presentations/\(presentationId)/prices",
                 body: body

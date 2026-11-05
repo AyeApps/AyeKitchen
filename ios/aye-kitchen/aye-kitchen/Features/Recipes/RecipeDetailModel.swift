@@ -8,7 +8,7 @@ nonisolated struct RecipeMarginPatch: Encodable, Sendable {
 
 /// Payload para actualizar las líneas de una receta en la versión base.
 nonisolated struct RecipeItemPayload: Encodable, Sendable {
-    let kind: RecipeItemKind
+    let kind: RemoteRecipeItemKind
     let refId: String
     let quantity: String
     let unitId: String?
@@ -68,8 +68,8 @@ enum RecipeDetailLoadingState: Equatable, Sendable {
 
 /// Destino de navegación desde una línea de costo del desglose.
 enum RecipeDetailDestination: Hashable, Identifiable {
-    case presentation(Presentation)
-    case ingredient(Ingredient)
+    case presentation(RemotePresentation)
+    case ingredient(RemoteIngredient)
 
     var id: String {
         switch self {
@@ -84,16 +84,16 @@ enum RecipeDetailDestination: Hashable, Identifiable {
 final class RecipeDetailModel {
     let recipeId: String
 
-    var recipe: Recipe?
-    var cost: RecipeCost?
+    var recipe: RemoteRecipe?
+    var cost: RemoteRecipeCost?
     var state: RecipeDetailLoadingState = .loading
     var optimisticMargin: Int?
     var isUpdatingMargin: Bool = false
     var actionErrorMessage: String?
 
     var selectedVersionId: String? = nil
-    var comparisons: [CostVersionComparison] = []
-    var versions: [CostVersion] = []
+    var comparisons: [RemoteCostVersionComparison] = []
+    var versions: [RemoteCostVersion] = []
     var isLoadingCost: Bool = false
 
     var loadingLine: CostLine? = nil
@@ -112,10 +112,10 @@ final class RecipeDetailModel {
 
     init(
         recipeId: String,
-        mockRecipe: Recipe? = nil,
-        mockCost: RecipeCost? = nil,
-        mockComparisons: [CostVersionComparison]? = nil,
-        mockVersions: [CostVersion]? = nil,
+        mockRecipe: RemoteRecipe? = nil,
+        mockCost: RemoteRecipeCost? = nil,
+        mockComparisons: [RemoteCostVersionComparison]? = nil,
+        mockVersions: [RemoteCostVersion]? = nil,
         initialVersionId: String? = nil
     ) {
         self.recipeId = recipeId
@@ -141,17 +141,17 @@ final class RecipeDetailModel {
                 [URLQueryItem(name: "version_id", value: $0)]
             } ?? []
 
-            async let recipeReq: Recipe = NetworkService.shared.request(.get, "/recipes/\(recipeId)")
-            async let costReq: RecipeCost = NetworkService.shared.request(
+            async let recipeReq: RemoteRecipe = NetworkService.shared.request(.get, "/recipes/\(recipeId)")
+            async let costReq: RemoteRecipeCost = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/cost",
                 query: costQuery
             )
-            async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+            async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/compare"
             )
-            async let versionsReq: [CostVersion] = NetworkService.shared.request(
+            async let versionsReq: [RemoteCostVersion] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/"
             )
@@ -186,7 +186,7 @@ final class RecipeDetailModel {
             let costQuery: [URLQueryItem] = versionId.map {
                 [URLQueryItem(name: "version_id", value: $0)]
             } ?? []
-            let loadedCost: RecipeCost = try await NetworkService.shared.request(
+            let loadedCost: RemoteRecipeCost = try await NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/cost",
                 query: costQuery
@@ -204,9 +204,9 @@ final class RecipeDetailModel {
     /// Crea una nueva versión con choices vacío: POST /recipes/{id}/versions/.
     /// Al guardar, la versión nueva queda elegida y se recargan costo, versiones y comparación.
     @discardableResult
-    func createVersion(name: String) async throws -> CostVersion {
+    func createVersion(name: String) async throws -> RemoteCostVersion {
         let payload = CostVersionCreatePayload(name: name, choices: [])
-        let created: CostVersion = try await NetworkService.shared.request(
+        let created: RemoteCostVersion = try await NetworkService.shared.request(
             .post,
             "/recipes/\(recipeId)/versions/",
             body: payload
@@ -215,15 +215,15 @@ final class RecipeDetailModel {
         self.selectedVersionId = created.id
 
         // Recargar versiones, comparaciones y el costo de la nueva versión
-        async let versionsReq: [CostVersion] = NetworkService.shared.request(
+        async let versionsReq: [RemoteCostVersion] = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/versions/"
         )
-        async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+        async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/versions/compare"
         )
-        async let costReq: RecipeCost = NetworkService.shared.request(
+        async let costReq: RemoteRecipeCost = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/cost",
             query: [URLQueryItem(name: "version_id", value: created.id)]
@@ -240,7 +240,7 @@ final class RecipeDetailModel {
     /// Renombra una versión existente: PATCH /recipes/{id}/versions/{version_id}.
     func renameVersion(versionId: String, newName: String) async throws {
         let payload = CostVersionRenamePayload(name: newName)
-        let _: CostVersion = try await NetworkService.shared.request(
+        let _: RemoteCostVersion = try await NetworkService.shared.request(
             .patch,
             "/recipes/\(recipeId)/versions/\(versionId)",
             body: payload
@@ -250,15 +250,15 @@ final class RecipeDetailModel {
             [URLQueryItem(name: "version_id", value: $0)]
         } ?? []
 
-        async let versionsReq: [CostVersion] = NetworkService.shared.request(
+        async let versionsReq: [RemoteCostVersion] = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/versions/"
         )
-        async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+        async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/versions/compare"
         )
-        async let costReq: RecipeCost = NetworkService.shared.request(
+        async let costReq: RemoteRecipeCost = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/cost",
             query: costQuery
@@ -280,15 +280,15 @@ final class RecipeDetailModel {
 
         self.selectedVersionId = nil
 
-        async let versionsReq: [CostVersion] = NetworkService.shared.request(
+        async let versionsReq: [RemoteCostVersion] = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/versions/"
         )
-        async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+        async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/versions/compare"
         )
-        async let costReq: RecipeCost = NetworkService.shared.request(
+        async let costReq: RemoteRecipeCost = NetworkService.shared.request(
             .get,
             "/recipes/\(recipeId)/cost"
         )
@@ -315,21 +315,21 @@ final class RecipeDetailModel {
             }
 
             let payload = CostVersionChoicesPatchPayload(choices: updatedChoices)
-            let _: CostVersion = try await NetworkService.shared.request(
+            let _: RemoteCostVersion = try await NetworkService.shared.request(
                 .patch,
                 "/recipes/\(recipeId)/versions/\(versionId)",
                 body: payload
             )
 
-            async let versionsReq: [CostVersion] = NetworkService.shared.request(
+            async let versionsReq: [RemoteCostVersion] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/"
             )
-            async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+            async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/compare"
             )
-            async let costReq: RecipeCost = NetworkService.shared.request(
+            async let costReq: RemoteRecipeCost = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/cost",
                 query: [URLQueryItem(name: "version_id", value: versionId)]
@@ -357,21 +357,21 @@ final class RecipeDetailModel {
             }
 
             let payload = RecipeItemsPatch(items: updatedItems)
-            let updatedRecipe: Recipe = try await NetworkService.shared.request(
+            let updatedRecipe: RemoteRecipe = try await NetworkService.shared.request(
                 .patch,
                 "/recipes/\(recipeId)",
                 body: payload
             )
 
-            async let costReq: RecipeCost = NetworkService.shared.request(
+            async let costReq: RemoteRecipeCost = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/cost"
             )
-            async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+            async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/compare"
             )
-            async let versionsReq: [CostVersion] = NetworkService.shared.request(
+            async let versionsReq: [RemoteCostVersion] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/"
             )
@@ -394,7 +394,7 @@ final class RecipeDetailModel {
 
         do {
             let body = RecipeMarginPatch(marginPercent: percent)
-            let updatedRecipe: Recipe = try await NetworkService.shared.request(
+            let updatedRecipe: RemoteRecipe = try await NetworkService.shared.request(
                 .patch,
                 "/recipes/\(recipeId)",
                 body: body
@@ -403,12 +403,12 @@ final class RecipeDetailModel {
             let costQuery: [URLQueryItem] = selectedVersionId.map {
                 [URLQueryItem(name: "version_id", value: $0)]
             } ?? []
-            async let costReq: RecipeCost = NetworkService.shared.request(
+            async let costReq: RemoteRecipeCost = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/cost",
                 query: costQuery
             )
-            async let compareReq: [CostVersionComparison] = NetworkService.shared.request(
+            async let compareReq: [RemoteCostVersionComparison] = NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipeId)/versions/compare"
             )
@@ -434,13 +434,13 @@ final class RecipeDetailModel {
 
         do {
             if let presentationId = line.presentationId, !presentationId.isEmpty {
-                let presentation: Presentation = try await NetworkService.shared.request(
+                let presentation: RemotePresentation = try await NetworkService.shared.request(
                     .get,
                     "/presentations/\(presentationId)"
                 )
                 self.activeDestination = .presentation(presentation)
             } else {
-                let ingredient: Ingredient = try await NetworkService.shared.request(
+                let ingredient: RemoteIngredient = try await NetworkService.shared.request(
                     .get,
                     "/ingredients/\(line.refId)"
                 )

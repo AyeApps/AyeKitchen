@@ -21,7 +21,7 @@ struct BrandChoiceSheet: View {
         isBaseVersion: Bool,
         onSelectBrand: @escaping @MainActor @Sendable (String?) async throws -> Void,
         onOpenIngredient: @escaping @MainActor @Sendable () -> Void,
-        mockPresentations: [Presentation]? = nil
+        mockPresentations: [RemotePresentation]? = nil
     ) {
         self.line = line
         self.isBaseVersion = isBaseVersion
@@ -199,7 +199,7 @@ struct BrandChoiceSheet: View {
         .disabled(isSaving)
     }
 
-    private func isPresentationSelected(_ p: Presentation) -> Bool {
+    private func isPresentationSelected(_ p: RemotePresentation) -> Bool {
         if isBaseVersion {
             return line.brandSource == .recipe && line.presentationId == p.id
         } else {
@@ -207,7 +207,7 @@ struct BrandChoiceSheet: View {
         }
     }
 
-    private func presentationRow(_ p: Presentation) -> some View {
+    private func presentationRow(_ p: RemotePresentation) -> some View {
         let isSelected = isPresentationSelected(p)
 
         return Button {
@@ -260,7 +260,7 @@ struct BrandChoiceSheet: View {
         .disabled(isSaving)
     }
 
-    private func rowTitle(_ p: Presentation) -> some View {
+    private func rowTitle(_ p: RemotePresentation) -> some View {
         let brandStoreText: String = {
             if let supplier = p.supplierName, !supplier.isEmpty {
                 return "\(p.brand) · \(supplier)"
@@ -273,7 +273,7 @@ struct BrandChoiceSheet: View {
             .foregroundStyle(.inkPrimary)
     }
 
-    private func rowSubtitle(_ p: Presentation) -> some View {
+    private func rowSubtitle(_ p: RemotePresentation) -> some View {
         let packageText: String = {
             let pkgQty = Quantity.format(p.packageQuantity)
             let unitStr = p.baseUnit.rawValue
@@ -361,7 +361,7 @@ struct BrandChoiceSheet: View {
     )
 
     let mockList = [
-        Presentation(
+        RemotePresentation(
             id: "pres_selecta",
             ingredientId: "ing_harina",
             ingredientName: "Harina de trigo",
@@ -380,7 +380,7 @@ struct BrandChoiceSheet: View {
             createdAt: .now,
             updatedAt: .now
         ),
-        Presentation(
+        RemotePresentation(
             id: "pres_tres_estrellas",
             ingredientId: "ing_harina",
             ingredientName: "Harina de trigo",
@@ -429,7 +429,7 @@ struct BrandChoiceSheet: View {
     )
 
     let mockList = [
-        Presentation(
+        RemotePresentation(
             id: "pres_selecta",
             ingredientId: "ing_harina",
             ingredientName: "Harina de trigo",

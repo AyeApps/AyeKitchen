@@ -13,8 +13,8 @@ struct BrandDetailView: View {
     var onBrandChangedOrDeleted: (() -> Void)?
 
     init(
-        presentation: Presentation,
-        mockPrices: [PriceRecord]? = nil,
+        presentation: RemotePresentation,
+        mockPrices: [RemotePriceRecord]? = nil,
         onBrandChangedOrDeleted: (() -> Void)? = nil
     ) {
         self._model = State(initialValue: BrandDetailModel(
@@ -187,7 +187,7 @@ struct BrandDetailView: View {
         }
     }
 
-    private func priceHistoryRow(record: PriceRecord, index: Int) -> some View {
+    private func priceHistoryRow(record: RemotePriceRecord, index: Int) -> some View {
         let diffText = priceDifferenceText(currentIndex: index)
 
         return VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -359,7 +359,7 @@ struct RecordPriceSheet: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockPresentationWithPrice = Presentation(
+private let mockPresentationWithPrice = RemotePresentation(
     id: "pres_1",
     ingredientId: "ing_1",
     ingredientName: "Harina de trigo",
@@ -379,7 +379,7 @@ private let mockPresentationWithPrice = Presentation(
     updatedAt: Date()
 )
 
-private let mockPresentationStale = Presentation(
+private let mockPresentationStale = RemotePresentation(
     id: "pres_2",
     ingredientId: "ing_1",
     ingredientName: "Harina de trigo",
@@ -399,7 +399,7 @@ private let mockPresentationStale = Presentation(
     updatedAt: Date()
 )
 
-private let mockPresentationNoPrice = Presentation(
+private let mockPresentationNoPrice = RemotePresentation(
     id: "pres_3",
     ingredientId: "ing_1",
     ingredientName: "Harina de trigo",
@@ -419,14 +419,14 @@ private let mockPresentationNoPrice = Presentation(
     updatedAt: Date()
 )
 
-private let mockPricesHistory: [PriceRecord] = [
-    PriceRecord(
+private let mockPricesHistory: [RemotePriceRecord] = [
+    RemotePriceRecord(
         id: "pr_2",
         priceCents: 2500,
         recordedAt: Date(),
         note: "Comprada en oferta"
     ),
-    PriceRecord(
+    RemotePriceRecord(
         id: "pr_1",
         priceCents: 2350,
         recordedAt: Date().addingTimeInterval(-10 * 86400),

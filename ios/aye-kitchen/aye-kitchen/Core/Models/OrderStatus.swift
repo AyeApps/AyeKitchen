@@ -1,7 +1,7 @@
 import Foundation
 
 /// Estados de pedido del contrato (`status` en `/orders`).
-nonisolated enum OrderStatus: String, Codable, Sendable, CaseIterable {
+nonisolated enum RemoteOrderStatus: String, Codable, Sendable, CaseIterable {
     case pending = "pendiente"
     case inProgress = "en_proceso"
     case delivered = "entregado"

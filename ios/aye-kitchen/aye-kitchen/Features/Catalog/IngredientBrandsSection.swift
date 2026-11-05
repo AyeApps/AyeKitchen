@@ -4,7 +4,7 @@ import SwiftUI
 
 @Observable final class IngredientBrandsSectionModel {
     let ingredientId: String
-    var presentations: [Presentation] = []
+    var presentations: [RemotePresentation] = []
     var isLoading = false
     var errorMessage: String?
     /// Ya se cargó al menos una vez (aunque el ingrediente no tenga marcas): no se vuelve a pedir
@@ -14,7 +14,7 @@ import SwiftUI
     /// a la lista reemplaza la fila que la lanzó y SwiftUI cancelaría la petición a medias.
     private var loadTask: Task<Void, Never>?
 
-    init(ingredientId: String, initialPresentations: [Presentation]? = nil) {
+    init(ingredientId: String, initialPresentations: [RemotePresentation]? = nil) {
         self.ingredientId = ingredientId
         if let initialPresentations {
             self.presentations = initialPresentations
@@ -38,7 +38,7 @@ import SwiftUI
         isLoading = true
         errorMessage = nil
         do {
-            let page: Page<Presentation> = try await NetworkService.shared.request(
+            let page: Page<RemotePresentation> = try await NetworkService.shared.request(
                 .get,
                 "/presentations/",
                 query: [
@@ -67,17 +67,17 @@ import SwiftUI
 
 /// Sección de marcas y precios dentro de la lista de detalle de un ingrediente.
 struct IngredientBrandsSection: View {
-    let ingredient: Ingredient
+    let ingredient: RemoteIngredient
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: IngredientBrandsSectionModel
     @State private var showingAddBrandSheet = false
-    @State private var presentationToDelete: Presentation?
+    @State private var presentationToDelete: RemotePresentation?
     @State private var showingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
 
-    init(ingredient: Ingredient, initialPresentations: [Presentation]? = nil) {
+    init(ingredient: RemoteIngredient, initialPresentations: [RemotePresentation]? = nil) {
         self.ingredient = ingredient
         self._model = State(initialValue: IngredientBrandsSectionModel(
             ingredientId: ingredient.id,
@@ -188,7 +188,7 @@ struct IngredientBrandsSection: View {
         }
     }
 
-    private func brandRow(_ presentation: Presentation) -> some View {
+    private func brandRow(_ presentation: RemotePresentation) -> some View {
         let titleText: String = {
             if let store = presentation.supplierName, !store.isEmpty {
                 return "\(presentation.brand) · \(store)"
@@ -251,7 +251,7 @@ struct IngredientBrandsSection: View {
     }
 
     @ViewBuilder
-    private func chipsView(for presentation: Presentation) -> some View {
+    private func chipsView(for presentation: RemotePresentation) -> some View {
         HStack(spacing: Spacing.xs) {
             if presentation.latestPriceCents == nil {
                 Chip("Falta precio", tone: .warning)
@@ -275,7 +275,7 @@ struct IngredientBrandsSection: View {
         }
     }
 
-    private func performDelete(_ presentation: Presentation) async {
+    private func performDelete(_ presentation: RemotePresentation) async {
         do {
             try await model.deletePresentation(id: presentation.id)
             presentationToDelete = nil
@@ -294,7 +294,7 @@ struct IngredientBrandsSection: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockIngredientForSection = Ingredient(
+private let mockIngredientForSection = RemoteIngredient(
     id: "ing_preview",
     name: "Harina de trigo",
     baseUnit: .g,
@@ -305,8 +305,8 @@ private let mockIngredientForSection = Ingredient(
     updatedAt: Date()
 )
 
-private let mockPresentationsForSection: [Presentation] = [
-    Presentation(
+private let mockPresentationsForSection: [RemotePresentation] = [
+    RemotePresentation(
         id: "pres_1",
         ingredientId: "ing_preview",
         ingredientName: "Harina de trigo",
@@ -325,7 +325,7 @@ private let mockPresentationsForSection: [Presentation] = [
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Presentation(
+    RemotePresentation(
         id: "pres_2",
         ingredientId: "ing_preview",
         ingredientName: "Harina de trigo",
@@ -344,7 +344,7 @@ private let mockPresentationsForSection: [Presentation] = [
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Presentation(
+    RemotePresentation(
         id: "pres_3",
         ingredientId: "ing_preview",
         ingredientName: "Harina de trigo",

@@ -3,8 +3,8 @@ import SwiftUI
 // MARK: - Modos del formulario
 
 enum BrandFormMode: Sendable {
-    case create(ingredient: Ingredient)
-    case edit(presentation: Presentation)
+    case create(ingredient: RemoteIngredient)
+    case edit(presentation: RemotePresentation)
 
     var title: String {
         switch self {
@@ -13,7 +13,7 @@ enum BrandFormMode: Sendable {
         }
     }
 
-    var baseUnit: BaseUnit {
+    var baseUnit: RemoteBaseUnit {
         switch self {
         case .create(let ingredient): ingredient.baseUnit
         case .edit(let presentation): presentation.baseUnit
@@ -132,7 +132,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
     var selectedUnit: MeasureUnit?
     var priceText: String = ""
 
-    var suppliers: [Supplier] = []
+    var suppliers: [RemoteSupplier] = []
     var availableUnits: [MeasureUnit] = []
     var isLoadingOptions = false
     var isSaving = false
@@ -145,7 +145,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
 
     init(
         mode: BrandFormMode,
-        mockSuppliers: [Supplier]? = nil,
+        mockSuppliers: [RemoteSupplier]? = nil,
         mockUnits: [MeasureUnit]? = nil
     ) {
         self.mode = mode
@@ -193,7 +193,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
         isLoadingOptions = true
         errorMessage = nil
         do {
-            async let suppliersTask: [Supplier] = NetworkService.shared.request(.get, "/suppliers/")
+            async let suppliersTask: [RemoteSupplier] = NetworkService.shared.request(.get, "/suppliers/")
             async let unitsTask: [MeasureUnit] = NetworkService.shared.request(.get, "/units/")
 
             let (fetchedSuppliers, fetchedUnits) = try await (suppliersTask, unitsTask)
@@ -218,12 +218,12 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
         }
     }
 
-    func createSupplier(name: String) async -> Supplier? {
+    func createSupplier(name: String) async -> RemoteSupplier? {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
         do {
             let body = SupplierCreateRequest(name: trimmed, notes: nil)
-            let created: Supplier = try await NetworkService.shared.request(.post, "/suppliers/", body: body)
+            let created: RemoteSupplier = try await NetworkService.shared.request(.post, "/suppliers/", body: body)
             suppliers.append(created)
             suppliers.sort { $0.name.localizedCompare($1.name) == .orderedAscending }
             selectedSupplier = .existing(id: created.id, name: created.name)
@@ -234,7 +234,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
         }
     }
 
-    func save() async -> Presentation? {
+    func save() async -> RemotePresentation? {
         guard isValid, let unit = selectedUnit, let parsedQty = Quantity.parse(packageQuantityText) else {
             return nil
         }
@@ -263,7 +263,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
                     priceCents: priceCents
                 )
 
-                let created: Presentation = try await NetworkService.shared.request(.post, "/presentations/", body: body)
+                let created: RemotePresentation = try await NetworkService.shared.request(.post, "/presentations/", body: body)
                 isSaving = false
                 return created
 
@@ -275,7 +275,7 @@ nonisolated struct PresentationUpdateRequest: Encodable, Sendable {
                     packageUnitId: unit.id
                 )
 
-                let updated: Presentation = try await NetworkService.shared.request(.patch, "/presentations/\(presentation.id)", body: body)
+                let updated: RemotePresentation = try await NetworkService.shared.request(.patch, "/presentations/\(presentation.id)", body: body)
                 isSaving = false
                 return updated
             }
@@ -324,13 +324,13 @@ struct BrandFormView: View {
     @State private var showingNewSupplierAlert = false
     @State private var newSupplierName = ""
 
-    let onSave: (Presentation) -> Void
+    let onSave: (RemotePresentation) -> Void
 
     init(
         mode: BrandFormMode,
-        mockSuppliers: [Supplier]? = nil,
+        mockSuppliers: [RemoteSupplier]? = nil,
         mockUnits: [MeasureUnit]? = nil,
-        onSave: @escaping (Presentation) -> Void
+        onSave: @escaping (RemotePresentation) -> Void
     ) {
         self._model = State(initialValue: BrandFormModel(
             mode: mode,
@@ -530,7 +530,7 @@ struct BrandFormView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockIngredientPreview = Ingredient(
+private let mockIngredientPreview = RemoteIngredient(
     id: "ing_prev",
     name: "Harina de trigo",
     baseUnit: .g,
@@ -541,7 +541,7 @@ private let mockIngredientPreview = Ingredient(
     updatedAt: Date()
 )
 
-private let mockPresentationPreview = Presentation(
+private let mockPresentationPreview = RemotePresentation(
     id: "pres_prev",
     ingredientId: "ing_prev",
     ingredientName: "Harina de trigo",
@@ -561,9 +561,9 @@ private let mockPresentationPreview = Presentation(
     updatedAt: Date()
 )
 
-private let mockSuppliersPreview: [Supplier] = [
-    Supplier(id: "sup_1", name: "Walmart", notes: nil, createdAt: Date(), updatedAt: Date()),
-    Supplier(id: "sup_2", name: "Costco", notes: nil, createdAt: Date(), updatedAt: Date())
+private let mockSuppliersPreview: [RemoteSupplier] = [
+    RemoteSupplier(id: "sup_1", name: "Walmart", notes: nil, createdAt: Date(), updatedAt: Date()),
+    RemoteSupplier(id: "sup_2", name: "Costco", notes: nil, createdAt: Date(), updatedAt: Date())
 ]
 
 private let mockUnitsPreview: [MeasureUnit] = [

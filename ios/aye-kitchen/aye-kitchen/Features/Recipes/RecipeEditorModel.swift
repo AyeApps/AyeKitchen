@@ -4,7 +4,7 @@ import SwiftUI
 /// Línea de ingrediente o subreceta dentro del editor de receta.
 struct RecipeEditorLine: Identifiable, Hashable, Sendable {
     let id: UUID
-    var kind: RecipeItemKind
+    var kind: RemoteRecipeItemKind
     var refId: String
     var refName: String
     var quantity: String
@@ -15,7 +15,7 @@ struct RecipeEditorLine: Identifiable, Hashable, Sendable {
 
     init(
         id: UUID = UUID(),
-        kind: RecipeItemKind,
+        kind: RemoteRecipeItemKind,
         refId: String,
         refName: String,
         quantity: String,
@@ -39,7 +39,7 @@ struct RecipeEditorLine: Identifiable, Hashable, Sendable {
 // MARK: - Cuerpos de petición (docs/api-contract.md)
 
 nonisolated struct RecipeItemInput: Encodable, Sendable {
-    let kind: RecipeItemKind
+    let kind: RemoteRecipeItemKind
     let refId: String
     let quantity: String
     let unitId: String?
@@ -82,7 +82,7 @@ nonisolated struct RecipeCreateRequest: Encodable, Sendable {
     let items: [RecipeItemInput]
     let extraCosts: [ExtraCostInput]
     let yieldQuantity: String
-    let yieldUnit: BaseUnit
+    let yieldUnit: RemoteBaseUnit
     let servings: Int?
 
     enum CodingKeys: String, CodingKey {
@@ -115,7 +115,7 @@ nonisolated struct RecipePatchRequest: Encodable, Sendable {
     let items: [RecipeItemInput]
     let extraCosts: [ExtraCostInput]
     let yieldQuantity: String
-    let yieldUnit: BaseUnit
+    let yieldUnit: RemoteBaseUnit
     let servings: Int?
 
     enum CodingKeys: String, CodingKey {
@@ -194,15 +194,15 @@ func formatQuantityAndUnit(quantity: String, unitName: String?) -> String {
 
 @Observable
 final class RecipeEditorModel {
-    let recipe: Recipe?
+    let recipe: RemoteRecipe?
 
     var name: String = ""
     var descriptionText: String = ""
     var yieldQuantity: String = "1"
-    var yieldUnit: BaseUnit = .pz
+    var yieldUnit: RemoteBaseUnit = .pz
     var servings: Int? = nil
     var items: [RecipeEditorLine] = []
-    var extraCosts: [ExtraCost] = []
+    var extraCosts: [RemoteExtraCost] = []
     var allUnits: [MeasureUnit] = []
 
     var isSaving: Bool = false
@@ -256,7 +256,7 @@ final class RecipeEditorModel {
         }
     }
 
-    init(recipe: Recipe? = nil, mockUnits: [MeasureUnit]? = nil) {
+    init(recipe: RemoteRecipe? = nil, mockUnits: [MeasureUnit]? = nil) {
         self.recipe = recipe
         if let mockUnits {
             self.allUnits = mockUnits
@@ -310,7 +310,7 @@ final class RecipeEditorModel {
                items[idx].pinnedBrandName == nil,
                items[idx].kind == .ingredient {
                 let ingId = items[idx].refId
-                if let presentations: Page<Presentation> = try? await NetworkService.shared.request(
+                if let presentations: Page<RemotePresentation> = try? await NetworkService.shared.request(
                     .get,
                     "/presentations/",
                     query: [
@@ -335,13 +335,13 @@ final class RecipeEditorModel {
 
         do {
             if item.kind == .ingredient {
-                let ing: Ingredient = try await NetworkService.shared.request(
+                let ing: RemoteIngredient = try await NetworkService.shared.request(
                     .get,
                     "/ingredients/\(item.refId)"
                 )
                 return .ingredient(ing)
             } else {
-                let rec: Recipe = try await NetworkService.shared.request(
+                let rec: RemoteRecipe = try await NetworkService.shared.request(
                     .get,
                     "/recipes/\(item.refId)"
                 )
@@ -369,15 +369,15 @@ final class RecipeEditorModel {
         items.removeAll(where: { $0.id == line.id })
     }
 
-    func addExtraCost(_ cost: ExtraCost) {
+    func addExtraCost(_ cost: RemoteExtraCost) {
         extraCosts.append(cost)
     }
 
-    func removeExtraCost(_ cost: ExtraCost) {
+    func removeExtraCost(_ cost: RemoteExtraCost) {
         extraCosts.removeAll(where: { $0.name == cost.name && $0.costCents == cost.costCents })
     }
 
-    func save() async throws -> Recipe {
+    func save() async throws -> RemoteRecipe {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
@@ -413,7 +413,7 @@ final class RecipeEditorModel {
                 yieldUnit: yieldUnit,
                 servings: servings
             )
-            let updated: Recipe = try await NetworkService.shared.request(
+            let updated: RemoteRecipe = try await NetworkService.shared.request(
                 .patch,
                 "/recipes/\(recipe.id)",
                 body: body
@@ -429,7 +429,7 @@ final class RecipeEditorModel {
                 yieldUnit: yieldUnit,
                 servings: servings
             )
-            let created: Recipe = try await NetworkService.shared.request(
+            let created: RemoteRecipe = try await NetworkService.shared.request(
                 .post,
                 "/recipes/",
                 body: body

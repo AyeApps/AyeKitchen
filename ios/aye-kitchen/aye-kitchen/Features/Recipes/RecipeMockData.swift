@@ -1,14 +1,14 @@
 #if DEBUG
 import Foundation
 
-extension Recipe {
+extension RemoteRecipe {
     /// Receta de ejemplo del contrato: Harina 1000 g a $23.50, línea de 300 g -> $7.05.
-    static let mockContractExample = Recipe(
+    static let mockContractExample = RemoteRecipe(
         id: "recipe-contract-1",
         name: "Pastel clásico de vainilla",
         description: "Receta base para pasteles de cumpleaños.",
         items: [
-            RecipeItem(
+            RemoteRecipeItem(
                 kind: .ingredient,
                 refId: "ing-harina",
                 refName: "Harina de trigo",
@@ -19,7 +19,7 @@ extension Recipe {
             )
         ],
         extraCosts: [
-            ExtraCost(name: "Caja para pastel", costCents: 1500)
+            RemoteExtraCost(name: "Caja para pastel", costCents: 1500)
         ],
         yieldQuantity: "1",
         yieldUnit: .pz,
@@ -29,12 +29,12 @@ extension Recipe {
         updatedAt: Date.now
     )
 
-    static let mockIncomplete = Recipe(
+    static let mockIncomplete = RemoteRecipe(
         id: "recipe-incomplete-1",
         name: "Pastel de zanahoria con nuez",
         description: "Pastel húmedo con betún de queso crema.",
         items: [
-            RecipeItem(
+            RemoteRecipeItem(
                 kind: .ingredient,
                 refId: "ing-nuez",
                 refName: "Nuez picada",
@@ -54,10 +54,10 @@ extension Recipe {
     )
 }
 
-extension RecipeCost {
+extension RemoteRecipeCost {
     /// Desglose de costo del contrato: Harina 300 g cuesta $7.05 (705 cents) + Caja $15.00 (1500 cents).
     /// Total tanda: $22.05 (2205 cents). Con margen 30%: $28.67 (2867 cents).
-    static let mockContractExample = RecipeCost(
+    static let mockContractExample = RemoteRecipeCost(
         recipeId: "recipe-contract-1",
         lines: [
             CostLine(
@@ -89,7 +89,7 @@ extension RecipeCost {
 
     /// Desglose con línea sin precio (missingPrice) y línea con precio viejo (priceIsStale),
     /// además de una subreceta.
-    static let mockWithWarnings = RecipeCost(
+    static let mockWithWarnings = RemoteRecipeCost(
         recipeId: "recipe-warnings-1",
         lines: [
             CostLine(
@@ -150,8 +150,8 @@ extension RecipeCost {
     )
 }
 
-extension RecipeListItem {
-    static let mockListItems: [RecipeListItem] = [
+extension RemoteRecipeListItem {
+    static let mockListItems: [RemoteRecipeListItem] = [
         makeMock(
             id: "recipe-contract-1",
             name: "Pastel clásico de vainilla",
@@ -178,7 +178,7 @@ extension RecipeListItem {
         )
     ]
 
-    private static func makeMock(id: String, name: String, batchCostCents: Int?, complete: Bool) -> RecipeListItem {
+    private static func makeMock(id: String, name: String, batchCostCents: Int?, complete: Bool) -> RemoteRecipeListItem {
         let json = """
         {
             "id": "\(id)",
@@ -196,7 +196,7 @@ extension RecipeListItem {
             "complete": \(complete)
         }
         """.data(using: .utf8)!
-        return try! JSONCoding.decode(RecipeListItem.self, from: json)
+        return try! JSONCoding.decode(RemoteRecipeListItem.self, from: json)
     }
 }
 #endif

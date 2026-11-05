@@ -8,15 +8,15 @@ struct OrderFormView: View {
     @State private var model: OrderFormModel
     @State private var showingRecipePicker = false
     @State private var showingCustomerPicker = false
-    let onSave: @MainActor @Sendable (Order) -> Void
+    let onSave: @MainActor @Sendable (RemoteOrder) -> Void
 
-    init(order: Order? = nil, onSave: @escaping @MainActor @Sendable (Order) -> Void) {
+    init(order: RemoteOrder? = nil, onSave: @escaping @MainActor @Sendable (RemoteOrder) -> Void) {
         _model = State(initialValue: OrderFormModel(order: order))
         self.onSave = onSave
     }
 
 #if DEBUG
-    init(model: OrderFormModel, onSave: @escaping @MainActor @Sendable (Order) -> Void = { _ in }) {
+    init(model: OrderFormModel, onSave: @escaping @MainActor @Sendable (RemoteOrder) -> Void = { _ in }) {
         _model = State(initialValue: model)
         self.onSave = onSave
     }
@@ -250,8 +250,8 @@ struct OrderFormView: View {
                     get: { item.wrappedValue.soldBy },
                     set: { item.wrappedValue.changeMode(to: $0) }
                 )) {
-                    Text(item.wrappedValue.unitOptionTitle).tag(OrderSoldBy.unit)
-                    Text("Por tanda").tag(OrderSoldBy.batch)
+                    Text(item.wrappedValue.unitOptionTitle).tag(RemoteOrderSoldBy.unit)
+                    Text("Por tanda").tag(RemoteOrderSoldBy.batch)
                 }
                 .pickerStyle(.segmented)
             }
@@ -350,11 +350,11 @@ struct OrderFormView: View {
 struct RecipePickerSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    let onSelect: (RecipeListItem) -> Void
+    let onSelect: (RemoteRecipeListItem) -> Void
 
     @State private var model: RecipePickerModel
 
-    init(model: RecipePickerModel = RecipePickerModel(), onSelect: @escaping (RecipeListItem) -> Void) {
+    init(model: RecipePickerModel = RecipePickerModel(), onSelect: @escaping (RemoteRecipeListItem) -> Void) {
         _model = State(initialValue: model)
         self.onSelect = onSelect
     }
@@ -443,7 +443,7 @@ struct RecipePickerSheet: View {
         }
     }
 
-    private func select(_ item: RecipeListItem) {
+    private func select(_ item: RemoteRecipeListItem) {
         model.selectingId = item.id
         onSelect(item)
         dismiss()
@@ -503,7 +503,7 @@ private func makeMockOrderFormModel() -> OrderFormModel {
 }
 
 #Preview("Editar pedido con cliente — Claro") {
-    var order = Order.mockPendingToday
+    var order = RemoteOrder.mockPendingToday
     order.customerId = "c-1"
     return OrderFormView(order: order) { _ in }
 }

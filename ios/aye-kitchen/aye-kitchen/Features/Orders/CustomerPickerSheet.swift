@@ -8,13 +8,13 @@ struct CustomerPickerSheet: View {
     @State private var searchText = ""
     @State private var searchTask: Task<Void, Never>?
     @State private var showingNewCustomerSheet = false
-    @State private var pendingCustomer: Customer?
+    @State private var pendingCustomer: RemoteCustomer?
 
-    let onSelect: (Customer) -> Void
+    let onSelect: (RemoteCustomer) -> Void
 
     init(
         model: CustomersModel = CustomersModel(),
-        onSelect: @escaping (Customer) -> Void
+        onSelect: @escaping (RemoteCustomer) -> Void
     ) {
         _model = State(initialValue: model)
         self.onSelect = onSelect
@@ -147,7 +147,7 @@ struct CustomerPickerSheet: View {
         }
     }
 
-    private func customerRow(_ customer: Customer) -> some View {
+    private func customerRow(_ customer: RemoteCustomer) -> some View {
         Button {
             onSelect(customer)
             dismiss()
@@ -174,8 +174,8 @@ struct CustomerPickerSheet: View {
 // MARK: - Previews
 
 #if DEBUG
-private let previewCustomers: [Customer] = [
-    Customer(
+private let previewCustomers: [RemoteCustomer] = [
+    RemoteCustomer(
         id: "c-1",
         name: "Mariana Rojas",
         phone: "5512345678",
@@ -183,7 +183,7 @@ private let previewCustomers: [Customer] = [
         createdAt: Date.now,
         updatedAt: Date.now
     ),
-    Customer(
+    RemoteCustomer(
         id: "c-2",
         name: "Carlos Benítez",
         phone: nil,

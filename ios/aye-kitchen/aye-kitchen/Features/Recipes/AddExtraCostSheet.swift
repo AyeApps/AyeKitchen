@@ -7,7 +7,7 @@ struct AddExtraCostSheet: View {
     @State private var name: String = ""
     @State private var amountText: String = ""
 
-    let onAdd: @MainActor @Sendable (ExtraCost) -> Void
+    let onAdd: @MainActor @Sendable (RemoteExtraCost) -> Void
 
     private var parsedCents: Int? {
         let clean = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -52,7 +52,7 @@ struct AddExtraCostSheet: View {
                     Button {
                         if let cents = parsedCents {
                             let trimmedName = name.trimmingCharacters(in: .whitespaces)
-                            onAdd(ExtraCost(name: trimmedName, costCents: cents))
+                            onAdd(RemoteExtraCost(name: trimmedName, costCents: cents))
                             dismiss()
                         }
                     } label: {

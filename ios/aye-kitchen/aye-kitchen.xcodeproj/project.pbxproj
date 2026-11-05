@@ -6,6 +6,10 @@
 	objectVersion = 90;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		000000000000000150000001 /* KitchenDomain in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000150000002 /* KitchenDomain */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* aye-kitchen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "aye-kitchen.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -22,6 +26,7 @@
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				000000000000000150000001 /* KitchenDomain in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -60,6 +65,9 @@
 				000000000000000000000010 /* aye-kitchen */,
 			);
 			name = "aye-kitchen";
+			packageProductDependencies = (
+				000000000000000150000002 /* KitchenDomain */,
+			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* aye-kitchen.app */;
 			productType = "com.apple.product-type.application";
@@ -88,6 +96,9 @@
 			);
 			mainGroup = 000000000000000000000001;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				000000000000000150000003 /* XCLocalSwiftPackageReference "../KitchenKit" */,
+			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
 			projectDirPath = "";
@@ -349,6 +360,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		000000000000000150000003 /* XCLocalSwiftPackageReference "../KitchenKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../KitchenKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		000000000000000150000002 /* KitchenDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = KitchenDomain;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 000000000000000000000000 /* Project object */;
 }

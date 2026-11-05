@@ -23,7 +23,7 @@ enum RecipeActionError: LocalizedError, Sendable {
 /// Modelo de presentación para la lista de recetas (MVVM, Regla 5 / Bloque I13).
 @Observable
 final class RecipesModel {
-    var items: [RecipeListItem] = []
+    var items: [RemoteRecipeListItem] = []
     var state: RecipesLoadingState = .loading
     var query: String = ""
 
@@ -50,7 +50,7 @@ final class RecipesModel {
         !query.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
-    init(mockItems: [RecipeListItem]? = nil) {
+    init(mockItems: [RemoteRecipeListItem]? = nil) {
         if let mockItems {
             self.items = mockItems
             self.state = .loaded
@@ -123,7 +123,7 @@ final class RecipesModel {
     }
 
     /// Carga la siguiente página de recetas cuando el usuario llega al final de la lista.
-    func loadNextPageIfNeeded(currentItem: RecipeListItem) async {
+    func loadNextPageIfNeeded(currentItem: RemoteRecipeListItem) async {
         guard let lastItem = items.last, lastItem.id == currentItem.id else { return }
         guard hasMorePages, !isLoadingMore else { return }
 
@@ -160,7 +160,7 @@ final class RecipesModel {
     /// Lee la copia guardada en disco de la primera pantalla sin búsqueda.
     private func loadFromCache() async -> Bool {
         guard !isMock else { return true }
-        guard let page: Page<RecipeListItem> = await NetworkService.shared.cached("/recipes/", query: firstPageQuery) else {
+        guard let page: Page<RemoteRecipeListItem> = await NetworkService.shared.cached("/recipes/", query: firstPageQuery) else {
             return false
         }
         self.items = page.items
@@ -176,7 +176,7 @@ final class RecipesModel {
     func reloadSilently() async -> Bool {
         guard !isMock else { return true }
         do {
-            let page: Page<RecipeListItem> = try await NetworkService.shared.requestCaching(
+            let page: Page<RemoteRecipeListItem> = try await NetworkService.shared.requestCaching(
                 "/recipes/",
                 query: firstPageQuery
             )
@@ -199,7 +199,7 @@ final class RecipesModel {
         }
     }
 
-    private func fetchPage(pageNumber: Int, query: String) async throws -> Page<RecipeListItem> {
+    private func fetchPage(pageNumber: Int, query: String) async throws -> Page<RemoteRecipeListItem> {
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "page", value: "\(pageNumber)"),
             URLQueryItem(name: "limit", value: "50")

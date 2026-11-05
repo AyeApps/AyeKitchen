@@ -27,7 +27,7 @@ enum OrdersLoadingState: Equatable, Sendable {
 struct OrderSection: Identifiable, Sendable {
     let id: String
     let title: String
-    let orders: [Order]
+    let orders: [RemoteOrder]
 }
 
 /// Modelo de presentación para la lista de pedidos (MVVM, Regla 5 / Bloque I13).
@@ -45,18 +45,18 @@ final class OrdersModel {
     var state: OrdersLoadingState = .loading
     private(set) var sections: [OrderSection] = []
 
-    private var pendingAndInProgressOrders: [Order] = []
-    private var deliveredOrders: [Order] = []
+    private var pendingAndInProgressOrders: [RemoteOrder] = []
+    private var deliveredOrders: [RemoteOrder] = []
     private var hasLoadedPending = false
     private var hasLoadedDelivered = false
     private(set) var isMock: Bool = false
 
     private let pendingQuery = [
-        URLQueryItem(name: "status", value: OrderStatus.pending.rawValue),
+        URLQueryItem(name: "status", value: RemoteOrderStatus.pending.rawValue),
         URLQueryItem(name: "limit", value: "100")
     ]
     private let inProgressQuery = [
-        URLQueryItem(name: "status", value: OrderStatus.inProgress.rawValue),
+        URLQueryItem(name: "status", value: RemoteOrderStatus.inProgress.rawValue),
         URLQueryItem(name: "limit", value: "100")
     ]
 
@@ -64,7 +64,7 @@ final class OrdersModel {
         sections.isEmpty
     }
 
-    init(mockOrders: [Order]? = nil) {
+    init(mockOrders: [RemoteOrder]? = nil) {
         if let mockOrders {
             self.isMock = true
             self.state = .loaded
@@ -138,8 +138,8 @@ final class OrdersModel {
     /// Lee la copia guardada en disco de la primera pantalla ("Por entregar").
     private func loadFromCache() async -> Bool {
         guard !isMock else { return true }
-        async let cachedPending: Page<Order>? = NetworkService.shared.cached("/orders/", query: pendingQuery)
-        async let cachedInProgress: Page<Order>? = NetworkService.shared.cached("/orders/", query: inProgressQuery)
+        async let cachedPending: Page<RemoteOrder>? = NetworkService.shared.cached("/orders/", query: pendingQuery)
+        async let cachedInProgress: Page<RemoteOrder>? = NetworkService.shared.cached("/orders/", query: inProgressQuery)
 
         let (pendingPage, inProgressPage) = await (cachedPending, cachedInProgress)
         guard let pendingPage, let inProgressPage else {
@@ -158,12 +158,12 @@ final class OrdersModel {
     func reloadSilently() async -> Bool {
         guard !isMock else { return true }
         do {
-            async let pendingRequest: Page<Order> = NetworkService.shared.requestCaching(
+            async let pendingRequest: Page<RemoteOrder> = NetworkService.shared.requestCaching(
                 "/orders/",
                 query: pendingQuery
             )
 
-            async let inProgressRequest: Page<Order> = NetworkService.shared.requestCaching(
+            async let inProgressRequest: Page<RemoteOrder> = NetworkService.shared.requestCaching(
                 "/orders/",
                 query: inProgressQuery
             )
@@ -201,11 +201,11 @@ final class OrdersModel {
         let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: Date.now) ?? Date.now.addingTimeInterval(-30 * 86400)
         let fromString = ISO8601DateFormatter().string(from: thirtyDaysAgo)
 
-        let page: Page<Order> = try await NetworkService.shared.request(
+        let page: Page<RemoteOrder> = try await NetworkService.shared.request(
             .get,
             "/orders/",
             query: [
-                URLQueryItem(name: "status", value: OrderStatus.delivered.rawValue),
+                URLQueryItem(name: "status", value: RemoteOrderStatus.delivered.rawValue),
                 URLQueryItem(name: "from", value: fromString),
                 URLQueryItem(name: "limit", value: "100")
             ]
@@ -261,7 +261,7 @@ final class OrdersModel {
     }
 
     /// Actualiza o inserta un pedido guardado localmente para respuesta instantánea.
-    func updateOrder(_ order: Order) {
+    func updateOrder(_ order: RemoteOrder) {
         pendingAndInProgressOrders.removeAll { $0.id == order.id }
         deliveredOrders.removeAll { $0.id == order.id }
 

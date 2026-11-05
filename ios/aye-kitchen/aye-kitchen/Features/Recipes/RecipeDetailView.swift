@@ -21,10 +21,10 @@ struct RecipeDetailView: View {
 
     init(
         recipeId: String,
-        mockRecipe: Recipe? = nil,
-        mockCost: RecipeCost? = nil,
-        mockComparisons: [CostVersionComparison]? = nil,
-        mockVersions: [CostVersion]? = nil,
+        mockRecipe: RemoteRecipe? = nil,
+        mockCost: RemoteRecipeCost? = nil,
+        mockComparisons: [RemoteCostVersionComparison]? = nil,
+        mockVersions: [RemoteCostVersion]? = nil,
         initialVersionId: String? = nil
     ) {
         _model = State(
@@ -203,7 +203,7 @@ struct RecipeDetailView: View {
 
     // MARK: - Encabezado
 
-    private func headerSection(recipe: Recipe) -> some View {
+    private func headerSection(recipe: RemoteRecipe) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(yieldDescription(recipe: recipe))
                 .font(.subheadline)
@@ -217,7 +217,7 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func yieldDescription(recipe: Recipe) -> String {
+    private func yieldDescription(recipe: RemoteRecipe) -> String {
         let qty = Quantity.format(recipe.yieldQuantity)
         let unitWord = yieldUnitWord(quantity: recipe.yieldQuantity, unit: recipe.yieldUnit)
         var text = "Rinde \(qty) \(unitWord)"
@@ -228,7 +228,7 @@ struct RecipeDetailView: View {
         return text
     }
 
-    private func yieldUnitWord(quantity: String, unit: BaseUnit) -> String {
+    private func yieldUnitWord(quantity: String, unit: RemoteBaseUnit) -> String {
         let clean = quantity.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
         let isSingular = (clean == "1" || clean == "1.0" || clean == "1.00" || clean == "1.000")
         switch unit {
@@ -329,7 +329,7 @@ struct RecipeDetailView: View {
 
     // MARK: - Tarjeta crema (componente firma)
 
-    private func creamCostCard(recipe: Recipe, cost: RecipeCost) -> some View {
+    private func creamCostCard(recipe: RemoteRecipe, cost: RemoteRecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.lg) {
             if dynamicTypeSize.isAccessibilitySize {
                 VStack(alignment: .leading, spacing: Spacing.md) {
@@ -354,7 +354,7 @@ struct RecipeDetailView: View {
         .softCard()
     }
 
-    private func costColumn(cost: RecipeCost) -> some View {
+    private func costColumn(cost: RemoteRecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text("Te cuesta")
                 .font(.subheadline.weight(.bold))
@@ -374,7 +374,7 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func suggestedColumn(cost: RecipeCost) -> some View {
+    private func suggestedColumn(cost: RemoteRecipeCost) -> some View {
         let profit = cost.suggestedPriceCents - cost.batchCostCents
 
         return VStack(alignment: .leading, spacing: Spacing.xs) {
@@ -394,7 +394,7 @@ struct RecipeDetailView: View {
         }
     }
 
-    private func marginControlSection(cost: RecipeCost) -> some View {
+    private func marginControlSection(cost: RemoteRecipeCost) -> some View {
         let currentMargin = model.effectiveMargin
         let isStandard = marginOptions.contains(currentMargin)
 
@@ -452,7 +452,7 @@ struct RecipeDetailView: View {
     // MARK: - Avisos
 
     @ViewBuilder
-    private func warningsSection(cost: RecipeCost) -> some View {
+    private func warningsSection(cost: RemoteRecipeCost) -> some View {
         if !cost.complete || cost.hasStalePrices {
             VStack(alignment: .leading, spacing: Spacing.sm) {
                 if !cost.complete {
@@ -485,7 +485,7 @@ struct RecipeDetailView: View {
 
     // MARK: - De dónde sale el costo
 
-    private func costBreakdownSection(recipe: Recipe, cost: RecipeCost) -> some View {
+    private func costBreakdownSection(recipe: RemoteRecipe, cost: RemoteRecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("De dónde sale el costo")
                 .sectionTitleStyle()
@@ -672,7 +672,7 @@ struct CostLineRow: View {
 
 /// Fila para un costo fijo adicional (gas, empaque, etc.).
 struct ExtraCostRow: View {
-    let extra: ExtraCost
+    let extra: RemoteExtraCost
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var iconBoxSize: CGFloat = 40
@@ -757,7 +757,7 @@ struct ExtraCostRow: View {
 
 #Preview("Con dos versiones — Claro") {
     let mockComparisons = [
-        CostVersionComparison(
+        RemoteCostVersionComparison(
             versionId: nil,
             name: "Base",
             batchCostCents: 705,
@@ -766,7 +766,7 @@ struct ExtraCostRow: View {
             complete: true,
             hasStalePrices: false
         ),
-        CostVersionComparison(
+        RemoteCostVersionComparison(
             versionId: "ver_tres_estrellas",
             name: "Con Tres Estrellas",
             batchCostCents: 900,
@@ -778,12 +778,12 @@ struct ExtraCostRow: View {
     ]
 
     let mockVersions = [
-        CostVersion(
+        RemoteCostVersion(
             id: "ver_tres_estrellas",
             recipeId: "recipe-contract-1",
             name: "Con Tres Estrellas",
             choices: [
-                CostVersionChoice(
+                RemoteCostVersionChoice(
                     ingredientId: "ing-1",
                     ingredientName: "Harina de trigo",
                     presentationId: "pres-2",
@@ -808,7 +808,7 @@ struct ExtraCostRow: View {
 
 #Preview("Con dos versiones — Letra AX3") {
     let mockComparisons = [
-        CostVersionComparison(
+        RemoteCostVersionComparison(
             versionId: nil,
             name: "Base",
             batchCostCents: 705,
@@ -817,7 +817,7 @@ struct ExtraCostRow: View {
             complete: true,
             hasStalePrices: false
         ),
-        CostVersionComparison(
+        RemoteCostVersionComparison(
             versionId: "ver_tres_estrellas",
             name: "Con Tres Estrellas",
             batchCostCents: 900,
@@ -829,12 +829,12 @@ struct ExtraCostRow: View {
     ]
 
     let mockVersions = [
-        CostVersion(
+        RemoteCostVersion(
             id: "ver_tres_estrellas",
             recipeId: "recipe-contract-1",
             name: "Con Tres Estrellas",
             choices: [
-                CostVersionChoice(
+                RemoteCostVersionChoice(
                     ingredientId: "ing-1",
                     ingredientName: "Harina de trigo",
                     presentationId: "pres-2",

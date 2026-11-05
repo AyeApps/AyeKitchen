@@ -6,7 +6,7 @@ struct RecipesView: View {
 
     @State private var model = RecipesModel()
     @State private var showingNewRecipe = false
-    @State private var recipeToDelete: RecipeListItem?
+    @State private var recipeToDelete: RemoteRecipeListItem?
     @State private var deleteErrorMessage: String?
     @State private var searchTask: Task<Void, Never>?
     @State private var isVisible = false
@@ -185,7 +185,7 @@ struct RecipesView: View {
 
 /// Fila individual de receta en la lista.
 struct RecipeRow: View {
-    let item: RecipeListItem
+    let item: RemoteRecipeListItem
 
     var body: some View {
         HStack(alignment: .center, spacing: Spacing.md) {
@@ -231,7 +231,7 @@ struct RecipeRow: View {
 }
 
 private struct RecipesMockListContainer: View {
-    @State private var model = RecipesModel(mockItems: RecipeListItem.mockListItems)
+    @State private var model = RecipesModel(mockItems: RemoteRecipeListItem.mockListItems)
     @State private var showingNew = false
 
     var body: some View {

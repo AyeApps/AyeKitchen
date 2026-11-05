@@ -15,7 +15,7 @@ struct RecipeLineSheet: View {
         target: LineTarget,
         existingLine: RecipeEditorLine? = nil,
         allUnits: [MeasureUnit],
-        mockPresentations: [Presentation]? = nil,
+        mockPresentations: [RemotePresentation]? = nil,
         onSave: @escaping @MainActor @Sendable (RecipeEditorLine) -> Void
     ) {
         _model = State(initialValue: RecipeLineModel(
@@ -330,7 +330,7 @@ struct RecipeLineSheet: View {
 
 #if DEBUG
 #Preview("Harina con Pregunta de Equivalencia") {
-    let mockHarina = Ingredient(
+    let mockHarina = RemoteIngredient(
         id: "ing-harina-preview",
         name: "Harina",
         baseUnit: .g,
@@ -348,7 +348,7 @@ struct RecipeLineSheet: View {
         MeasureUnit(id: "u_cdta", name: "cucharadita", abbreviation: "cdta", baseUnit: .ml, factorToBase: "5", isSystem: true)
     ]
     let mockPresentations = [
-        Presentation(
+        RemotePresentation(
             id: "p_1",
             ingredientId: "ing-harina-preview",
             ingredientName: "Harina",
@@ -377,7 +377,7 @@ struct RecipeLineSheet: View {
 }
 
 #Preview("Harina - Accesibilidad AX3") {
-    let mockHarina = Ingredient(
+    let mockHarina = RemoteIngredient(
         id: "ing-harina-preview-ax",
         name: "Harina",
         baseUnit: .g,

@@ -3,9 +3,9 @@ import Foundation
 // MARK: - Modelo de Inicio (Bloque I4 / I13)
 
 @Observable final class HomeModel {
-    var pendingOrders: [Order] = []
-    var inProgressOrders: [Order] = []
-    var recipes: [RecipeListItem] = []
+    var pendingOrders: [RemoteOrder] = []
+    var inProgressOrders: [RemoteOrder] = []
+    var recipes: [RemoteRecipeListItem] = []
     var stalePresentations: [StalePresentation] = []
 
     var isLoading = false
@@ -35,9 +35,9 @@ import Foundation
     ]
 
     init(
-        pendingOrders: [Order]? = nil,
-        inProgressOrders: [Order]? = nil,
-        recipes: [RecipeListItem]? = nil,
+        pendingOrders: [RemoteOrder]? = nil,
+        inProgressOrders: [RemoteOrder]? = nil,
+        recipes: [RemoteRecipeListItem]? = nil,
         stalePresentations: [StalePresentation]? = nil
     ) {
         if pendingOrders != nil || inProgressOrders != nil || recipes != nil || stalePresentations != nil {
@@ -51,8 +51,8 @@ import Foundation
     }
 
     /// Todos los pedidos activos (pendientes y en proceso), ordenados por fecha de entrega.
-    var activeOrders: [Order] {
-        var map: [String: Order] = [:]
+    var activeOrders: [RemoteOrder] {
+        var map: [String: RemoteOrder] = [:]
         for order in pendingOrders + inProgressOrders {
             map[order.id] = order
         }
@@ -60,12 +60,12 @@ import Foundation
     }
 
     /// Pedidos atrasados: pendientes o en proceso con fecha de entrega antes del inicio de hoy.
-    var overdueOrders: [Order] {
+    var overdueOrders: [RemoteOrder] {
         activeOrders.filter { $0.deliveryAt < startOfToday }
     }
 
     /// Pedidos de la semana: desde el inicio de hoy hasta 7 días después.
-    var ordersThisWeek: [Order] {
+    var ordersThisWeek: [RemoteOrder] {
         activeOrders.filter { $0.deliveryAt >= startOfToday && $0.deliveryAt <= endOfSevenDays }
     }
 
@@ -75,12 +75,12 @@ import Foundation
     }
 
     /// "Lo que sigue": pedido pendiente o en proceso con la entrega más próxima desde el inicio de hoy.
-    var nextOrder: Order? {
+    var nextOrder: RemoteOrder? {
         activeOrders.first { $0.deliveryAt >= startOfToday }
     }
 
     /// Demás pedidos de la semana (excluyendo el que se muestra en la tarjeta "Lo que sigue").
-    var remainingWeekOrders: [Order] {
+    var remainingWeekOrders: [RemoteOrder] {
         if let nextId = nextOrder?.id {
             return ordersThisWeek.filter { $0.id != nextId }
         }
@@ -88,7 +88,7 @@ import Foundation
     }
 
     /// Recetas con complete falso.
-    var incompleteRecipes: [RecipeListItem] {
+    var incompleteRecipes: [RemoteRecipeListItem] {
         recipes.filter { !$0.complete }
     }
 
@@ -135,9 +135,9 @@ import Foundation
     /// Lee la copia guardada en disco de las 4 peticiones de Inicio.
     private func loadFromCache() async -> Bool {
         guard !isMock else { return true }
-        async let cachedPending: Page<Order>? = NetworkService.shared.cached("/orders/", query: pendingQuery)
-        async let cachedInProgress: Page<Order>? = NetworkService.shared.cached("/orders/", query: inProgressQuery)
-        async let cachedRecipes: Page<RecipeListItem>? = NetworkService.shared.cached("/recipes/", query: recipesQuery)
+        async let cachedPending: Page<RemoteOrder>? = NetworkService.shared.cached("/orders/", query: pendingQuery)
+        async let cachedInProgress: Page<RemoteOrder>? = NetworkService.shared.cached("/orders/", query: inProgressQuery)
+        async let cachedRecipes: Page<RemoteRecipeListItem>? = NetworkService.shared.cached("/recipes/", query: recipesQuery)
         async let cachedStale: Page<StalePresentation>? = NetworkService.shared.cached("/presentations/stale", query: staleQuery)
 
         let (pOrders, ipOrders, rList, sList) = await (cachedPending, cachedInProgress, cachedRecipes, cachedStale)
@@ -160,15 +160,15 @@ import Foundation
     func reloadSilently() async -> Bool {
         guard !isMock else { return true }
         do {
-            async let pendingTask: Page<Order> = NetworkService.shared.requestCaching(
+            async let pendingTask: Page<RemoteOrder> = NetworkService.shared.requestCaching(
                 "/orders/",
                 query: pendingQuery
             )
-            async let inProgressTask: Page<Order> = NetworkService.shared.requestCaching(
+            async let inProgressTask: Page<RemoteOrder> = NetworkService.shared.requestCaching(
                 "/orders/",
                 query: inProgressQuery
             )
-            async let recipesTask: Page<RecipeListItem> = NetworkService.shared.requestCaching(
+            async let recipesTask: Page<RemoteRecipeListItem> = NetworkService.shared.requestCaching(
                 "/recipes/",
                 query: recipesQuery
             )

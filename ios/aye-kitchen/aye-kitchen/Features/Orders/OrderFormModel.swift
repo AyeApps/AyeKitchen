@@ -4,7 +4,7 @@ import SwiftUI
 /// Elemento de entrada para cada línea del pedido al crear o editar.
 nonisolated struct OrderItemInput: Encodable, Sendable {
     let recipeId: String
-    let soldBy: OrderSoldBy
+    let soldBy: RemoteOrderSoldBy
     let quantity: String
     let unitPriceCents: Int?
 }
@@ -25,7 +25,7 @@ nonisolated struct OrderUpdateBody: Encodable, Sendable {
     let customerName: String?
     let customerPhone: String?
     let deliveryAt: Date?
-    let status: OrderStatus?
+    let status: RemoteOrderStatus?
     let notes: String?
     let items: [OrderItemInput]?
 
@@ -64,9 +64,9 @@ struct DraftOrderItem: Identifiable, Hashable {
     let id: UUID
     var recipeId: String
     var recipeName: String
-    var soldBy: OrderSoldBy
+    var soldBy: RemoteOrderSoldBy
     var yieldQuantity: Decimal?
-    var yieldUnit: BaseUnit
+    var yieldUnit: RemoteBaseUnit
     var quantityText: String
     var unitPriceText: String
     var suggestedPriceBatchCents: Int?
@@ -77,9 +77,9 @@ struct DraftOrderItem: Identifiable, Hashable {
         id: UUID = UUID(),
         recipeId: String,
         recipeName: String,
-        soldBy: OrderSoldBy = .batch,
+        soldBy: RemoteOrderSoldBy = .batch,
         yieldQuantity: Decimal? = nil,
-        yieldUnit: BaseUnit = .pz,
+        yieldUnit: RemoteBaseUnit = .pz,
         quantityText: String = "1",
         unitPriceText: String = "",
         suggestedPriceBatchCents: Int? = nil,
@@ -206,7 +206,7 @@ struct DraftOrderItem: Identifiable, Hashable {
     }
 
     /// Cambia el modo entre .batch y .unit según la regla del bloque I12.
-    mutating func changeMode(to newMode: OrderSoldBy) {
+    mutating func changeMode(to newMode: RemoteOrderSoldBy) {
         guard newMode != soldBy else { return }
         soldBy = newMode
         switch newMode {
@@ -239,7 +239,7 @@ struct DraftOrderItem: Identifiable, Hashable {
 /// Modelo de presentación para el formulario de nuevo o editar pedido (MVVM, Regla 5).
 @Observable
 final class OrderFormModel {
-    let editingOrder: Order?
+    let editingOrder: RemoteOrder?
 
     var customerId: String? = nil
     var customerName: String = ""
@@ -268,7 +268,7 @@ final class OrderFormModel {
         return !isSaving
     }
 
-    init(order: Order? = nil, draftItems: [DraftOrderItem]? = nil) {
+    init(order: RemoteOrder? = nil, draftItems: [DraftOrderItem]? = nil) {
         self.editingOrder = order
 
         if let order {
@@ -309,7 +309,7 @@ final class OrderFormModel {
     }
 
     /// Selecciona un cliente del catálogo (Bloque I7b).
-    func selectCustomer(_ customer: Customer) {
+    func selectCustomer(_ customer: RemoteCustomer) {
         self.customerId = customer.id
         self.customerName = customer.name
         self.customerPhone = customer.phone ?? ""
@@ -320,15 +320,15 @@ final class OrderFormModel {
     func loadRecipeDetailsForEditing() async {
         guard isEditing else { return }
 
-        await withTaskGroup(of: (UUID, Recipe?, RecipeCost?).self) { group in
+        await withTaskGroup(of: (UUID, RemoteRecipe?, RemoteRecipeCost?).self) { group in
             for item in items {
                 group.addTask {
                     do {
-                        async let recipeReq: Recipe = NetworkService.shared.request(
+                        async let recipeReq: RemoteRecipe = NetworkService.shared.request(
                             .get,
                             "/recipes/\(item.recipeId)"
                         )
-                        async let costReq: RecipeCost = NetworkService.shared.request(
+                        async let costReq: RemoteRecipeCost = NetworkService.shared.request(
                             .get,
                             "/recipes/\(item.recipeId)/cost"
                         )
@@ -359,15 +359,15 @@ final class OrderFormModel {
     /// Agrega una receta seleccionada:
     /// Si yieldQuantity > 1, empieza por pieza con cantidad igual al rendimiento y precio por unidad.
     /// Si rinde 1, empieza por tanda con cantidad 1 y precio por tanda.
-    func addRecipe(_ recipeItem: RecipeListItem) async {
+    func addRecipe(_ recipeItem: RemoteRecipeListItem) async {
         let recipe = recipeItem.recipe
         let yieldQty = Decimal(string: recipe.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) ?? 1
         let startsAsUnit = yieldQty > 1
-        let initialSoldBy: OrderSoldBy = startsAsUnit ? .unit : .batch
+        let initialSoldBy: RemoteOrderSoldBy = startsAsUnit ? .unit : .batch
         let initialQuantityText = startsAsUnit ? DraftOrderItem.formatQuantityForInput(yieldQty) : "1"
 
         do {
-            let cost: RecipeCost = try await NetworkService.shared.request(
+            let cost: RemoteRecipeCost = try await NetworkService.shared.request(
                 .get,
                 "/recipes/\(recipe.id)/cost"
             )
@@ -418,7 +418,7 @@ final class OrderFormModel {
     }
 
     /// Guarda el pedido (POST /orders/ o PATCH /orders/{id}).
-    func save() async throws -> Order {
+    func save() async throws -> RemoteOrder {
         isSaving = true
         errorMessage = nil
         defer { isSaving = false }
@@ -452,7 +452,7 @@ final class OrderFormModel {
                     notes: notesValue,
                     items: payloadItems
                 )
-                let updated: Order = try await NetworkService.shared.request(
+                let updated: RemoteOrder = try await NetworkService.shared.request(
                     .patch,
                     "/orders/\(order.id)",
                     body: body
@@ -468,7 +468,7 @@ final class OrderFormModel {
                     items: payloadItems,
                     notes: notesValue
                 )
-                let created: Order = try await NetworkService.shared.request(
+                let created: RemoteOrder = try await NetworkService.shared.request(
                     .post,
                     "/orders/",
                     body: body

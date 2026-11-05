@@ -9,7 +9,7 @@ struct CustomersView: View {
     @State private var searchText = ""
     @State private var searchTask: Task<Void, Never>?
     @State private var showingNewCustomer = false
-    @State private var customerToDelete: Customer?
+    @State private var customerToDelete: RemoteCustomer?
     @State private var showingDeleteConfirmation = false
     @State private var isVisible = false
 
@@ -171,7 +171,7 @@ struct CustomersView: View {
         }
     }
 
-    private func customerRow(_ customer: Customer) -> some View {
+    private func customerRow(_ customer: RemoteCustomer) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
             Text(customer.name)
                 .font(.body.weight(.semibold))
@@ -190,8 +190,8 @@ struct CustomersView: View {
 // MARK: - Previews
 
 #if DEBUG
-private let mockCustomersSample: [Customer] = [
-    Customer(
+private let mockCustomersSample: [RemoteCustomer] = [
+    RemoteCustomer(
         id: "mock_c1",
         name: "Ana Ruiz",
         phone: "55 1234 5678",
@@ -199,7 +199,7 @@ private let mockCustomersSample: [Customer] = [
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Customer(
+    RemoteCustomer(
         id: "mock_c2",
         name: "Carlos Mendoza",
         phone: "81 9876 5432",
@@ -207,7 +207,7 @@ private let mockCustomersSample: [Customer] = [
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Customer(
+    RemoteCustomer(
         id: "mock_c3",
         name: "Doña Mary",
         phone: "33 2345 6789",
@@ -215,7 +215,7 @@ private let mockCustomersSample: [Customer] = [
         createdAt: Date(),
         updatedAt: Date()
     ),
-    Customer(
+    RemoteCustomer(
         id: "mock_c4",
         name: "Roberto Garza",
         phone: nil,
