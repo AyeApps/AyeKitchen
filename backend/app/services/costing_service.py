@@ -469,7 +469,10 @@ async def calculate_recipe_cost(
     extras_cost_cents = round_to_cents(unrounded_extras_cost)
     batch_cost_cents = round_to_cents(unrounded_batch_cost)
 
-    yield_qty = parse_decimal(recipe.yield_quantity)
+    try:
+        yield_qty = parse_decimal(recipe.yield_quantity)
+    except Exception:
+        yield_qty = Decimal("0")
     if yield_qty > Decimal("0"):
         cost_per_yield_unit = str(
             (unrounded_batch_cost / yield_qty).quantize(
@@ -496,6 +499,16 @@ async def calculate_recipe_cost(
     )
     suggested_price_cents = round_to_cents(unrounded_suggested_price)
 
+    if yield_qty > Decimal("0"):
+        unrounded_suggested_price_per_yield_unit = (
+            unrounded_batch_cost / yield_qty
+        ) * (Decimal("1") + Decimal(margin_percent) / Decimal("100"))
+        suggested_price_per_yield_unit_cents = round_to_cents(
+            unrounded_suggested_price_per_yield_unit
+        )
+    else:
+        suggested_price_per_yield_unit_cents = 0
+
     complete = all(not line.missing_price for line in lines)
     has_stale_prices = any(line.price_is_stale for line in lines)
 
@@ -515,6 +528,7 @@ async def calculate_recipe_cost(
         cost_per_serving_cents=cost_per_serving_cents,
         margin_percent=margin_percent,
         suggested_price_cents=suggested_price_cents,
+        suggested_price_per_yield_unit_cents=suggested_price_per_yield_unit_cents,
         complete=complete,
         has_stale_prices=has_stale_prices,
         version_id=version_id,

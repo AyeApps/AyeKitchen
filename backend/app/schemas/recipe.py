@@ -110,6 +110,7 @@ class RecipeCostResponse(BaseModel):
     cost_per_serving_cents: int | None = None
     margin_percent: int
     suggested_price_cents: int
+    suggested_price_per_yield_unit_cents: int
     complete: bool
     has_stale_prices: bool = False
     version_id: str | None = None

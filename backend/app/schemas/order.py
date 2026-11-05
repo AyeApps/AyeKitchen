@@ -4,12 +4,14 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from app.models.base import AyeDecimal
-from app.models.order import OrderStatus
+from app.models.order import OrderSoldBy, OrderStatus
+from app.models.unit import BaseUnit
 
 
 class OrderItemInput(BaseModel):
     recipe_id: str
-    quantity: AyeDecimal = Field(default=Decimal("1"), gt=Decimal("0"))
+    sold_by: OrderSoldBy = OrderSoldBy.batch
+    quantity: AyeDecimal = Field(default=Decimal("1"))
     unit_price_cents: int | None = Field(default=None, ge=0)
 
 
@@ -48,6 +50,8 @@ class PaymentResponse(BaseModel):
 class OrderItemResponse(BaseModel):
     recipe_id: str
     recipe_name: str
+    sold_by: OrderSoldBy = OrderSoldBy.batch
+    unit_label: BaseUnit | None = None
     quantity: str
     unit_price_cents: int
     unit_cost_cents_snapshot: int

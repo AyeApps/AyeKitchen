@@ -1,5 +1,10 @@
+from datetime import UTC, datetime
+
 import pytest
+from bson.decimal128 import Decimal128
 from httpx import AsyncClient
+
+from app.models.order import Order
 
 
 @pytest.mark.asyncio
@@ -843,3 +848,424 @@ async def test_order_without_customer_continues_working_as_before(
     assert patched_data["customer_id"] is None
     assert patched_data["customer_name"] == "Cliente Ocasional VIP"
     assert patched_data["customer_phone"] == "555-9988"
+
+
+@pytest.mark.asyncio
+async def test_order_sold_by_unit_line(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Receta que rinde 12 pz, costo tanda $120.00 (12000 cents), margen 30%
+    # suggested_price_cents = 15600, suggested_price_per_yield_unit_cents = 1300
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Galletas 12 pz",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "extra_costs": [{"name": "Insumos", "cost_cents": 12000}],
+        },
+    )
+    assert rec_resp.status_code == 201
+    rec_id = rec_resp.json()["id"]
+
+    # 1. Un pedido con una línea unit de 4 pz de esa receta da precio unitario 1300,
+    # snapshot 1000, unit_label "pz", total 5200 y costo 4000.
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Carlos Galletas",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "4"}],
+        },
+    )
+    assert order_resp.status_code == 201
+    data = order_resp.json()
+    assert len(data["items"]) == 1
+    it = data["items"][0]
+    assert it["sold_by"] == "unit"
+    assert it["unit_label"] == "pz"
+    assert it["unit_price_cents"] == 1300
+    assert it["unit_cost_cents_snapshot"] == 1000
+    assert it["quantity"] == "4"
+    assert data["total_cents"] == 5200
+    assert data["cost_cents"] == 4000
+    assert data["profit_cents"] == 1200
+
+
+@pytest.mark.asyncio
+async def test_order_line_without_sold_by_defaults_to_batch(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Una línea sin sold_by es batch y da lo mismo que hoy
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Pastel Tanda Completa",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "extra_costs": [{"name": "Insumos", "cost_cents": 12000}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Maria Tandas",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "quantity": "2"}],
+        },
+    )
+    assert order_resp.status_code == 201
+    data = order_resp.json()
+    it = data["items"][0]
+    assert it["sold_by"] == "batch"
+    assert it["unit_label"] is None
+    assert it["unit_price_cents"] == 15600
+    assert it["unit_cost_cents_snapshot"] == 12000
+    assert data["total_cents"] == 31200
+    assert data["cost_cents"] == 24000
+
+
+@pytest.mark.asyncio
+async def test_order_unit_decimal_and_zero_quantity(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Una línea unit con cantidad 0.5, o con decimales, se acepta. Con 0 responde INVALID_REFERENCE, como hoy.
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Gelatina Porción",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "extra_costs": [{"name": "Insumos", "cost_cents": 12000}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    # Decimal 0.5
+    order_dec = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Cliente Decimal",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "0.5"}],
+        },
+    )
+    assert order_dec.status_code == 201
+    dec_data = order_dec.json()
+    assert dec_data["items"][0]["quantity"] == "0.5"
+    assert dec_data["items"][0]["unit_price_cents"] == 1300
+    assert dec_data["total_cents"] == 650
+    assert dec_data["cost_cents"] == 500
+
+    # Decimal 2.75
+    order_dec2 = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Cliente Decimal 2",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "2.75"}],
+        },
+    )
+    assert order_dec2.status_code == 201
+
+    # Con 0 responde INVALID_REFERENCE (422)
+    order_zero = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Cliente Invalido",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "0"}],
+        },
+    )
+    assert order_zero.status_code == 422
+    assert order_zero.json()["code"] == "INVALID_REFERENCE"
+
+
+@pytest.mark.asyncio
+async def test_patch_order_preserves_unit_line_price_and_snapshot(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Un PATCH que conserva una línea unit existente mantiene su precio aunque cambie el costo de la receta.
+    ing_resp = await client.post(
+        "/api/v1/ingredients/",
+        headers=auth_headers,
+        json={"name": "Nuez Unit", "base_unit": "g"},
+    )
+    ing_id = ing_resp.json()["id"]
+
+    pres_resp = await client.post(
+        "/api/v1/presentations/",
+        headers=auth_headers,
+        json={
+            "ingredient_id": ing_id,
+            "brand": "Nuez Rey",
+            "package_quantity": "1000",
+            "price_cents": 12000,
+        },
+    )
+    pres_id = pres_resp.json()["id"]
+
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Bolsitas Nuez 12 pz",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "items": [{"kind": "ingredient", "ref_id": ing_id, "quantity": "1000"}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Conserva Precio",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "4"}],
+        },
+    )
+    assert order_resp.status_code == 201
+    order_id = order_resp.json()["id"]
+    assert order_resp.json()["items"][0]["unit_price_cents"] == 1300
+    assert order_resp.json()["items"][0]["unit_cost_cents_snapshot"] == 1000
+
+    # Cambia el precio del ingrediente al doble
+    await client.post(
+        f"/api/v1/presentations/{pres_id}/prices",
+        headers=auth_headers,
+        json={"price_cents": 24000},
+    )
+
+    # PATCH conservando la línea unit existente con nueva cantidad
+    patch_resp = await client.patch(
+        f"/api/v1/orders/{order_id}",
+        headers=auth_headers,
+        json={
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "6"}],
+        },
+    )
+    assert patch_resp.status_code == 200
+    patched_data = patch_resp.json()
+    item = patched_data["items"][0]
+    assert item["sold_by"] == "unit"
+    assert item["unit_label"] == "pz"
+    assert item["unit_price_cents"] == 1300
+    assert item["unit_cost_cents_snapshot"] == 1000
+    assert item["quantity"] == "6"
+    assert patched_data["total_cents"] == 7800
+    assert patched_data["cost_cents"] == 6000
+
+
+@pytest.mark.asyncio
+async def test_patch_order_changes_line_from_batch_to_unit(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Un PATCH que cambia una línea de batch a unit recalcula el precio y el snapshot por pieza.
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Galletas Cambio Modalidad",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "extra_costs": [{"name": "Insumos", "cost_cents": 12000}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    # Crear pedido inicial con batch
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Cliente Cambio Modalidad",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_id, "sold_by": "batch", "quantity": "1"}],
+        },
+    )
+    assert order_resp.status_code == 201
+    order_id = order_resp.json()["id"]
+    assert order_resp.json()["items"][0]["sold_by"] == "batch"
+    assert order_resp.json()["items"][0]["unit_price_cents"] == 15600
+    assert order_resp.json()["items"][0]["unit_cost_cents_snapshot"] == 12000
+
+    # PATCH cambiando la línea a unit (4 pz, sin precio especificado)
+    patch_resp = await client.patch(
+        f"/api/v1/orders/{order_id}",
+        headers=auth_headers,
+        json={
+            "items": [{"recipe_id": rec_id, "sold_by": "unit", "quantity": "4"}],
+        },
+    )
+    assert patch_resp.status_code == 200
+    patched_data = patch_resp.json()
+    item = patched_data["items"][0]
+    assert item["sold_by"] == "unit"
+    assert item["unit_label"] == "pz"
+    assert item["unit_price_cents"] == 1300
+    assert item["unit_cost_cents_snapshot"] == 1000
+    assert patched_data["total_cents"] == 5200
+    assert patched_data["cost_cents"] == 4000
+
+
+@pytest.mark.asyncio
+async def test_legacy_order_without_sold_by_reads_as_batch(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Un pedido viejo guardado en la base sin sold_by (inserta un Order con la línea sin ese campo)
+    # se lee como batch, con unit_label nulo.
+    me_resp = await client.get("/api/v1/me/", headers=auth_headers)
+    ws_id = me_resp.json()["workspace"]["id"]
+
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Receta Antigua B4",
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    legacy_doc = {
+        "workspace_id": ws_id,
+        "customer_id": None,
+        "customer_name": "Cliente Archivo Histórico",
+        "customer_phone": None,
+        "delivery_at": datetime.now(UTC),
+        "items": [
+            {
+                "recipe_id": rec_id,
+                "quantity": Decimal128("2"),
+                "unit_price_cents": 2500,
+                "unit_cost_cents_snapshot": 1800,
+            }
+        ],
+        "payments": [],
+        "status": "pendiente",
+        "notes": None,
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
+        "deleted_at": None,
+    }
+    insert_res = await Order.get_motor_collection().insert_one(legacy_doc)
+    order_id = str(insert_res.inserted_id)
+
+    get_resp = await client.get(f"/api/v1/orders/{order_id}", headers=auth_headers)
+    assert get_resp.status_code == 200
+    data = get_resp.json()
+    assert len(data["items"]) == 1
+    legacy_item = data["items"][0]
+    assert legacy_item["sold_by"] == "batch"
+    assert legacy_item["unit_label"] is None
+    assert legacy_item["unit_price_cents"] == 2500
+    assert legacy_item["unit_cost_cents_snapshot"] == 1800
+
+
+@pytest.mark.asyncio
+async def test_order_unit_isolation_other_user_recipe(
+    client: AsyncClient,
+    auth_headers,
+    auth_headers_user_2,
+):
+    # Aislamiento: igual que en las pruebas existentes, el otro usuario no puede usar la receta en una línea unit.
+    rec_u1 = (await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Receta Privada U1",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+        },
+    )).json()
+
+    resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers_user_2,
+        json={
+            "customer_name": "Usuario 2 Intentando",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [{"recipe_id": rec_u1["id"], "sold_by": "unit", "quantity": "4"}],
+        },
+    )
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "INVALID_REFERENCE"
+
+
+@pytest.mark.asyncio
+async def test_order_with_both_batch_and_unit_lines_caches_costing(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Si una receta aparece en dos líneas (una por tanda y otra por pieza), se costea una sola vez y ambas líneas se procesan.
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Galletas Mixtas Tanda y Pieza",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "extra_costs": [{"name": "Insumos", "cost_cents": 12000}],
+        },
+    )
+    rec_id = rec_resp.json()["id"]
+
+    order_resp = await client.post(
+        "/api/v1/orders/",
+        headers=auth_headers,
+        json={
+            "customer_name": "Cliente Mixto",
+            "delivery_at": "2026-11-10T15:00:00Z",
+            "items": [
+                {"recipe_id": rec_id, "sold_by": "batch", "quantity": "1"},
+                {"recipe_id": rec_id, "sold_by": "unit", "quantity": "4"},
+            ],
+        },
+    )
+    assert order_resp.status_code == 201
+    data = order_resp.json()
+    assert len(data["items"]) == 2
+    b_item = data["items"][0]
+    u_item = data["items"][1]
+
+    assert b_item["sold_by"] == "batch"
+    assert b_item["unit_label"] is None
+    assert b_item["unit_price_cents"] == 15600
+    assert b_item["unit_cost_cents_snapshot"] == 12000
+
+    assert u_item["sold_by"] == "unit"
+    assert u_item["unit_label"] == "pz"
+    assert u_item["unit_price_cents"] == 1300
+    assert u_item["unit_cost_cents_snapshot"] == 1000
+
+    # Total: 1 * 15600 + 4 * 1300 = 15600 + 5200 = 20800
+    assert data["total_cents"] == 20800
+    # Costo: 1 * 12000 + 4 * 1000 = 12000 + 4000 = 16000
+    assert data["cost_cents"] == 16000
+    assert data["profit_cents"] == 4800
+

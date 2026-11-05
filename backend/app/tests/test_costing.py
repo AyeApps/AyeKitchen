@@ -881,3 +881,60 @@ async def test_costing_line_missing_price_does_not_count_as_stale(
     assert cost_data["lines"][0]["missing_price"] is True
     assert cost_data["lines"][0]["price_is_stale"] is False
 
+
+@pytest.mark.asyncio
+async def test_costing_suggested_price_per_yield_unit(
+    client: AsyncClient,
+    auth_headers,
+):
+    # Una receta que rinde 12 pz, con un costo de tanda de $120.00 y margen 30,
+    # da suggested_price_cents 15600 y suggested_price_per_yield_unit_cents 1300.
+    rec_resp = await client.post(
+        "/api/v1/recipes/",
+        headers=auth_headers,
+        json={
+            "name": "Galletas Chispas 12 pz",
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "margin_percent": 30,
+            "extra_costs": [
+                {"name": "Materia prima", "cost_cents": 12000},
+            ],
+        },
+    )
+    assert rec_resp.status_code == 201
+    rec_id = rec_resp.json()["id"]
+
+    cost_resp = await client.get(
+        f"/api/v1/recipes/{rec_id}/cost",
+        headers=auth_headers,
+    )
+    assert cost_resp.status_code == 200
+    cost_data = cost_resp.json()
+    assert cost_data["batch_cost_cents"] == 12000
+    assert cost_data["suggested_price_cents"] == 15600
+    assert cost_data["suggested_price_per_yield_unit_cents"] == 1300
+
+
+@pytest.mark.asyncio
+async def test_costing_zero_or_invalid_yield_quantity_gives_zero_unit_price(
+    client: AsyncClient,
+    auth_headers,
+):
+    from app.models.recipe import ExtraCost
+    from app.services.costing_service import calculate_recipe_cost
+
+    me_resp = await client.get("/api/v1/me/", headers=auth_headers)
+    ws_id = me_resp.json()["workspace"]["id"]
+
+    rec = Recipe(
+        workspace_id=ws_id,
+        name="Receta Cero Yield",
+        yield_quantity=Decimal("0"),
+        yield_unit=BaseUnit.pz,
+        extra_costs=[ExtraCost(name="Gasto", cost_cents=1000)],
+    )
+    cost = await calculate_recipe_cost(ws_id, rec)
+    assert cost.suggested_price_per_yield_unit_cents == 0
+
+

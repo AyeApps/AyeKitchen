@@ -7,16 +7,19 @@ from bson import ObjectId
 
 from app.core.errors import AppError
 from app.models.base import parse_decimal, round_to_cents
-from app.models.order import Order, OrderItem, OrderStatus, Payment
+from app.models.order import Order, OrderItem, OrderSoldBy, OrderStatus, Payment
 from app.models.recipe import Recipe
+from app.models.unit import BaseUnit
 from app.schemas.order import (
     OrderCreate,
+    OrderItemInput,
     OrderItemResponse,
     OrderResponse,
     OrderUpdate,
     PaymentCreate,
     PaymentResponse,
 )
+from app.schemas.recipe import RecipeCostResponse
 from app.services.costing_service import calculate_recipe_cost
 from app.services.customer_service import get_customer
 
@@ -68,6 +71,8 @@ async def serialize_order(
         OrderItemResponse(
             recipe_id=it.recipe_id,
             recipe_name=recipe_map.get(it.recipe_id, ""),
+            sold_by=it.sold_by,
+            unit_label=it.unit_label,
             quantity=str(it.quantity),
             unit_price_cents=it.unit_price_cents,
             unit_cost_cents_snapshot=it.unit_cost_cents_snapshot,
@@ -176,6 +181,30 @@ async def list_orders(
     return page_orders, recipe_map, total, pages
 
 
+def _compute_item_defaults(
+    it: OrderItemInput,
+    rec: Recipe,
+    cost_info: RecipeCostResponse,
+) -> tuple[int, int, BaseUnit | None]:
+    if it.sold_by == OrderSoldBy.unit:
+        unit_price = (
+            it.unit_price_cents
+            if it.unit_price_cents is not None
+            else cost_info.suggested_price_per_yield_unit_cents
+        )
+        snapshot = round_to_cents(Decimal(cost_info.cost_per_yield_unit))
+        unit_label = rec.yield_unit
+    else:
+        unit_price = (
+            it.unit_price_cents
+            if it.unit_price_cents is not None
+            else cost_info.suggested_price_cents
+        )
+        snapshot = cost_info.batch_cost_cents
+        unit_label = None
+    return unit_price, snapshot, unit_label
+
+
 async def create_order(workspace_id: str, data: OrderCreate) -> Order:
     recipe_cache: dict[str, Recipe] = {}
     cost_cache: dict[str, Any] = {}
@@ -216,19 +245,16 @@ async def create_order(workspace_id: str, data: OrderCreate) -> Order:
         else:
             cost_info = cost_cache[it.recipe_id]
 
-        unit_cost_snapshot = cost_info.batch_cost_cents
-        unit_price = (
-            it.unit_price_cents
-            if it.unit_price_cents is not None
-            else cost_info.suggested_price_cents
-        )
+        unit_price, snapshot, unit_label = _compute_item_defaults(it, rec, cost_info)
 
         order_items.append(
             OrderItem(
                 recipe_id=it.recipe_id,
+                sold_by=it.sold_by,
+                unit_label=unit_label,
                 quantity=parse_decimal(it.quantity),
                 unit_price_cents=unit_price,
-                unit_cost_cents_snapshot=unit_cost_snapshot,
+                unit_cost_cents_snapshot=snapshot,
             )
         )
 
@@ -319,10 +345,11 @@ async def update_order(
         order.notes = data.notes.strip() if data.notes else None
 
     if "items" in data.model_fields_set and data.items is not None:
-        existing_lines: dict[str, OrderItem] = {}
+        existing_lines: dict[tuple[str, OrderSoldBy], OrderItem] = {}
         for item in order.items:
-            if item.recipe_id not in existing_lines:
-                existing_lines[item.recipe_id] = item
+            key = (item.recipe_id, item.sold_by)
+            if key not in existing_lines:
+                existing_lines[key] = item
 
         recipe_cache: dict[str, Recipe] = {}
         cost_cache: dict[str, Any] = {}
@@ -357,9 +384,11 @@ async def update_order(
         new_items: list[OrderItem] = []
         for it in data.items:
             rec = recipe_cache[it.recipe_id]
-            if it.recipe_id in existing_lines:
-                prev_line = existing_lines[it.recipe_id]
+            key = (it.recipe_id, it.sold_by)
+            if key in existing_lines:
+                prev_line = existing_lines[key]
                 snapshot = prev_line.unit_cost_cents_snapshot
+                unit_label = prev_line.unit_label
                 unit_price = (
                     it.unit_price_cents
                     if it.unit_price_cents is not None
@@ -369,16 +398,13 @@ async def update_order(
                 if it.recipe_id not in cost_cache:
                     cost_cache[it.recipe_id] = await calculate_recipe_cost(workspace_id, rec)
                 cost_info = cost_cache[it.recipe_id]
-                snapshot = cost_info.batch_cost_cents
-                unit_price = (
-                    it.unit_price_cents
-                    if it.unit_price_cents is not None
-                    else cost_info.suggested_price_cents
-                )
+                unit_price, snapshot, unit_label = _compute_item_defaults(it, rec, cost_info)
 
             new_items.append(
                 OrderItem(
                     recipe_id=it.recipe_id,
+                    sold_by=it.sold_by,
+                    unit_label=unit_label,
                     quantity=parse_decimal(it.quantity),
                     unit_price_cents=unit_price,
                     unit_cost_cents_snapshot=snapshot,
