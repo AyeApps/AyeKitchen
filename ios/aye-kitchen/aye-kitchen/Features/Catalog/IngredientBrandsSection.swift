@@ -29,6 +29,10 @@ import SwiftUI
             )
             self.presentations = page.items
             self.isLoading = false
+        } catch where error.isCancellation {
+            // La vista se reconstruyó a media carga: no es falta de red. El `.task` de la vista
+            // nueva vuelve a pedir porque errorMessage sigue vacío.
+            self.isLoading = false
         } catch {
             self.isLoading = false
             self.errorMessage = error.localizedDescription

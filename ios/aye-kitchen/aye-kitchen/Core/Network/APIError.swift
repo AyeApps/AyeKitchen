@@ -41,6 +41,20 @@ extension APIError: LocalizedError {
     }
 }
 
+extension Error {
+    /// La petición se canceló porque la vista que la pidió desapareció o se reconstruyó (SwiftUI
+    /// cancela su `.task`). No es un error para mostrar: la pantalla debe ignorarlo y volver a
+    /// pedir cuando aparezca de nuevo.
+    nonisolated var isCancellation: Bool {
+        if self is CancellationError { return true }
+        if let urlError = self as? URLError { return urlError.code == .cancelled }
+        if let apiError = self as? APIError, case .network(let urlError) = apiError {
+            return urlError.code == .cancelled
+        }
+        return false
+    }
+}
+
 private nonisolated struct ErrorBody: Decodable {
     let code: String?
     let message: String?
