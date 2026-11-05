@@ -18,15 +18,20 @@ final class SessionStore {
         return nil
     }
 
+    /// Última cuenta que entró en este teléfono: permite abrir la app sin red con sus datos guardados.
+    private static let lastAccountKey = "SessionStore.lastAccountId"
+
     func start() async {
         state = .checking
         await NetworkService.shared.setSessionExpiredHandler { [weak self] in
             self?.state = .signedOut
+            Task { await self?.forgetLocalData() }
         }
         guard KeychainStore.load() != nil else {
             state = .signedOut
             return
         }
+        await useAccount(UserDefaults.standard.string(forKey: Self.lastAccountKey))
         await loadMe()
     }
 
@@ -56,17 +61,44 @@ final class SessionStore {
 
     func signOut() async {
         await NetworkService.shared.logout()
+        await forgetLocalData()
         state = .signedOut
     }
 
+    /// Pide `/me/`. Sin red, si esta cuenta ya había entrado en el teléfono, entra con su copia
+    /// guardada para que se puedan ver los datos de la caché.
     private func loadMe() async {
         do {
             let me: Me = try await NetworkService.shared.request(.get, "/me/")
+            await useAccount(me.id)
+            await NetworkService.shared.cacheMe(me)
             state = .signedIn(me)
         } catch APIError.unauthorized {
             state = .signedOut
+        } catch APIError.network(let error) {
+            if let saved: Me = await NetworkService.shared.cached("/me/") {
+                state = .signedIn(saved)
+            } else {
+                state = .unavailable(APIError.network(error).localizedDescription)
+            }
         } catch {
             state = .unavailable(error.localizedDescription)
         }
+    }
+
+    /// Caché en disco y marcas de cambios por cuenta: una cuenta nunca ve los datos de otra.
+    private func useAccount(_ id: String?) async {
+        if let id {
+            UserDefaults.standard.set(id, forKey: Self.lastAccountKey)
+        }
+        await ResponseCache.shared.useAccount(id)
+        ChangeTracker.shared.useAccount(id)
+    }
+
+    private func forgetLocalData() async {
+        UserDefaults.standard.removeObject(forKey: Self.lastAccountKey)
+        await ResponseCache.shared.clearAll()
+        await ResponseCache.shared.useAccount(nil)
+        ChangeTracker.shared.reset()
     }
 }

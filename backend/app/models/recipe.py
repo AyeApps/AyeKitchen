@@ -1,6 +1,7 @@
 from enum import StrEnum
 
 from pydantic import BaseModel, Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 from app.models.base import AyeDecimal, Cents, WorkspaceDocument
 from app.models.unit import BaseUnit
@@ -40,3 +41,5 @@ class Recipe(WorkspaceDocument):
     class Settings:
         name = "recipes"
         use_state_management = True
+        # B8: /me/changes busca el updated_at más reciente por workspace
+        indexes = [IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)])]

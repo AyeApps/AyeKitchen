@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from beanie import Indexed
 from pydantic import Field
-from pymongo import ASCENDING, IndexModel
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 from app.models.base import AyeDecimal, Cents, WorkspaceDocument
 
@@ -23,7 +23,11 @@ class Presentation(WorkspaceDocument):
         name = "presentations"
         use_state_management = True
         # Indexed(...) | None no crea índice en Beanie: se declara aquí
-        indexes = [IndexModel([("workspace_id", ASCENDING), ("barcode", ASCENDING)])]
+        indexes = [
+            IndexModel([("workspace_id", ASCENDING), ("barcode", ASCENDING)]),
+            # B8: /me/changes busca el updated_at más reciente por workspace
+            IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)]),
+        ]
 
 
 class PriceRecord(WorkspaceDocument):
@@ -37,3 +41,5 @@ class PriceRecord(WorkspaceDocument):
     class Settings:
         name = "price_records"
         use_state_management = True
+        # B8: /me/changes busca el updated_at más reciente por workspace
+        indexes = [IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)])]

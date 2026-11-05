@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 from app.models.base import AyeDecimal, WorkspaceDocument
 from app.models.unit import BaseUnit
@@ -26,3 +27,5 @@ class Ingredient(WorkspaceDocument):
     class Settings:
         name = "ingredients"
         use_state_management = True
+        # B8: /me/changes busca el updated_at más reciente por workspace
+        indexes = [IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)])]

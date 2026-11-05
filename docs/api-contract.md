@@ -40,8 +40,23 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 | Método | Ruta | Respuesta |
 |---|---|---|
 | GET | `/me/` | `{id, email, name, avatar_url, workspace: {id, name, currency, default_margin_percent, price_stale_days}}` |
+| GET | `/me/changes` | `{home, orders, recipes, catalog, customers}`: datetime o `null` por sección (B8). Ver abajo |
 
-Implementado en el esqueleto.
+`/me/` está implementado en el esqueleto.
+
+### `GET /me/changes` — cuándo cambió lo que muestra cada sección (B8)
+
+Para que la app no vuelva a pedir una lista que no cambió. Cada valor es el `updated_at` más reciente (incluidos los documentos con `deleted_at`, porque borrar también es un cambio) entre las colecciones de las que depende esa sección, solo del workspace del usuario. `null` si ninguna de esas colecciones tiene documentos del workspace.
+
+| Sección | Colecciones |
+|---|---|
+| `catalog` | ingredients, presentations, price_records, suppliers, units (solo las del workspace) |
+| `recipes` | recipes, cost_versions + todo `catalog` (la lista muestra costos) |
+| `customers` | customers, orders (el detalle del cliente muestra sus pedidos) |
+| `orders` | orders, customers, recipes (el pedido muestra nombres de cliente y receta) |
+| `home` | todo lo anterior + expenses |
+
+Reglas: toda escritura de negocio (crear, editar, soft delete, `update_many`, pagos, precios) deja `updated_at` en la hora del cambio, para que la marca suba. Una consulta por colección (orden `updated_at` desc, límite 1) con el índice `(workspace_id, updated_at)` que ya declaran los modelos. Ruta declarada en el router de `/me` como `/changes`.
 
 ---
 

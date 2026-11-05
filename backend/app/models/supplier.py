@@ -1,4 +1,5 @@
 from pydantic import Field
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 from app.models.base import WorkspaceDocument
 
@@ -12,3 +13,5 @@ class Supplier(WorkspaceDocument):
     class Settings:
         name = "suppliers"
         use_state_management = True
+        # B8: /me/changes busca el updated_at más reciente por workspace
+        indexes = [IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)])]

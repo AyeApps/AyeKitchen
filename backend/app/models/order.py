@@ -4,7 +4,7 @@ from enum import StrEnum
 
 from beanie import Indexed
 from pydantic import BaseModel, Field
-from pymongo import ASCENDING, IndexModel
+from pymongo import ASCENDING, DESCENDING, IndexModel
 
 from app.models.base import AyeDecimal, Cents, WorkspaceDocument
 from app.models.unit import BaseUnit
@@ -56,7 +56,11 @@ class Order(WorkspaceDocument):
     class Settings:
         name = "orders"
         use_state_management = True
-        indexes = [IndexModel([("workspace_id", ASCENDING), ("customer_id", ASCENDING)])]
+        # B8: /me/changes busca el updated_at más reciente por workspace
+        indexes = [
+            IndexModel([("workspace_id", ASCENDING), ("customer_id", ASCENDING)]),
+            IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)]),
+        ]
 
 
 class Expense(WorkspaceDocument):
@@ -71,3 +75,5 @@ class Expense(WorkspaceDocument):
     class Settings:
         name = "expenses"
         use_state_management = True
+        # B8: /me/changes busca el updated_at más reciente por workspace
+        indexes = [IndexModel([("workspace_id", ASCENDING), ("updated_at", DESCENDING)])]

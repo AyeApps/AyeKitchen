@@ -38,6 +38,38 @@ actor NetworkService {
         return try JSONCoding.decode(T.self, from: data)
     }
 
+    /// GET que además guarda la respuesta en la caché en disco de la cuenta, para que
+    /// `cached(_:query:)` la devuelva al abrir la app o sin conexión. Solo para las listas de las
+    /// pestañas (bloque I13), no para detalles ni para POST/PATCH.
+    func requestCaching<T: Decodable & Sendable>(
+        _ path: String,
+        query: [URLQueryItem] = []
+    ) async throws -> T {
+        let data = try await perform(.get, AppConfig.apiBaseURL, path, query: query, body: nil, authorized: true)
+        let decoded = try JSONCoding.decode(T.self, from: data)
+        await ResponseCache.shared.save(data, for: ResponseCache.key(path: path, query: query))
+        return decoded
+    }
+
+    /// Guarda la cuenta en la caché como si viniera de `GET /me/`, una vez elegida la carpeta de
+    /// esa cuenta (así abre sin red la próxima vez).
+    func cacheMe(_ me: Me) async {
+        guard let data = try? JSONCoding.encode(me) else { return }
+        await ResponseCache.shared.save(data, for: ResponseCache.key(path: "/me/", query: []))
+    }
+
+    /// La última respuesta guardada por `requestCaching` para la misma ruta y query, o `nil`.
+    /// No toca la red. Si el formato cambió y ya no decodifica, devuelve `nil`.
+    func cached<T: Decodable & Sendable>(
+        _ path: String,
+        query: [URLQueryItem] = []
+    ) async -> T? {
+        guard let data = await ResponseCache.shared.load(for: ResponseCache.key(path: path, query: query)) else {
+            return nil
+        }
+        return try? JSONCoding.decode(T.self, from: data)
+    }
+
     func requestNoContent(
         _ method: HTTPMethod,
         _ path: String,

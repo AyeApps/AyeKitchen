@@ -1,7 +1,7 @@
 import Foundation
 
 /// `GET /me/` (docs/api-contract.md).
-nonisolated struct Me: Decodable, Sendable, Equatable {
+nonisolated struct Me: Codable, Sendable, Equatable {
     let id: String
     let email: String
     let name: String
@@ -13,7 +13,7 @@ nonisolated struct Me: Decodable, Sendable, Equatable {
     }
 }
 
-nonisolated struct Workspace: Decodable, Sendable, Equatable {
+nonisolated struct Workspace: Codable, Sendable, Equatable {
     let id: String
     let name: String
     let currency: String
