@@ -178,10 +178,18 @@ struct IngredientBrandsSection: View {
             let pkgStr = "\(Quantity.format(presentation.packageQuantity)) \(presentation.baseUnit.rawValue)"
             if let cents = presentation.latestPriceCents {
                 let price = Money.format(cents: cents)
-                if let age = ageDescription(days: presentation.priceAgeDays) {
-                    return "\(price) por \(pkgStr) · \(age)"
+                let base: String = {
+                    if let age = ageDescription(days: presentation.priceAgeDays) {
+                        return "\(price) por \(pkgStr) · \(age)"
+                    } else {
+                        return "\(price) por \(pkgStr)"
+                    }
+                }()
+                if let costPerBase = presentation.costPerBaseUnit,
+                   let perUnit = Money.formatPerUnit(costPerBaseUnit: costPerBase, baseUnit: presentation.baseUnit) {
+                    return "\(base) · \(perUnit)"
                 } else {
-                    return "\(price) por \(pkgStr)"
+                    return base
                 }
             } else {
                 return "por \(pkgStr)"
@@ -197,6 +205,7 @@ struct IngredientBrandsSection: View {
                     Text(subtitleText)
                         .font(.subheadline)
                         .foregroundStyle(.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                     chipsView(for: presentation)
                 }
                 .padding(.vertical, Spacing.xs)
@@ -209,6 +218,7 @@ struct IngredientBrandsSection: View {
                         Text(subtitleText)
                             .font(.subheadline)
                             .foregroundStyle(.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
                     chipsView(for: presentation)

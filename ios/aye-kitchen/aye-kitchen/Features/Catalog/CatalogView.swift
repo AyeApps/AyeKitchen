@@ -2,6 +2,7 @@ import SwiftUI
 
 /// Catálogo: lista de ingredientes agrupados con búsqueda, paginación y borrado.
 struct CatalogView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: CatalogModel
     @State private var searchText = ""
     @State private var searchTask: Task<Void, Never>?
@@ -141,9 +142,7 @@ struct CatalogView: View {
                                         Text(ingredient.name)
                                             .font(.headline)
                                             .foregroundStyle(.inkPrimary)
-                                        Text(ingredient.buyingUnitDescription)
-                                            .font(.subheadline)
-                                            .foregroundStyle(.inkMuted)
+                                        ingredientSubtitle(for: ingredient)
                                     }
                                     .padding(.vertical, Spacing.xs)
                                 }
@@ -185,6 +184,53 @@ struct CatalogView: View {
         }
     }
 
+    @ViewBuilder
+    private func ingredientSubtitle(for ingredient: Ingredient) -> some View {
+        if let brandsCount = ingredient.brandsCount {
+            if brandsCount > 0 {
+                let countText = brandsCount == 1 ? "1 marca" : "\(brandsCount) marcas"
+                let brandDetail: String? = {
+                    guard let currentBrand = ingredient.currentBrand,
+                          let costPerBaseUnit = currentBrand.costPerBaseUnit,
+                          let formattedPrice = Money.formatPerUnit(costPerBaseUnit: costPerBaseUnit, baseUnit: ingredient.baseUnit)
+                    else {
+                        return nil
+                    }
+                    return "Usamos \(currentBrand.brand) · \(formattedPrice)"
+                }()
+
+                if let brandDetail {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        Text(countText)
+                            .font(.subheadline)
+                            .foregroundStyle(.inkMuted)
+                        Text(brandDetail)
+                            .font(.subheadline)
+                            .foregroundStyle(.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("\(countText) · \(brandDetail)")
+                            .font(.subheadline)
+                            .foregroundStyle(.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                } else {
+                    Text(countText)
+                        .font(.subheadline)
+                        .foregroundStyle(.inkMuted)
+                }
+            } else {
+                Text("Sin marcas todavía")
+                    .font(.subheadline)
+                    .foregroundStyle(.warningText)
+            }
+        } else {
+            Text(ingredient.buyingUnitDescription)
+                .font(.subheadline)
+                .foregroundStyle(.inkMuted)
+        }
+    }
+
     private func performDelete(_ ingredient: Ingredient) async {
         do {
             try await model.deleteIngredient(ingredient)
@@ -215,7 +261,14 @@ private let mockCatalogIngredients: [Ingredient] = [
             IngredientConversion(unitId: "u_tz", unitName: "taza", quantityInBase: "125")
         ],
         createdAt: Date(),
-        updatedAt: Date()
+        updatedAt: Date(),
+        brandsCount: 3,
+        currentBrand: IngredientCurrentBrand(
+            presentationId: "pres_1",
+            brand: "Selecta",
+            supplierName: "Walmart",
+            costPerBaseUnit: "2.350000"
+        )
     ),
     Ingredient(
         id: "ing_2",
@@ -225,7 +278,9 @@ private let mockCatalogIngredients: [Ingredient] = [
         notes: nil,
         conversions: [],
         createdAt: Date(),
-        updatedAt: Date()
+        updatedAt: Date(),
+        brandsCount: 0,
+        currentBrand: nil
     ),
     Ingredient(
         id: "ing_3",
@@ -235,7 +290,9 @@ private let mockCatalogIngredients: [Ingredient] = [
         notes: nil,
         conversions: [],
         createdAt: Date(),
-        updatedAt: Date()
+        updatedAt: Date(),
+        brandsCount: nil,
+        currentBrand: nil
     ),
     Ingredient(
         id: "ing_4",
@@ -245,7 +302,14 @@ private let mockCatalogIngredients: [Ingredient] = [
         notes: nil,
         conversions: [],
         createdAt: Date(),
-        updatedAt: Date()
+        updatedAt: Date(),
+        brandsCount: 1,
+        currentBrand: IngredientCurrentBrand(
+            presentationId: "pres_4",
+            brand: "San Juan",
+            supplierName: nil,
+            costPerBaseUnit: "3.200000"
+        )
     ),
     Ingredient(
         id: "ing_5",
@@ -255,7 +319,9 @@ private let mockCatalogIngredients: [Ingredient] = [
         notes: nil,
         conversions: [],
         createdAt: Date(),
-        updatedAt: Date()
+        updatedAt: Date(),
+        brandsCount: 0,
+        currentBrand: nil
     )
 ]
 

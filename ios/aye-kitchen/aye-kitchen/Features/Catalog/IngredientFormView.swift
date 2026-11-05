@@ -112,7 +112,7 @@ nonisolated struct IngredientUpdateRequest: Encodable, Sendable {
     var errorMessage: String? = nil
     private(set) var isMock: Bool = false
 
-    // Campos para la sección "¿Cuánto te costó?" en modo .create
+    // Campos para la sección "Primera marca" en modo .create
     var brandText: String = ""
     var packageQuantityText: String = "1"
     var selectedPackageUnit: MeasureUnit?
@@ -494,9 +494,9 @@ struct IngredientFormView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                     } header: {
-                        Text("¿Cuánto te costó?")
+                        Text("Primera marca")
                     } footer: {
-                        Text("Opcional. Puedes agregar más marcas después.")
+                        Text("Opcional. El ingrediente es general, como harina de trigo; aquí va la marca que compras. Puedes agregar más marcas después y elegir cuál usar en cada receta.")
                     }
                 }
 

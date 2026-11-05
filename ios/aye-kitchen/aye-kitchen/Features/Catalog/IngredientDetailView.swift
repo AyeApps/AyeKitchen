@@ -20,14 +20,18 @@ struct IngredientDetailView: View {
 
     var body: some View {
         List {
+            Section {
+                IngredientBrandsSection(ingredient: ingredient)
+            } header: {
+                Text("Marcas y precios")
+            } footer: {
+                Text("Tus recetas usan la marca que dice La que usamos. Puedes elegir otra en cada receta.")
+            }
+
             Section("Cómo lo compras") {
                 Text(ingredient.buyingUnitDescription)
                     .font(.body)
                     .foregroundStyle(.inkPrimary)
-            }
-
-            Section("Marcas y precios") {
-                IngredientBrandsSection(ingredient: ingredient)
             }
 
             Section("Equivalencias") {
