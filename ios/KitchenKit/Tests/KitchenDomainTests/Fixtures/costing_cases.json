@@ -1,0 +1,2071 @@
+{
+  "generated_at": "2026-11-05T18:48:10.962Z",
+  "cases": [
+    {
+      "name": "a_contrato_harina",
+      "now": "2026-11-05T18:48:10.977Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:10.980Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6aef21f6dee42913ca",
+            "name": "Harina de trigo",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:10.968Z",
+            "updated_at": "2026-11-05T18:48:10.968Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6aef21f6dee42913cb",
+            "ingredient_id": "6aeccf6aef21f6dee42913ca",
+            "brand": "Selecta",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:10.971Z",
+            "updated_at": "2026-11-05T18:48:10.971Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6aef21f6dee42913cc",
+            "presentation_id": "6aeccf6aef21f6dee42913cb",
+            "price_cents": 2350,
+            "recorded_at": "2026-11-05T18:48:10.972Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:10.972Z",
+            "updated_at": "2026-11-05T18:48:10.972Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6aef21f6dee42913cd",
+            "name": "Pastel Simple Harina",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6aef21f6dee42913ca",
+                "quantity": "300",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:10.976Z",
+            "updated_at": "2026-11-05T18:48:10.976Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6aef21f6dee42913cd",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6aef21f6dee42913cd",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6aef21f6dee42913ca",
+                "ref_name": "Harina de trigo",
+                "quantity": "300",
+                "unit_name": null,
+                "quantity_in_base": "300",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6aef21f6dee42913cb",
+                "presentation_label": "Selecta · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 705,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 705,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 705,
+            "cost_per_yield_unit": "705.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 987,
+            "suggested_price_per_yield_unit_cents": 987,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "b_conversiones_unidades",
+      "now": "2026-11-05T18:48:11.010Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.013Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [
+          {
+            "id": "6aeccf6aef21f6dee42913ce",
+            "name": "Puñado",
+            "abbreviation": "pnd",
+            "base_unit": "g",
+            "factor_to_base": "50",
+            "created_at": "2026-11-05T18:48:10.992Z",
+            "updated_at": "2026-11-05T18:48:10.992Z",
+            "deleted_at": null
+          }
+        ],
+        "ingredients": [
+          {
+            "id": "6aeccf6aef21f6dee42913cf",
+            "name": "Harina con Taza Propia",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [
+              {
+                "unit_id": "sys.tz",
+                "quantity_in_base": "125"
+              }
+            ],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:10.996Z",
+            "updated_at": "2026-11-05T18:48:10.996Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913d2",
+            "name": "Leche Entera",
+            "base_unit": "ml",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.000Z",
+            "updated_at": "2026-11-05T18:48:11.000Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913d5",
+            "name": "Nuez en Mitades",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.004Z",
+            "updated_at": "2026-11-05T18:48:11.004Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6aef21f6dee42913d0",
+            "ingredient_id": "6aeccf6aef21f6dee42913cf",
+            "brand": "Selecta",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:10.998Z",
+            "updated_at": "2026-11-05T18:48:10.998Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913d3",
+            "ingredient_id": "6aeccf6bef21f6dee42913d2",
+            "brand": "Lala",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.001Z",
+            "updated_at": "2026-11-05T18:48:11.001Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913d6",
+            "ingredient_id": "6aeccf6bef21f6dee42913d5",
+            "brand": "Nuez de Campo",
+            "supplier_id": null,
+            "package_quantity": "500",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.006Z",
+            "updated_at": "2026-11-05T18:48:11.006Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6aef21f6dee42913d1",
+            "presentation_id": "6aeccf6aef21f6dee42913d0",
+            "price_cents": 2000,
+            "recorded_at": "2026-11-05T18:48:10.998Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:10.998Z",
+            "updated_at": "2026-11-05T18:48:10.998Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913d4",
+            "presentation_id": "6aeccf6bef21f6dee42913d3",
+            "price_cents": 2500,
+            "recorded_at": "2026-11-05T18:48:11.002Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.002Z",
+            "updated_at": "2026-11-05T18:48:11.002Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913d7",
+            "presentation_id": "6aeccf6bef21f6dee42913d6",
+            "price_cents": 10000,
+            "recorded_at": "2026-11-05T18:48:11.006Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.006Z",
+            "updated_at": "2026-11-05T18:48:11.006Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee42913d8",
+            "name": "Pan Dulce con Nuez",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6aef21f6dee42913cf",
+                "quantity": "2",
+                "unit_id": "sys.tz",
+                "pinned_presentation_id": null
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913d2",
+                "quantity": "1",
+                "unit_id": "sys.tz",
+                "pinned_presentation_id": null
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913d5",
+                "quantity": "2",
+                "unit_id": "6aeccf6aef21f6dee42913ce",
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.009Z",
+            "updated_at": "2026-11-05T18:48:11.009Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913d8",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913d8",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6aef21f6dee42913cf",
+                "ref_name": "Harina con Taza Propia",
+                "quantity": "2",
+                "unit_name": "taza",
+                "quantity_in_base": "250",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6aef21f6dee42913d0",
+                "presentation_label": "Selecta · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 500,
+                "missing_price": false,
+                "price_is_stale": false
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913d2",
+                "ref_name": "Leche Entera",
+                "quantity": "1",
+                "unit_name": "taza",
+                "quantity_in_base": "240",
+                "base_unit": "ml",
+                "presentation_id": "6aeccf6bef21f6dee42913d3",
+                "presentation_label": "Lala · 1000 ml",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 600,
+                "missing_price": false,
+                "price_is_stale": false
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913d5",
+                "ref_name": "Nuez en Mitades",
+                "quantity": "2",
+                "unit_name": "Puñado",
+                "quantity_in_base": "100",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913d6",
+                "presentation_label": "Nuez de Campo · 500 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 2000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 3100,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 3100,
+            "cost_per_yield_unit": "3100.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 4340,
+            "suggested_price_per_yield_unit_cents": 4340,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "c_marca_fijada_estados_y_empate",
+      "now": "2026-11-05T18:48:11.080Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.083Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee42913d9",
+            "name": "Vainilla",
+            "base_unit": "ml",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.024Z",
+            "updated_at": "2026-11-05T18:48:11.024Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913df",
+            "name": "Cocoa",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.050Z",
+            "updated_at": "2026-11-05T18:48:11.050Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e4",
+            "name": "Canela",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.059Z",
+            "updated_at": "2026-11-05T18:48:11.059Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913ea",
+            "name": "Azúcar Empate",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.068Z",
+            "updated_at": "2026-11-05T18:48:11.068Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee42913da",
+            "ingredient_id": "6aeccf6bef21f6dee42913d9",
+            "brand": "Papantla",
+            "supplier_id": null,
+            "package_quantity": "100",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.026Z",
+            "updated_at": "2026-11-05T18:48:11.026Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913dc",
+            "ingredient_id": "6aeccf6bef21f6dee42913d9",
+            "brand": "Molina Vigente",
+            "supplier_id": null,
+            "package_quantity": "100",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.029Z",
+            "updated_at": "2026-11-05T18:48:11.029Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e0",
+            "ingredient_id": "6aeccf6bef21f6dee42913df",
+            "brand": "Cocoa Gourmet Sin Precio",
+            "supplier_id": null,
+            "package_quantity": "500",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.052Z",
+            "updated_at": "2026-11-05T18:48:11.052Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e1",
+            "ingredient_id": "6aeccf6bef21f6dee42913df",
+            "brand": "Cocoa Regular",
+            "supplier_id": null,
+            "package_quantity": "500",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.054Z",
+            "updated_at": "2026-11-05T18:48:11.054Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e5",
+            "ingredient_id": "6aeccf6bef21f6dee42913e4",
+            "brand": "Canela Vieja",
+            "supplier_id": null,
+            "package_quantity": "100",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.060Z",
+            "updated_at": "2026-11-05T18:48:11.067Z",
+            "deleted_at": "2026-11-05T18:48:11.067Z"
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e7",
+            "ingredient_id": "6aeccf6bef21f6dee42913e4",
+            "brand": "Canela Vigente",
+            "supplier_id": null,
+            "package_quantity": "100",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.063Z",
+            "updated_at": "2026-11-05T18:48:11.063Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913eb",
+            "ingredient_id": "6aeccf6bef21f6dee42913ea",
+            "brand": "Zulka Antigua",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.070Z",
+            "updated_at": "2026-11-05T18:48:11.070Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913ed",
+            "ingredient_id": "6aeccf6bef21f6dee42913ea",
+            "brand": "Morena Reciente",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.075Z",
+            "updated_at": "2026-11-05T18:48:11.075Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee42913db",
+            "presentation_id": "6aeccf6bef21f6dee42913da",
+            "price_cents": 1500,
+            "recorded_at": "2026-11-05T18:48:11.026Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.026Z",
+            "updated_at": "2026-11-05T18:48:11.026Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913dd",
+            "presentation_id": "6aeccf6bef21f6dee42913dc",
+            "price_cents": 1000,
+            "recorded_at": "2026-11-05T18:48:11.029Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.029Z",
+            "updated_at": "2026-11-05T18:48:11.029Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e2",
+            "presentation_id": "6aeccf6bef21f6dee42913e1",
+            "price_cents": 3000,
+            "recorded_at": "2026-11-05T18:48:11.054Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.054Z",
+            "updated_at": "2026-11-05T18:48:11.054Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e6",
+            "presentation_id": "6aeccf6bef21f6dee42913e5",
+            "price_cents": 800,
+            "recorded_at": "2026-11-05T18:48:11.061Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.061Z",
+            "updated_at": "2026-11-05T18:48:11.061Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e8",
+            "presentation_id": "6aeccf6bef21f6dee42913e7",
+            "price_cents": 1200,
+            "recorded_at": "2026-11-05T18:48:11.063Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.063Z",
+            "updated_at": "2026-11-05T18:48:11.063Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913ec",
+            "presentation_id": "6aeccf6bef21f6dee42913eb",
+            "price_cents": 2500,
+            "recorded_at": "2026-11-04T18:48:11.069Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.074Z",
+            "updated_at": "2026-11-05T18:48:11.074Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913ee",
+            "presentation_id": "6aeccf6bef21f6dee42913ed",
+            "price_cents": 3500,
+            "recorded_at": "2026-11-04T18:48:11.069Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.078Z",
+            "updated_at": "2026-11-05T18:48:11.078Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee42913de",
+            "name": "Receta con Vainilla Fijada",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913d9",
+                "quantity": "10",
+                "unit_id": null,
+                "pinned_presentation_id": "6aeccf6bef21f6dee42913da"
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.032Z",
+            "updated_at": "2026-11-05T18:48:11.032Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e3",
+            "name": "Receta Cocoa Sin Precio",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913df",
+                "quantity": "50",
+                "unit_id": null,
+                "pinned_presentation_id": "6aeccf6bef21f6dee42913e0"
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.057Z",
+            "updated_at": "2026-11-05T18:48:11.057Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913e9",
+            "name": "Receta con Canela Fijada Borrada",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913e4",
+                "quantity": "10",
+                "unit_id": null,
+                "pinned_presentation_id": "6aeccf6bef21f6dee42913e5"
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.066Z",
+            "updated_at": "2026-11-05T18:48:11.066Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913ef",
+            "name": "Receta Azúcar Empate",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913ea",
+                "quantity": "100",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.080Z",
+            "updated_at": "2026-11-05T18:48:11.080Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913ef",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913ef",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913ea",
+                "ref_name": "Azúcar Empate",
+                "quantity": "100",
+                "unit_name": null,
+                "quantity_in_base": "100",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913ed",
+                "presentation_label": "Morena Reciente · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 350,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 350,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 350,
+            "cost_per_yield_unit": "350.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 490,
+            "suggested_price_per_yield_unit_cents": 490,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913e3",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913e3",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913df",
+                "ref_name": "Cocoa",
+                "quantity": "50",
+                "unit_name": null,
+                "quantity_in_base": "50",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913e0",
+                "presentation_label": "Cocoa Gourmet Sin Precio · 500 g",
+                "pinned": true,
+                "brand_source": "recipe",
+                "cost_cents": 0,
+                "missing_price": true,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 0,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 0,
+            "cost_per_yield_unit": "0.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 0,
+            "suggested_price_per_yield_unit_cents": 0,
+            "complete": false,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913e9",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913e9",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913e4",
+                "ref_name": "Canela",
+                "quantity": "10",
+                "unit_name": null,
+                "quantity_in_base": "10",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913e7",
+                "presentation_label": "Canela Vigente · 100 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 120,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 120,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 120,
+            "cost_per_yield_unit": "120.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 168,
+            "suggested_price_per_yield_unit_cents": 168,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913de",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913de",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913d9",
+                "ref_name": "Vainilla",
+                "quantity": "10",
+                "unit_name": null,
+                "quantity_in_base": "10",
+                "base_unit": "ml",
+                "presentation_id": "6aeccf6bef21f6dee42913da",
+                "presentation_label": "Papantla · 100 ml",
+                "pinned": true,
+                "brand_source": "recipe",
+                "cost_cents": 150,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 150,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 150,
+            "cost_per_yield_unit": "150.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 210,
+            "suggested_price_per_yield_unit_cents": 210,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "d_versiones_costeo",
+      "now": "2026-11-05T18:48:11.124Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.126Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee42913f0",
+            "name": "Mantequilla Versiones",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.109Z",
+            "updated_at": "2026-11-05T18:48:11.109Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee42913f1",
+            "ingredient_id": "6aeccf6bef21f6dee42913f0",
+            "brand": "Gloria Base",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.111Z",
+            "updated_at": "2026-11-05T18:48:11.111Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913f3",
+            "ingredient_id": "6aeccf6bef21f6dee42913f0",
+            "brand": "Lala Versión",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.113Z",
+            "updated_at": "2026-11-05T18:48:11.113Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913f5",
+            "ingredient_id": "6aeccf6bef21f6dee42913f0",
+            "brand": "Artesanal Sin Precio",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.116Z",
+            "updated_at": "2026-11-05T18:48:11.116Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee42913f2",
+            "presentation_id": "6aeccf6bef21f6dee42913f1",
+            "price_cents": 4000,
+            "recorded_at": "2026-11-05T18:48:11.111Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.111Z",
+            "updated_at": "2026-11-05T18:48:11.111Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913f4",
+            "presentation_id": "6aeccf6bef21f6dee42913f3",
+            "price_cents": 5000,
+            "recorded_at": "2026-11-05T18:48:11.114Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.114Z",
+            "updated_at": "2026-11-05T18:48:11.114Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee42913f6",
+            "name": "Galletas de Mantequilla",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913f0",
+                "quantity": "200",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "10",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.118Z",
+            "updated_at": "2026-11-05T18:48:11.118Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [
+          {
+            "id": "6aeccf6bef21f6dee42913f7",
+            "recipe_id": "6aeccf6bef21f6dee42913f6",
+            "name": "Con Lala",
+            "choices": [
+              {
+                "ingredient_id": "6aeccf6bef21f6dee42913f0",
+                "presentation_id": "6aeccf6bef21f6dee42913f3"
+              }
+            ],
+            "created_at": "2026-11-05T18:48:11.121Z",
+            "updated_at": "2026-11-05T18:48:11.121Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913f8",
+            "recipe_id": "6aeccf6bef21f6dee42913f6",
+            "name": "Con Artesanal",
+            "choices": [
+              {
+                "ingredient_id": "6aeccf6bef21f6dee42913f0",
+                "presentation_id": "6aeccf6bef21f6dee42913f5"
+              }
+            ],
+            "created_at": "2026-11-05T18:48:11.123Z",
+            "updated_at": "2026-11-05T18:48:11.123Z",
+            "deleted_at": null
+          }
+        ],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913f6",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913f6",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913f0",
+                "ref_name": "Mantequilla Versiones",
+                "quantity": "200",
+                "unit_name": null,
+                "quantity_in_base": "200",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913f3",
+                "presentation_label": "Lala Versión · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 1000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 1000,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 1000,
+            "cost_per_yield_unit": "100.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 1400,
+            "suggested_price_per_yield_unit_cents": 140,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913f6",
+          "version_id": "6aeccf6bef21f6dee42913f7",
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913f6",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913f0",
+                "ref_name": "Mantequilla Versiones",
+                "quantity": "200",
+                "unit_name": null,
+                "quantity_in_base": "200",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913f3",
+                "presentation_label": "Lala Versión · 1000 g",
+                "pinned": true,
+                "brand_source": "version",
+                "cost_cents": 1000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 1000,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 1000,
+            "cost_per_yield_unit": "100.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 1400,
+            "suggested_price_per_yield_unit_cents": 140,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": "6aeccf6bef21f6dee42913f7",
+            "version_name": "Con Lala"
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913f6",
+          "version_id": "6aeccf6bef21f6dee42913f8",
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913f6",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913f0",
+                "ref_name": "Mantequilla Versiones",
+                "quantity": "200",
+                "unit_name": null,
+                "quantity_in_base": "200",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913f5",
+                "presentation_label": "Artesanal Sin Precio · 1000 g",
+                "pinned": true,
+                "brand_source": "version",
+                "cost_cents": 0,
+                "missing_price": true,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 0,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 0,
+            "cost_per_yield_unit": "0.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 0,
+            "suggested_price_per_yield_unit_cents": 0,
+            "complete": false,
+            "has_stale_prices": false,
+            "version_id": "6aeccf6bef21f6dee42913f8",
+            "version_name": "Con Artesanal"
+          }
+        }
+      ]
+    },
+    {
+      "name": "e_subreceta_unidad_distinta",
+      "now": "2026-11-05T18:48:11.152Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.154Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee42913f9",
+            "name": "Queso Crema",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.144Z",
+            "updated_at": "2026-11-05T18:48:11.144Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee42913fa",
+            "ingredient_id": "6aeccf6bef21f6dee42913f9",
+            "brand": "Philadelphia",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.146Z",
+            "updated_at": "2026-11-05T18:48:11.146Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee42913fb",
+            "presentation_id": "6aeccf6bef21f6dee42913fa",
+            "price_cents": 8000,
+            "recorded_at": "2026-11-05T18:48:11.146Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.146Z",
+            "updated_at": "2026-11-05T18:48:11.146Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee42913fc",
+            "name": "Betún de Queso",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913f9",
+                "quantity": "500",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "500",
+            "yield_unit": "g",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.149Z",
+            "updated_at": "2026-11-05T18:48:11.149Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee42913fd",
+            "name": "Pastel de Tres Pisos",
+            "description": null,
+            "items": [
+              {
+                "kind": "recipe",
+                "ref_id": "6aeccf6bef21f6dee42913fc",
+                "quantity": "1.5",
+                "unit_id": "sys.kg",
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.151Z",
+            "updated_at": "2026-11-05T18:48:11.151Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913fc",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913fc",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913f9",
+                "ref_name": "Queso Crema",
+                "quantity": "500",
+                "unit_name": null,
+                "quantity_in_base": "500",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913fa",
+                "presentation_label": "Philadelphia · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 4000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 4000,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 4000,
+            "cost_per_yield_unit": "8.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 5600,
+            "suggested_price_per_yield_unit_cents": 11,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee42913fd",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee42913fd",
+            "lines": [
+              {
+                "kind": "recipe",
+                "ref_id": "6aeccf6bef21f6dee42913fc",
+                "ref_name": "Betún de Queso",
+                "quantity": "1.5",
+                "unit_name": "kilogramo",
+                "quantity_in_base": "1500.0",
+                "base_unit": "g",
+                "presentation_id": null,
+                "presentation_label": null,
+                "pinned": false,
+                "brand_source": null,
+                "cost_cents": 12000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 12000,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 12000,
+            "cost_per_yield_unit": "12000.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 16800,
+            "suggested_price_per_yield_unit_cents": 16800,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "f_extras_porciones_margenes",
+      "now": "2026-11-05T18:48:11.174Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.176Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee42913fe",
+            "name": "Chocolate Amargo",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.167Z",
+            "updated_at": "2026-11-05T18:48:11.167Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee42913ff",
+            "ingredient_id": "6aeccf6bef21f6dee42913fe",
+            "brand": "Turin",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.169Z",
+            "updated_at": "2026-11-05T18:48:11.169Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee4291400",
+            "presentation_id": "6aeccf6bef21f6dee42913ff",
+            "price_cents": 10000,
+            "recorded_at": "2026-11-05T18:48:11.169Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.169Z",
+            "updated_at": "2026-11-05T18:48:11.169Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee4291401",
+            "name": "Trufas Gourmet",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913fe",
+                "quantity": "100",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [
+              {
+                "name": "Caja Dorada",
+                "cost_cents": 200
+              },
+              {
+                "name": "Lazo",
+                "cost_cents": 50
+              }
+            ],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": 5,
+            "margin_percent": 25,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.171Z",
+            "updated_at": "2026-11-05T18:48:11.171Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291402",
+            "name": "Pastel Chocolate Workspace Margin",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913fe",
+                "quantity": "200",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": 4,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.173Z",
+            "updated_at": "2026-11-05T18:48:11.173Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee4291402",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee4291402",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913fe",
+                "ref_name": "Chocolate Amargo",
+                "quantity": "200",
+                "unit_name": null,
+                "quantity_in_base": "200",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913ff",
+                "presentation_label": "Turin · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 2000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 2000,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 2000,
+            "cost_per_yield_unit": "2000.000000",
+            "cost_per_serving_cents": 500,
+            "margin_percent": 40,
+            "suggested_price_cents": 2800,
+            "suggested_price_per_yield_unit_cents": 2800,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        },
+        {
+          "recipe_id": "6aeccf6bef21f6dee4291401",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee4291401",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee42913fe",
+                "ref_name": "Chocolate Amargo",
+                "quantity": "100",
+                "unit_name": null,
+                "quantity_in_base": "100",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee42913ff",
+                "presentation_label": "Turin · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 1000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 1000,
+            "extras_cost_cents": 250,
+            "batch_cost_cents": 1250,
+            "cost_per_yield_unit": "1250.000000",
+            "cost_per_serving_cents": 250,
+            "margin_percent": 25,
+            "suggested_price_cents": 1563,
+            "suggested_price_per_yield_unit_cents": 1563,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "g_precios_viejos_y_recientes",
+      "now": "2026-11-05T18:48:11.200Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.202Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee4291403",
+            "name": "Fresa Silvestre",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.189Z",
+            "updated_at": "2026-11-05T18:48:11.189Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291406",
+            "name": "Crema Batida",
+            "base_unit": "ml",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.195Z",
+            "updated_at": "2026-11-05T18:48:11.195Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee4291404",
+            "ingredient_id": "6aeccf6bef21f6dee4291403",
+            "brand": "Campo Viejo",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.191Z",
+            "updated_at": "2026-11-05T18:48:11.191Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291407",
+            "ingredient_id": "6aeccf6bef21f6dee4291406",
+            "brand": "Alpura Fresca",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.197Z",
+            "updated_at": "2026-11-05T18:48:11.197Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee4291405",
+            "presentation_id": "6aeccf6bef21f6dee4291404",
+            "price_cents": 6000,
+            "recorded_at": "2026-08-02T18:48:11.188Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.193Z",
+            "updated_at": "2026-11-05T18:48:11.193Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291408",
+            "presentation_id": "6aeccf6bef21f6dee4291407",
+            "price_cents": 4000,
+            "recorded_at": "2026-11-05T18:48:11.197Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.197Z",
+            "updated_at": "2026-11-05T18:48:11.197Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee4291409",
+            "name": "Fresas con Crema Stale",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291403",
+                "quantity": "200",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291406",
+                "quantity": "100",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.199Z",
+            "updated_at": "2026-11-05T18:48:11.199Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee4291409",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee4291409",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291403",
+                "ref_name": "Fresa Silvestre",
+                "quantity": "200",
+                "unit_name": null,
+                "quantity_in_base": "200",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee4291404",
+                "presentation_label": "Campo Viejo · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 1200,
+                "missing_price": false,
+                "price_is_stale": true
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291406",
+                "ref_name": "Crema Batida",
+                "quantity": "100",
+                "unit_name": null,
+                "quantity_in_base": "100",
+                "base_unit": "ml",
+                "presentation_id": "6aeccf6bef21f6dee4291407",
+                "presentation_label": "Alpura Fresca · 1000 ml",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 400,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 1600,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 1600,
+            "cost_per_yield_unit": "1600.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 2240,
+            "suggested_price_per_yield_unit_cents": 2240,
+            "complete": true,
+            "has_stale_prices": true,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "h_rendimiento_piezas",
+      "now": "2026-11-05T18:48:11.217Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.219Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee429140a",
+            "name": "Masa de Galleta",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.212Z",
+            "updated_at": "2026-11-05T18:48:11.212Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee429140b",
+            "ingredient_id": "6aeccf6bef21f6dee429140a",
+            "brand": "Masa Lista",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.214Z",
+            "updated_at": "2026-11-05T18:48:11.214Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee429140c",
+            "presentation_id": "6aeccf6bef21f6dee429140b",
+            "price_cents": 2000,
+            "recorded_at": "2026-11-05T18:48:11.214Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.214Z",
+            "updated_at": "2026-11-05T18:48:11.214Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee429140d",
+            "name": "Docena de Galletas",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee429140a",
+                "quantity": "500",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [
+              {
+                "name": "Caja",
+                "cost_cents": 200
+              }
+            ],
+            "yield_quantity": "12",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": 30,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.216Z",
+            "updated_at": "2026-11-05T18:48:11.216Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee429140d",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee429140d",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee429140a",
+                "ref_name": "Masa de Galleta",
+                "quantity": "500",
+                "unit_name": null,
+                "quantity_in_base": "500",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee429140b",
+                "presentation_label": "Masa Lista · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 1000,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 1000,
+            "extras_cost_cents": 200,
+            "batch_cost_cents": 1200,
+            "cost_per_yield_unit": "100.000000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 30,
+            "suggested_price_cents": 1560,
+            "suggested_price_per_yield_unit_cents": 130,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    },
+    {
+      "name": "i_redondeo_subcentavos",
+      "now": "2026-11-05T18:48:11.243Z",
+      "data": {
+        "schema_version": 1,
+        "exported_at": "2026-11-05T18:48:11.245Z",
+        "device_id": "server-export",
+        "settings": {
+          "name": "Mi cocina",
+          "currency": "MXN",
+          "timezone": "America/Mexico_City",
+          "default_margin_percent": 40,
+          "price_stale_days": 90
+        },
+        "units": [],
+        "ingredients": [
+          {
+            "id": "6aeccf6bef21f6dee429140e",
+            "name": "Ingrediente Subcentavo 1",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.229Z",
+            "updated_at": "2026-11-05T18:48:11.229Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291411",
+            "name": "Ingrediente Subcentavo 2",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.233Z",
+            "updated_at": "2026-11-05T18:48:11.233Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291414",
+            "name": "Ingrediente Subcentavo 3",
+            "base_unit": "g",
+            "group": null,
+            "notes": null,
+            "conversions": [],
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.237Z",
+            "updated_at": "2026-11-05T18:48:11.237Z",
+            "deleted_at": null
+          }
+        ],
+        "suppliers": [],
+        "presentations": [
+          {
+            "id": "6aeccf6bef21f6dee429140f",
+            "ingredient_id": "6aeccf6bef21f6dee429140e",
+            "brand": "Marca 1",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.231Z",
+            "updated_at": "2026-11-05T18:48:11.231Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291412",
+            "ingredient_id": "6aeccf6bef21f6dee4291411",
+            "brand": "Marca 2",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.235Z",
+            "updated_at": "2026-11-05T18:48:11.235Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291415",
+            "ingredient_id": "6aeccf6bef21f6dee4291414",
+            "brand": "Marca 3",
+            "supplier_id": null,
+            "package_quantity": "1000",
+            "barcode": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.239Z",
+            "updated_at": "2026-11-05T18:48:11.239Z",
+            "deleted_at": null
+          }
+        ],
+        "price_records": [
+          {
+            "id": "6aeccf6bef21f6dee4291410",
+            "presentation_id": "6aeccf6bef21f6dee429140f",
+            "price_cents": 4,
+            "recorded_at": "2026-11-05T18:48:11.231Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.231Z",
+            "updated_at": "2026-11-05T18:48:11.231Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291413",
+            "presentation_id": "6aeccf6bef21f6dee4291412",
+            "price_cents": 4,
+            "recorded_at": "2026-11-05T18:48:11.235Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.235Z",
+            "updated_at": "2026-11-05T18:48:11.235Z",
+            "deleted_at": null
+          },
+          {
+            "id": "6aeccf6bef21f6dee4291416",
+            "presentation_id": "6aeccf6bef21f6dee4291415",
+            "price_cents": 4,
+            "recorded_at": "2026-11-05T18:48:11.239Z",
+            "note": null,
+            "created_at": "2026-11-05T18:48:11.239Z",
+            "updated_at": "2026-11-05T18:48:11.239Z",
+            "deleted_at": null
+          }
+        ],
+        "recipes": [
+          {
+            "id": "6aeccf6bef21f6dee4291417",
+            "name": "Receta Redondeo Subcentavo",
+            "description": null,
+            "items": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee429140e",
+                "quantity": "100",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291411",
+                "quantity": "100",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291414",
+                "quantity": "100",
+                "unit_id": null,
+                "pinned_presentation_id": null
+              }
+            ],
+            "extra_costs": [],
+            "yield_quantity": "1",
+            "yield_unit": "pz",
+            "servings": null,
+            "margin_percent": null,
+            "photo_id": null,
+            "created_at": "2026-11-05T18:48:11.242Z",
+            "updated_at": "2026-11-05T18:48:11.242Z",
+            "deleted_at": null
+          }
+        ],
+        "cost_versions": [],
+        "customers": [],
+        "orders": [],
+        "expenses": []
+      },
+      "recipe_costs": [
+        {
+          "recipe_id": "6aeccf6bef21f6dee4291417",
+          "version_id": null,
+          "expected": {
+            "recipe_id": "6aeccf6bef21f6dee4291417",
+            "lines": [
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee429140e",
+                "ref_name": "Ingrediente Subcentavo 1",
+                "quantity": "100",
+                "unit_name": null,
+                "quantity_in_base": "100",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee429140f",
+                "presentation_label": "Marca 1 · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 0,
+                "missing_price": false,
+                "price_is_stale": false
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291411",
+                "ref_name": "Ingrediente Subcentavo 2",
+                "quantity": "100",
+                "unit_name": null,
+                "quantity_in_base": "100",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee4291412",
+                "presentation_label": "Marca 2 · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 0,
+                "missing_price": false,
+                "price_is_stale": false
+              },
+              {
+                "kind": "ingredient",
+                "ref_id": "6aeccf6bef21f6dee4291414",
+                "ref_name": "Ingrediente Subcentavo 3",
+                "quantity": "100",
+                "unit_name": null,
+                "quantity_in_base": "100",
+                "base_unit": "g",
+                "presentation_id": "6aeccf6bef21f6dee4291415",
+                "presentation_label": "Marca 3 · 1000 g",
+                "pinned": false,
+                "brand_source": "current",
+                "cost_cents": 0,
+                "missing_price": false,
+                "price_is_stale": false
+              }
+            ],
+            "ingredients_cost_cents": 1,
+            "extras_cost_cents": 0,
+            "batch_cost_cents": 1,
+            "cost_per_yield_unit": "1.200000",
+            "cost_per_serving_cents": null,
+            "margin_percent": 40,
+            "suggested_price_cents": 2,
+            "suggested_price_per_yield_unit_cents": 2,
+            "complete": true,
+            "has_stale_prices": false,
+            "version_id": null,
+            "version_name": null
+          }
+        }
+      ]
+    }
+  ]
+}
