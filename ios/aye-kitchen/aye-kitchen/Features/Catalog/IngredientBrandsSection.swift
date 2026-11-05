@@ -7,15 +7,34 @@ import SwiftUI
     var presentations: [Presentation] = []
     var isLoading = false
     var errorMessage: String?
+    /// Ya se cargó al menos una vez (aunque el ingrediente no tenga marcas): no se vuelve a pedir
+    /// solo porque una fila reaparezca.
+    private(set) var hasLoaded = false
+    /// La carga en curso. Vive fuera del `.task` de la vista: en una `List`, cambiar de "cargando"
+    /// a la lista reemplaza la fila que la lanzó y SwiftUI cancelaría la petición a medias.
+    private var loadTask: Task<Void, Never>?
 
     init(ingredientId: String, initialPresentations: [Presentation]? = nil) {
         self.ingredientId = ingredientId
         if let initialPresentations {
             self.presentations = initialPresentations
+            self.hasLoaded = true
         }
     }
 
+    /// Pide las marcas. Si ya hay una carga en curso, espera esa en lugar de lanzar otra.
     func loadBrands() async {
+        if let loadTask {
+            await loadTask.value
+            return
+        }
+        let task = Task { await self.fetchBrands() }
+        loadTask = task
+        await task.value
+        loadTask = nil
+    }
+
+    private func fetchBrands() async {
         isLoading = true
         errorMessage = nil
         do {
@@ -28,10 +47,9 @@ import SwiftUI
                 ]
             )
             self.presentations = page.items
+            self.hasLoaded = true
             self.isLoading = false
         } catch where error.isCancellation {
-            // La vista se reconstruyó a media carga: no es falta de red. El `.task` de la vista
-            // nueva vuelve a pedir porque errorMessage sigue vacío.
             self.isLoading = false
         } catch {
             self.isLoading = false
@@ -129,7 +147,7 @@ struct IngredientBrandsSection: View {
             }
         }
         .task {
-            if model.presentations.isEmpty && model.errorMessage == nil {
+            if !model.hasLoaded && model.errorMessage == nil {
                 await model.loadBrands()
             }
         }
