@@ -61,6 +61,54 @@ nonisolated enum CurrencyMath {
 nonisolated enum OrderDateFormatter {
     private static let mxLocale = Locale(identifier: "es_MX")
 
+    private nonisolated(unsafe) static let dayHeaderFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = mxLocale
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEEE d 'de' MMMM"
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let dayAbbreviationFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = mxLocale
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEE"
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let dayNumberFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = mxLocale
+        formatter.timeZone = .current
+        formatter.dateFormat = "d"
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = mxLocale
+        formatter.timeZone = .current
+        formatter.dateFormat = "h:mm a"
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let fullDateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = mxLocale
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEEE d 'de' MMMM"
+        return formatter
+    }()
+
+    private nonisolated(unsafe) static let paymentDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = mxLocale
+        formatter.timeZone = .current
+        formatter.dateFormat = "d 'de' MMMM, h:mm a"
+        return formatter
+    }()
+
     /// Encabezado de sección: "Hoy", "Mañana" o fecha completa ("Sábado 26 de octubre").
     static func dayHeader(for date: Date) -> String {
         let calendar = Calendar.current
@@ -69,51 +117,31 @@ nonisolated enum OrderDateFormatter {
         } else if calendar.isDateInTomorrow(date) {
             return "Mañana"
         } else {
-            let formatter = DateFormatter()
-            formatter.locale = mxLocale
-            formatter.timeZone = .current
-            formatter.dateFormat = "EEEE d 'de' MMMM"
-            let str = formatter.string(from: date)
+            let str = dayHeaderFormatter.string(from: date)
             return str.prefix(1).uppercased() + str.dropFirst()
         }
     }
 
     /// Día abreviado en mayúsculas sin punto ("SÁB", "DOM", "LUN").
     static func dayAbbreviation(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = mxLocale
-        formatter.timeZone = .current
-        formatter.dateFormat = "EEE"
-        let str = formatter.string(from: date).uppercased()
+        let str = dayAbbreviationFormatter.string(from: date).uppercased()
         return str.replacingOccurrences(of: ".", with: "").trimmingCharacters(in: .whitespaces)
     }
 
     /// Número del día ("26").
     static func dayNumber(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = mxLocale
-        formatter.timeZone = .current
-        formatter.dateFormat = "d"
-        return formatter.string(from: date)
+        dayNumberFormatter.string(from: date)
     }
 
     /// Hora en formato "4:00 pm".
     static func timeString(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = mxLocale
-        formatter.timeZone = .current
-        formatter.dateFormat = "h:mm a"
-        let str = formatter.string(from: date).lowercased()
+        let str = timeFormatter.string(from: date).lowercased()
         return str.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespaces)
     }
 
     /// Fecha y hora completa para encabezado de detalle ("Sábado 26 de octubre, 4:00 pm").
     static func fullDateTime(for date: Date) -> String {
-        let dfDate = DateFormatter()
-        dfDate.locale = mxLocale
-        dfDate.timeZone = .current
-        dfDate.dateFormat = "EEEE d 'de' MMMM"
-        let dateStr = dfDate.string(from: date)
+        let dateStr = fullDateTimeFormatter.string(from: date)
         let capitalizedDate = dateStr.prefix(1).uppercased() + dateStr.dropFirst()
 
         let timeStr = timeString(for: date)
@@ -122,11 +150,7 @@ nonisolated enum OrderDateFormatter {
 
     /// Fecha de pago ("25 de octubre, 3:30 pm").
     static func paymentDate(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = mxLocale
-        formatter.timeZone = .current
-        formatter.dateFormat = "d 'de' MMMM, h:mm a"
-        let str = formatter.string(from: date).lowercased()
+        let str = paymentDateFormatter.string(from: date).lowercased()
         return str.replacingOccurrences(of: ".", with: "").replacingOccurrences(of: "  ", with: " ").trimmingCharacters(in: .whitespaces)
     }
 }

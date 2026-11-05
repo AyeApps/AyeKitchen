@@ -212,6 +212,14 @@ struct HomeView: View {
         .softCard()
     }
 
+    private nonisolated(unsafe) static let deliveryMomentFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "es_MX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "EEEE d"
+        return formatter
+    }()
+
     private func formatDeliveryMoment(_ date: Date) -> String {
         let calendar = Calendar.current
         let time = OrderDateFormatter.timeString(for: date)
@@ -220,11 +228,7 @@ struct HomeView: View {
         } else if calendar.isDateInTomorrow(date) {
             return "Mañana, \(time)"
         } else {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "es_MX")
-            formatter.timeZone = .current
-            formatter.dateFormat = "EEEE d"
-            let str = formatter.string(from: date)
+            let str = Self.deliveryMomentFormatter.string(from: date)
             let capitalized = str.prefix(1).uppercased() + str.dropFirst()
             return "\(capitalized), \(time)"
         }

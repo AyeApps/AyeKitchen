@@ -43,7 +43,7 @@ struct RecipeDetailView: View {
         content
             .background(.canvasBackground)
             .navigationTitle(model.recipe?.name ?? "")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
                     if model.selectedVersionId != nil {
@@ -205,13 +205,15 @@ struct RecipeDetailView: View {
 
     private func headerSection(recipe: Recipe) -> some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            Text(recipe.name)
-                .font(.title.weight(.heavy))
-                .foregroundStyle(.inkPrimary)
-
             Text(yieldDescription(recipe: recipe))
                 .font(.subheadline)
                 .foregroundStyle(.inkMuted)
+
+            if let description = recipe.description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
+                Text(description)
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
+            }
         }
     }
 
