@@ -91,11 +91,19 @@ struct OrdersView: View {
                 pickerView
 
                 if model.isEmpty {
-                    ContentUnavailableView(
-                        "Todavía no hay pedidos",
-                        systemImage: "list.clipboard",
-                        description: Text("Toca + para anotar el primero.")
-                    )
+                    ContentUnavailableView {
+                        Label("Todavía no hay pedidos", systemImage: "list.clipboard")
+                    } description: {
+                        Text("Toca + para anotar el primero.")
+                    } actions: {
+                        Button {
+                            showingNewOrder = true
+                        } label: {
+                            Text("Nuevo pedido")
+                        }
+                        .buttonStyle(.kitchenPrimary)
+                        .padding(.horizontal, Spacing.xxl)
+                    }
                     .padding(.top, 40)
                 } else {
                     ordersList

@@ -57,6 +57,15 @@ final class RecipeDetailModel {
         cost?.marginPercent ?? recipe?.marginPercent ?? 30
     }
 
+    /// Algún ingrediente de la receta tiene 2 o más marcas activas (regla de RecipeVersionsTip).
+    var hasIngredientWithSeveralBrands: Bool {
+        guard let recipe else { return false }
+        let ingredientIds = recipe.items.filter { $0.kind == .ingredient }.map(\.refId)
+        return ingredientIds.contains { ingId in
+            store.data.presentations.filter { $0.ingredientId == ingId && $0.isActive }.count >= 2
+        }
+    }
+
     var selectedVersionName: String? {
         guard let selectedVersionId else { return nil }
         return versions.first(where: { $0.id == selectedVersionId })?.name ??

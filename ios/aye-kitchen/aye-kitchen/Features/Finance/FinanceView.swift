@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Pestaña principal de Finanzas: gastos, ganancias del mes y costos de recetas (Bloque I22 local-first).
@@ -83,6 +84,9 @@ struct FinanceView: View {
                     Text(deleteErrorMessage)
                 }
             }
+            .onAppear {
+                FirstSteps.markFinanceVisited()
+            }
         }
     }
 
@@ -159,6 +163,12 @@ struct FinanceView: View {
             }
 
             Section {
+                TipView(FinanceExpensesTip())
+                    .tipBackground(.surfaceCard)
+                    .listRowInsets(EdgeInsets(top: 0, leading: Spacing.xl, bottom: Spacing.sm, trailing: Spacing.xl))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+
                 if model.monthlyExpenses.isEmpty {
                     emptyExpensesView
                         .listRowInsets(EdgeInsets(top: Spacing.md, leading: Spacing.xl, bottom: Spacing.md, trailing: Spacing.xl))
@@ -379,32 +389,21 @@ struct FinanceView: View {
     }
 
     private var emptyExpensesView: some View {
-        VStack(alignment: .center, spacing: Spacing.md) {
-            Image(systemName: "cart")
-                .font(.system(size: 36))
-                .foregroundStyle(.inkMuted)
-
-            Text("Todavía no registras gastos este mes. Agrega lo que compras para ver cuánto te queda.")
-                .font(.subheadline)
-                .foregroundStyle(.inkMuted)
-                .multilineTextAlignment(.center)
-
+        ContentUnavailableView {
+            Label("Todavía no registras gastos este mes", systemImage: "cart")
+        } description: {
+            Text("Agrega lo que compras para ver cuánto te queda.")
+        } actions: {
             Button {
                 showingNewExpense = true
             } label: {
-                Label("Agregar gasto", systemImage: "plus")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(.accentInk)
-                    .padding(.horizontal, Spacing.lg)
-                    .padding(.vertical, Spacing.sm)
-                    .background(.accentFill, in: .capsule)
+                Text("Agregar gasto")
             }
-            .buttonStyle(.plain)
-            .padding(.top, Spacing.xs)
+            .buttonStyle(.kitchenPrimary)
+            .padding(.horizontal, Spacing.xxl)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, Spacing.xl)
-        .padding(.horizontal, Spacing.md)
+        .padding(.vertical, Spacing.md)
     }
 }
 

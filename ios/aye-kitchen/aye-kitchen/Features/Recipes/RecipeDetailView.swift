@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Extensión para identificar líneas de costo en sheets.
@@ -132,6 +133,12 @@ struct RecipeDetailView: View {
                     Text(message)
                 }
             }
+            .onAppear {
+                RecipeVersionsTip.recipeHasIngredientWithSeveralBrands = model.hasIngredientWithSeveralBrands
+            }
+            .onChange(of: model.hasIngredientWithSeveralBrands) { _, newValue in
+                RecipeVersionsTip.recipeHasIngredientWithSeveralBrands = newValue
+            }
     }
 
     @ViewBuilder
@@ -204,22 +211,27 @@ struct RecipeDetailView: View {
     private var versionSelectorSection: some View {
         let hasVersions = model.comparisons.count > 1 || !model.versions.isEmpty
 
-        if !hasVersions {
-            Button("Comparar con otras marcas") {
-                showingCreateVersionSheet = true
-            }
-            .buttonStyle(.kitchenSecondary)
-        } else {
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: Spacing.sm) {
-                    comparisonChipsList
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            TipView(RecipeVersionsTip())
+                .tipBackground(.surfaceCard)
+
+            if !hasVersions {
+                Button("Comparar con otras marcas") {
+                    showingCreateVersionSheet = true
                 }
+                .buttonStyle(.kitchenSecondary)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Spacing.sm) {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: Spacing.sm) {
                         comparisonChipsList
                     }
-                    .padding(.vertical, Spacing.xs)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: Spacing.sm) {
+                            comparisonChipsList
+                        }
+                        .padding(.vertical, Spacing.xs)
+                    }
                 }
             }
         }
@@ -436,6 +448,9 @@ struct RecipeDetailView: View {
 
     private func costBreakdownSection(recipe: Recipe, cost: RecipeCost) -> some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
+            TipView(RecipeChangeBrandTip())
+                .tipBackground(.surfaceCard)
+
             Text("De dónde sale el costo")
                 .sectionTitleStyle()
 

@@ -224,6 +224,16 @@ final class OrderFormModel {
         return !isSaving
     }
 
+    /// Hay al menos una línea de una receta que rinde más de 1 (regla de OrderSoldByTip).
+    var hasRecipeYieldingSeveral: Bool {
+        items.contains(where: \.yieldsMultiple)
+    }
+
+    /// ID de la primera línea que tiene selector (rinden más de 1).
+    var firstYieldingSeveralItemId: UUID? {
+        items.first(where: \.yieldsMultiple)?.id
+    }
+
     init(
         mode: Mode = .create,
         store: LocalStore = .shared,

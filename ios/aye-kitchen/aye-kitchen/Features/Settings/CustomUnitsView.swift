@@ -83,11 +83,19 @@ struct CustomUnitsView: View {
 
     private var emptyView: some View {
         ScrollView {
-            ContentUnavailableView(
-                "Todavía no tienes unidades propias",
-                systemImage: "scalemass",
-                description: Text("Crea unidades para paquetes o medidas que uses en tu cocina.")
-            )
+            ContentUnavailableView {
+                Label("Todavía no tienes unidades propias", systemImage: "scalemass")
+            } description: {
+                Text("Crea unidades para paquetes o medidas que uses en tu cocina.")
+            } actions: {
+                Button {
+                    showingCreateSheet = true
+                } label: {
+                    Text("Nueva unidad")
+                }
+                .buttonStyle(.kitchenPrimary)
+                .padding(.horizontal, Spacing.xxl)
+            }
             .padding(.top, Spacing.xxl)
         }
     }

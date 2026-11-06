@@ -171,11 +171,20 @@ struct SuppliersView: View {
     @ViewBuilder
     private var content: some View {
         if model.suppliers.isEmpty {
-            ContentUnavailableView(
-                "Todavía no tienes tiendas",
-                systemImage: "storefront",
-                description: Text("Agrega dónde compras: Walmart, Costco, el mercado…")
-            )
+            ContentUnavailableView {
+                Label("Todavía no tienes tiendas", systemImage: "storefront")
+            } description: {
+                Text("Agrega dónde compras: Walmart, Costco, el mercado…")
+            } actions: {
+                Button {
+                    newSupplierName = ""
+                    showingAddAlert = true
+                } label: {
+                    Text("Agregar tienda")
+                }
+                .buttonStyle(.kitchenPrimary)
+                .padding(.horizontal, Spacing.xxl)
+            }
         } else if filteredSuppliers.isEmpty {
             ContentUnavailableView.search(text: searchText)
         } else {

@@ -94,11 +94,19 @@ struct RecipesView: View {
                     ContentUnavailableView.search(text: model.query)
                         .padding(.top, 40)
                 } else {
-                    ContentUnavailableView(
-                        "Todavía no hay recetas",
-                        systemImage: "book.closed",
-                        description: Text("Arma una receta y te decimos cuánto te cuesta.")
-                    )
+                    ContentUnavailableView {
+                        Label("Todavía no hay recetas", systemImage: "book.closed")
+                    } description: {
+                        Text("Arma una receta y te decimos cuánto te cuesta.")
+                    } actions: {
+                        Button {
+                            showingNewRecipe = true
+                        } label: {
+                            Text("Nueva receta")
+                        }
+                        .buttonStyle(.kitchenPrimary)
+                        .padding(.horizontal, Spacing.xxl)
+                    }
                     .padding(.top, 40)
                 }
             }

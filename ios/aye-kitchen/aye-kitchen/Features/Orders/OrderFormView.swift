@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Formulario para crear o editar un pedido (Bloque I18 local-first).
@@ -92,6 +93,12 @@ struct OrderFormView: View {
                 CustomerPickerSheet(store: model.store) { selectedCustomer in
                     model.selectCustomer(selectedCustomer)
                 }
+            }
+            .onAppear {
+                OrderSoldByTip.hasRecipeYieldingSeveral = model.hasRecipeYieldingSeveral
+            }
+            .onChange(of: model.hasRecipeYieldingSeveral) { _, newValue in
+                OrderSoldByTip.hasRecipeYieldingSeveral = newValue
             }
         }
     }
@@ -258,6 +265,11 @@ struct OrderFormView: View {
 
             // Selector por unidad / por tanda (solo si la receta rinde más de 1)
             if item.wrappedValue.yieldsMultiple {
+                if item.wrappedValue.id == model.firstYieldingSeveralItemId {
+                    TipView(OrderSoldByTip())
+                        .tipBackground(.surfaceCard)
+                }
+
                 Picker("Modo de venta", selection: Binding(
                     get: { item.wrappedValue.soldBy },
                     set: { item.wrappedValue.changeMode(to: $0) }

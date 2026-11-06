@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Catálogo: lista de ingredientes agrupados con búsqueda y borrado local.
@@ -89,16 +90,27 @@ struct CatalogView: View {
                 if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
-                    ContentUnavailableView(
-                        "Tu catálogo está vacío",
-                        systemImage: "square.grid.2x2",
-                        description: Text("Agrega los ingredientes que compras y dónde los compras.")
-                    )
+                    ContentUnavailableView {
+                        Label("Tu catálogo está vacío", systemImage: "square.grid.2x2")
+                    } description: {
+                        Text("Agrega los ingredientes que compras y dónde los compras.")
+                    } actions: {
+                        Button {
+                            showingNewIngredient = true
+                        } label: {
+                            Text("Agregar ingrediente")
+                        }
+                        .buttonStyle(.kitchenPrimary)
+                        .padding(.horizontal, Spacing.xxl)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             List {
+                TipView(CatalogBrandsTip())
+                    .tipBackground(.surfaceCard)
+
                 ForEach(model.sections) { section in
                     Section(section.title) {
                         ForEach(section.items) { ingredient in

@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 // MARK: - Vista de Sección de Marcas
@@ -31,6 +32,9 @@ struct IngredientBrandsSection: View {
                     .font(.subheadline)
                     .foregroundStyle(.inkMuted)
             } else {
+                TipView(IngredientCurrentBrandTip())
+                    .tipBackground(.surfaceCard)
+
                 ForEach(presentations) { presentation in
                     NavigationLink {
                         BrandDetailView(presentationId: presentation.id, store: store)
@@ -59,6 +63,12 @@ struct IngredientBrandsSection: View {
                 .font(.body.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
             }
+        }
+        .onAppear {
+            IngredientCurrentBrandTip.ingredientHasBrands = !presentations.isEmpty
+        }
+        .onChange(of: presentations.isEmpty) { _, isEmpty in
+            IngredientCurrentBrandTip.ingredientHasBrands = !isEmpty
         }
         .sheet(isPresented: $showingAddBrandSheet) {
             BrandFormView(mode: .create(ingredientId: ingredientId), store: store)

@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Pantalla de Cuenta y ajustes (Bloque I21).
@@ -9,6 +10,7 @@ struct SettingsView: View {
 
     @State private var model: SettingsModel
     @State private var showingSignOutConfirmation = false
+    @State private var showingTipsResetAlert = false
     #if DEBUG
     @State private var showingCopiedToast = false
     #endif
@@ -26,6 +28,7 @@ struct SettingsView: View {
             List {
                 accountSection
                 generalSection
+                helpSection
                 signOutSection
                 #if DEBUG
                 debugSection
@@ -109,6 +112,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .popoverTip(BackupTip(), arrowEdge: .bottom)
 
             NavigationLink {
                 BusinessSettingsView(store: model.store)
@@ -158,7 +162,29 @@ struct SettingsView: View {
         }
     }
 
-    // 3. Cerrar sesión
+    // 3. Ayuda
+    private var helpSection: some View {
+        Section {
+            Button {
+                KitchenTips.requestResetOnNextLaunch()
+                showingTipsResetAlert = true
+            } label: {
+                Text("Volver a ver los consejos")
+                    .foregroundStyle(.inkPrimary)
+            }
+            .alert("Consejos", isPresented: $showingTipsResetAlert) {
+                Button("Entendido", role: .cancel) {}
+            } message: {
+                Text("Los verás otra vez la próxima vez que abras la app.")
+            }
+        } header: {
+            Text("Ayuda")
+        } footer: {
+            Text("Los verás otra vez la próxima vez que abras la app.")
+        }
+    }
+
+    // 4. Cerrar sesión
     private var signOutSection: some View {
         Section {
             Button(role: .destructive) {

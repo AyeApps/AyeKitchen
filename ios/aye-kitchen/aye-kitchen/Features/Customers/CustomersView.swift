@@ -83,11 +83,19 @@ struct CustomersView: View {
                 if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     ContentUnavailableView.search(text: searchText)
                 } else {
-                    ContentUnavailableView(
-                        "Todavía no tienes clientes",
-                        systemImage: "person.2",
-                        description: Text("Agrégalos aquí o al crear un pedido.")
-                    )
+                    ContentUnavailableView {
+                        Label("Todavía no tienes clientes", systemImage: "person.2")
+                    } description: {
+                        Text("Agrégalos aquí o al crear un pedido.")
+                    } actions: {
+                        Button {
+                            showingNewCustomer = true
+                        } label: {
+                            Text("Nuevo cliente")
+                        }
+                        .buttonStyle(.kitchenPrimary)
+                        .padding(.horizontal, Spacing.xxl)
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
