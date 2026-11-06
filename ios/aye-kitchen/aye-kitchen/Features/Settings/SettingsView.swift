@@ -11,8 +11,10 @@ struct SettingsView: View {
     @State private var model: SettingsModel
     @State private var showingSignOutConfirmation = false
     @State private var showingTipsResetAlert = false
-    @State private var showingEraseConfirmation = false
     #if DEBUG
+    @State private var deletionModel = DataDeletionModel()
+    @State private var showingEraseConfirmation = false
+    @State private var showingEraseErrorAlert = false
     @State private var showingCopiedToast = false
     #endif
 
@@ -31,8 +33,8 @@ struct SettingsView: View {
                 generalSection
                 helpSection
                 signOutSection
+                deleteAccountSection
                 #if DEBUG
-                // Para producción: sacar eraseDataSection de este #if.
                 eraseDataSection
                 debugSection
                 #endif
@@ -64,6 +66,20 @@ struct SettingsView: View {
             } message: {
                 Text("Tus datos se quedan en este teléfono. Si tienes cambios sin respaldar, se guardarán antes de salir.")
             }
+            #if DEBUG
+            .alert(
+                "No se pudieron borrar tus datos",
+                isPresented: $showingEraseErrorAlert
+            ) {
+                Button("Aceptar", role: .cancel) {
+                    deletionModel.errorMessage = nil
+                }
+            } message: {
+                if let message = deletionModel.errorMessage {
+                    Text(message)
+                }
+            }
+            #endif
         }
     }
 
@@ -209,33 +225,63 @@ struct SettingsView: View {
         }
     }
 
-    // 5. Borrar todos los datos (lista para producción; hoy solo en DEBUG)
+    // 5. Eliminar mi cuenta Aye
+    private var deleteAccountSection: some View {
+        Section {
+            NavigationLink {
+                DeleteAccountView()
+            } label: {
+                Text("Eliminar mi cuenta Aye")
+                    .foregroundStyle(.warningText)
+            }
+        }
+    }
+
+    #if DEBUG
+    // 6. Borrar mis datos de AyeKitchen (solo en DEBUG por ahora)
     private var eraseDataSection: some View {
         Section {
             Button(role: .destructive) {
                 showingEraseConfirmation = true
             } label: {
-                Text("Borrar todos los datos")
-                    .foregroundStyle(.warningText)
+                if deletionModel.isWorking {
+                    HStack(spacing: Spacing.sm) {
+                        ProgressView()
+                            .tint(.warningText)
+                        Text("Borrando datos...")
+                            .foregroundStyle(.warningText)
+                    }
+                } else {
+                    Text("Borrar mis datos de AyeKitchen")
+                        .foregroundStyle(.warningText)
+                }
             }
+            .disabled(deletionModel.isWorking)
             .confirmationDialog(
-                "¿Borrar todos tus datos?",
+                "¿Borrar tus datos de AyeKitchen?",
                 isPresented: $showingEraseConfirmation,
                 titleVisibility: .visible
             ) {
                 Button("Borrar todo", role: .destructive) {
                     guard let accountId = session.me?.id else { return }
-                    dismiss()
-                    LocalReset.eraseAllData(accountId: accountId)
+                    Task {
+                        let success = await deletionModel.eraseKitchenData(accountId: accountId)
+                        if success {
+                            dismiss()
+                        } else {
+                            showingEraseErrorAlert = true
+                        }
+                    }
                 }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("Se borran tus ingredientes, recetas, pedidos, clientes, gastos y fotos de referencia, y tu negocio vuelve a empezar. No se puede deshacer.")
+                Text("Se borran de este teléfono y de tus respaldos: ingredientes, recetas, pedidos, clientes, gastos y fotos de referencia. Tu cuenta Aye se queda. No se puede deshacer.")
             }
         } footer: {
             Text("Tu cuenta Aye se queda; solo se vacía AyeKitchen.")
         }
     }
+    #endif
 
     // 4. Sección de desarrollo (DEBUG)
     #if DEBUG
