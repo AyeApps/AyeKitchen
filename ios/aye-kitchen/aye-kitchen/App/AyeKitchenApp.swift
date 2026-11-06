@@ -4,6 +4,10 @@ import SwiftUI
 struct AyeKitchenApp: App {
     @State private var session = SessionStore()
 
+    init() {
+        KitchenTips.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
