@@ -344,3 +344,14 @@ Notas:
 - `base_backup_id` es el `id` del último respaldo que el teléfono subió o restauró. El primero no lo manda.
 - El servidor guarda el JSON tal cual lo recibe (no lo reescribe), para que `/backup/latest` devuelva exactamente lo que el teléfono subió.
 
+### Imágenes de referencia (B12)
+
+Los bytes de las imágenes de `references` (docs/backup-format.md, "Referencias"). Una por id, por workspace. El servidor no las interpreta.
+
+| Método | Ruta | Body | Notas |
+|---|---|---|---|
+| GET | `/backup/references/` | — | `[{id, sha256, size_bytes, content_type, updated_at}]` de las imágenes del workspace (para saber cuáles faltan) |
+| PUT | `/backup/references/{id}` | bytes crudos; header `Content-Type` `image/jpeg` o `image/heic`; query `?sha256=` | 201/200. Crea o reemplaza. Más de 2 MB → `BACKUP_TOO_LARGE`. Otro `Content-Type` o `sha256` que no coincide con los bytes → `INVALID_BACKUP`. `id` de 1 a 64 caracteres `[A-Za-z0-9_-]` |
+| GET | `/backup/references/{id}` | — | Los bytes con su `Content-Type`. No existe → 404 `NOT_FOUND` |
+| DELETE | `/backup/references/{id}` | — | 204 (no existe también 204) |
+

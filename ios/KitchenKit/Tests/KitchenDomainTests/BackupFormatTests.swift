@@ -13,7 +13,7 @@ struct BackupFormatTests {
             ingredients: [
                 Ingredient(id: "ing-1", name: "Harina de trigo", baseUnit: .g, group: "Harinas",
                            conversions: [IngredientConversion(unitId: "sys.tz", quantityInBase: "125")],
-                           photoId: "photo-1", createdAt: date, updatedAt: date),
+                           referenceIds: ["ref-1"], createdAt: date, updatedAt: date),
             ],
             presentations: [
                 Presentation(id: "pres-1", ingredientId: "ing-1", brand: "Selecta", packageQuantity: "1000",

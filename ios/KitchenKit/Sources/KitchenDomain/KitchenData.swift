@@ -23,12 +23,14 @@ public struct KitchenData: Codable, Sendable, Hashable {
     public var customers: [Customer]
     public var orders: [Order]
     public var expenses: [Expense]
+    /// Imágenes de referencia (sus datos; los bytes van aparte).
+    public var references: [ReferenceImage]
 
     public init(schemaVersion: Int = KitchenData.currentSchemaVersion, exportedAt: Date = Date(), deviceId: String,
                 settings: KitchenSettings = KitchenSettings(), units: [KitchenUnit] = [], ingredients: [Ingredient] = [],
                 suppliers: [Supplier] = [], presentations: [Presentation] = [], priceRecords: [PriceRecord] = [],
                 recipes: [Recipe] = [], costVersions: [CostVersion] = [], customers: [Customer] = [],
-                orders: [Order] = [], expenses: [Expense] = []) {
+                orders: [Order] = [], expenses: [Expense] = [], references: [ReferenceImage] = []) {
         self.schemaVersion = schemaVersion
         self.exportedAt = exportedAt
         self.deviceId = deviceId
@@ -43,6 +45,33 @@ public struct KitchenData: Codable, Sendable, Hashable {
         self.customers = customers
         self.orders = orders
         self.expenses = expenses
+        self.references = references
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, exportedAt, deviceId, settings, units, ingredients, suppliers, presentations
+        case priceRecords, recipes, costVersions, customers, orders, expenses, references
+    }
+
+    /// Tolerante: una lista que falta se lee vacía, para que archivos y respaldos escritos antes de
+    /// que existiera un campo nuevo se sigan leyendo (cambios que solo agregan, sin subir la versión).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decode(Int.self, forKey: .schemaVersion)
+        exportedAt = try c.decode(Date.self, forKey: .exportedAt)
+        deviceId = try c.decode(String.self, forKey: .deviceId)
+        settings = try c.decodeIfPresent(KitchenSettings.self, forKey: .settings) ?? KitchenSettings()
+        units = try c.decodeIfPresent([KitchenUnit].self, forKey: .units) ?? []
+        ingredients = try c.decodeIfPresent([Ingredient].self, forKey: .ingredients) ?? []
+        suppliers = try c.decodeIfPresent([Supplier].self, forKey: .suppliers) ?? []
+        presentations = try c.decodeIfPresent([Presentation].self, forKey: .presentations) ?? []
+        priceRecords = try c.decodeIfPresent([PriceRecord].self, forKey: .priceRecords) ?? []
+        recipes = try c.decodeIfPresent([Recipe].self, forKey: .recipes) ?? []
+        costVersions = try c.decodeIfPresent([CostVersion].self, forKey: .costVersions) ?? []
+        customers = try c.decodeIfPresent([Customer].self, forKey: .customers) ?? []
+        orders = try c.decodeIfPresent([Order].self, forKey: .orders) ?? []
+        expenses = try c.decodeIfPresent([Expense].self, forKey: .expenses) ?? []
+        references = try c.decodeIfPresent([ReferenceImage].self, forKey: .references) ?? []
     }
 
     /// Un negocio vacío (primera vez, sin respaldo).

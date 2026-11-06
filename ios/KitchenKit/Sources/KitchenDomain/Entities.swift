@@ -54,13 +54,14 @@ public struct Ingredient: Codable, Sendable, Hashable, Identifiable {
     public var group: String?
     public var notes: String?
     public var conversions: [IngredientConversion]
-    public var photoId: String?
+    /// Imágenes de referencia opcionales (ids de `KitchenData.references`), hasta 5. Nulo = ninguna.
+    public var referenceIds: [String]?
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
 
     public init(id: String, name: String, baseUnit: BaseUnit, group: String? = nil, notes: String? = nil,
-                conversions: [IngredientConversion] = [], photoId: String? = nil,
+                conversions: [IngredientConversion] = [], referenceIds: [String]? = nil,
                 createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.name = name
@@ -68,7 +69,7 @@ public struct Ingredient: Codable, Sendable, Hashable, Identifiable {
         self.group = group
         self.notes = notes
         self.conversions = conversions
-        self.photoId = photoId
+        self.referenceIds = referenceIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
@@ -102,20 +103,21 @@ public struct Presentation: Codable, Sendable, Hashable, Identifiable {
     /// En la base_unit del ingrediente.
     public var packageQuantity: String
     public var barcode: String?
-    public var photoId: String?
+    /// Imágenes de referencia opcionales (ids de `KitchenData.references`), hasta 5. Nulo = ninguna.
+    public var referenceIds: [String]?
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
 
     public init(id: String, ingredientId: String, brand: String, supplierId: String? = nil, packageQuantity: String,
-                barcode: String? = nil, photoId: String? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
+                barcode: String? = nil, referenceIds: [String]? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.ingredientId = ingredientId
         self.brand = brand
         self.supplierId = supplierId
         self.packageQuantity = packageQuantity
         self.barcode = barcode
-        self.photoId = photoId
+        self.referenceIds = referenceIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
@@ -193,14 +195,15 @@ public struct Recipe: Codable, Sendable, Hashable, Identifiable {
     public var servings: Int?
     /// Nulo = el margen del negocio (`KitchenSettings.defaultMarginPercent`).
     public var marginPercent: Int?
-    public var photoId: String?
+    /// Imágenes de referencia opcionales (ids de `KitchenData.references`), hasta 5. Nulo = ninguna.
+    public var referenceIds: [String]?
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
 
     public init(id: String, name: String, description: String? = nil, items: [RecipeItem] = [], extraCosts: [ExtraCost] = [],
                 yieldQuantity: String, yieldUnit: BaseUnit, servings: Int? = nil, marginPercent: Int? = nil,
-                photoId: String? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
+                referenceIds: [String]? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.name = name
         self.description = description
@@ -210,7 +213,7 @@ public struct Recipe: Codable, Sendable, Hashable, Identifiable {
         self.yieldUnit = yieldUnit
         self.servings = servings
         self.marginPercent = marginPercent
-        self.photoId = photoId
+        self.referenceIds = referenceIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
@@ -333,13 +336,15 @@ public struct Order: Codable, Sendable, Hashable, Identifiable {
     public var payments: [Payment]
     public var status: OrderStatus
     public var notes: String?
+    /// Imágenes de referencia opcionales (lo que pidió el cliente), hasta 5.
+    public var referenceIds: [String]?
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
 
     public init(id: String, customerId: String? = nil, customerName: String, customerPhone: String? = nil,
                 deliveryAt: Date, items: [OrderItem] = [], payments: [Payment] = [], status: OrderStatus = .pendiente,
-                notes: String? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
+                notes: String? = nil, referenceIds: [String]? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.customerId = customerId
         self.customerName = customerName
@@ -349,6 +354,7 @@ public struct Order: Codable, Sendable, Hashable, Identifiable {
         self.payments = payments
         self.status = status
         self.notes = notes
+        self.referenceIds = referenceIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt
@@ -362,18 +368,50 @@ public struct Expense: Codable, Sendable, Hashable, Identifiable {
     public var spentAt: Date
     public var category: String?
     public var supplierId: String?
+    /// Imágenes de referencia opcionales (el ticket), hasta 5.
+    public var referenceIds: [String]?
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
 
     public init(id: String, description: String, amountCents: Int, spentAt: Date, category: String? = nil,
-                supplierId: String? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
+                supplierId: String? = nil, referenceIds: [String]? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.description = description
         self.amountCents = amountCents
         self.spentAt = spentAt
         self.category = category
         self.supplierId = supplierId
+        self.referenceIds = referenceIds
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.deletedAt = deletedAt
+    }
+}
+
+/// Imagen de referencia (foto del empaque, del pastel terminado, de la receta escrita, del ticket).
+/// Los bytes viven aparte (en el teléfono y en `/backup/references`); aquí solo sus datos.
+public struct ReferenceImage: Codable, Sendable, Hashable, Identifiable {
+    public var id: String
+    /// "image/jpeg" o "image/heic".
+    public var contentType: String
+    public var sizeBytes: Int
+    public var width: Int
+    public var height: Int
+    /// Huella SHA-256 en hex de los bytes, para saber si ya está respaldada.
+    public var sha256: String
+    public var createdAt: Date
+    public var updatedAt: Date
+    public var deletedAt: Date?
+
+    public init(id: String, contentType: String, sizeBytes: Int, width: Int, height: Int, sha256: String,
+                createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
+        self.id = id
+        self.contentType = contentType
+        self.sizeBytes = sizeBytes
+        self.width = width
+        self.height = height
+        self.sha256 = sha256
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

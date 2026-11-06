@@ -22,7 +22,6 @@ extension KitchenData {
         yieldUnit: BaseUnit,
         servings: Int? = nil,
         marginPercent: Int? = nil,
-        photoId: String? = nil,
         ctx: MutationContext
     ) throws -> Recipe {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -68,7 +67,6 @@ extension KitchenData {
             yieldUnit: yieldUnit,
             servings: servings,
             marginPercent: marginPercent,
-            photoId: photoId,
             createdAt: ctx.now,
             updatedAt: ctx.now,
             deletedAt: nil
@@ -93,7 +91,6 @@ extension KitchenData {
         yieldUnit: BaseUnit? = nil,
         servings: Int?? = nil,
         marginPercent: Int?? = nil,
-        photoId: String?? = nil,
         ctx: MutationContext
     ) throws -> Recipe {
         guard let idx = recipes.activeIndex(of: id) else {
@@ -168,9 +165,6 @@ extension KitchenData {
         }
         if let m = marginPercent {
             recipe.marginPercent = m
-        }
-        if let p = photoId {
-            recipe.photoId = p
         }
         if let extraCosts = extraCosts {
             recipe.extraCosts = extraCosts.map {

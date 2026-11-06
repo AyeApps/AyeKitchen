@@ -42,7 +42,7 @@ public struct RecipeListItem: Sendable, Hashable, Identifiable {
     public var yieldUnit: BaseUnit { recipe.yieldUnit }
     public var servings: Int? { recipe.servings }
     public var marginPercent: Int? { recipe.marginPercent }
-    public var photoId: String? { recipe.photoId }
+    public var referenceIds: [String] { recipe.referenceIds ?? [] }
     public var batchCostCents: Int?
     public var complete: Bool
     public var createdAt: Date { recipe.createdAt }

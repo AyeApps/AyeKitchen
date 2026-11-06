@@ -221,7 +221,7 @@ extension KitchenData {
             group: (trimmedGroup?.isEmpty == true) ? nil : trimmedGroup,
             notes: (trimmedNotes?.isEmpty == true) ? nil : trimmedNotes,
             conversions: conversions,
-            photoId: nil,
+            referenceIds: nil,
             createdAt: ctx.now,
             updatedAt: ctx.now
         )
@@ -558,7 +558,7 @@ extension KitchenData {
             supplierId: (supplierId?.isEmpty == true) ? nil : supplierId,
             packageQuantity: Qty.text(convertedQty),
             barcode: (trimmedBarcode?.isEmpty == true) ? nil : trimmedBarcode,
-            photoId: nil,
+            referenceIds: nil,
             createdAt: ctx.now,
             updatedAt: ctx.now
         )

@@ -12,6 +12,7 @@ El archivo local de la app y el respaldo son **el mismo documento JSON**. El có
 - **Borrado:** nada se quita de las listas; se marca `deleted_at`. Las pantallas y el costeo ignoran lo borrado, salvo para mostrar nombres viejos.
 - Todo documento de las listas tiene `id`, `created_at`, `updated_at` y `deleted_at` (nulo si no está borrado), salvo donde se indica.
 - `schema_version` sube solo con cambios que una app vieja no sabría leer. Una app que recibe una versión mayor no la lee (pide actualizar).
+- **Cambios que solo agregan** (un campo o una lista nueva) no suben la versión: al leer, una lista que falta es vacía y un campo opcional que falta es nulo. Campos que ya no existen se ignoran (por ejemplo `photo_id`, que hubo antes de las referencias).
 
 ## Documento
 
@@ -21,25 +22,35 @@ El archivo local de la app y el respaldo son **el mismo documento JSON**. El có
   exported_at, device_id,
   settings: {name, currency, timezone, default_margin_percent, price_stale_days},
   units:          [{id, name, abbreviation, base_unit: "g"|"ml"|"pz", factor_to_base, ...}],   # solo las del negocio
-  ingredients:    [{id, name, base_unit, group, notes, conversions: [{unit_id, quantity_in_base}], photo_id, ...}],
+  ingredients:    [{id, name, base_unit, group, notes, conversions: [{unit_id, quantity_in_base}], reference_ids, ...}],
   suppliers:      [{id, name, notes, ...}],
-  presentations:  [{id, ingredient_id, brand, supplier_id, package_quantity, barcode, photo_id, ...}],
+  presentations:  [{id, ingredient_id, brand, supplier_id, package_quantity, barcode, reference_ids, ...}],
   price_records:  [{id, presentation_id, price_cents, recorded_at, note, ...}],
   recipes:        [{id, name, description,
                     items: [{kind: "ingredient"|"recipe", ref_id, quantity, unit_id, pinned_presentation_id}],
                     extra_costs: [{name, cost_cents}],
-                    yield_quantity, yield_unit, servings, margin_percent, photo_id, ...}],
+                    yield_quantity, yield_unit, servings, margin_percent, reference_ids, ...}],
   cost_versions:  [{id, recipe_id, name, choices: [{ingredient_id, presentation_id}], ...}],
   customers:      [{id, name, phone, notes, ...}],
-  orders:         [{id, customer_id, customer_name, customer_phone, delivery_at, status, notes,
+  orders:         [{id, customer_id, customer_name, customer_phone, delivery_at, status, notes, reference_ids,
                     items: [{recipe_id, recipe_name, sold_by: "batch"|"unit", unit_label, quantity,
                              unit_price_cents, unit_cost_cents_snapshot}],
                     payments: [{id, amount_cents, paid_at, method}], ...}],     # items y payments sin created_at/deleted_at
-  expenses:       [{id, description, amount_cents, spent_at, category, supplier_id, ...}]
+  expenses:       [{id, description, amount_cents, spent_at, category, supplier_id, reference_ids, ...}],
+  references:     [{id, content_type, size_bytes, width, height, sha256, ...}]      # imágenes de referencia; los bytes van aparte
 }
 ```
 
-`status`: `pendiente`, `en_proceso`, `entregado`, `cancelado`. `photo_id` es nulo hasta que exista el soporte de fotos.
+`status`: `pendiente`, `en_proceso`, `entregado`, `cancelado`.
+
+## Referencias (imágenes opcionales)
+
+Ingredientes, marcas, recetas, pedidos y gastos pueden tener hasta 5 imágenes de referencia opcionales (`reference_ids`, ids de `references`; nulo = ninguna). No son la imagen de la cosa en la interfaz: son un apoyo (el empaque de la marca, el pastel terminado, la receta escrita, el diseño que pidió el cliente, el ticket).
+
+- El documento solo guarda sus datos en `references`. Los **bytes** se guardan en el teléfono como archivos y en el servidor con `/backup/references` (ver `api-contract.md`), uno por id.
+- El teléfono las comprime antes de guardarlas: lado mayor de 1600 px como máximo, JPEG calidad 0.7 (≈ 100–300 KB). Nunca más de 2 MB.
+- `sha256` es la huella de los bytes guardados; si cambia, se vuelven a subir.
+- Quitar una referencia la marca con `deleted_at` y la saca de `reference_ids`; sus bytes se pueden borrar del teléfono.
 
 ## Unidades del sistema
 

@@ -60,7 +60,7 @@ public struct CatalogIngredient: Sendable, Hashable, Identifiable {
     public var baseUnit: BaseUnit { ingredient.baseUnit }
     public var group: String? { ingredient.group }
     public var notes: String? { ingredient.notes }
-    public var photoId: String? { ingredient.photoId }
+    public var referenceIds: [String] { ingredient.referenceIds ?? [] }
     public var createdAt: Date { ingredient.createdAt }
     public var updatedAt: Date { ingredient.updatedAt }
 
