@@ -10,3 +10,11 @@ class BackupInfo(BaseModel):
     exported_at: datetime
     created_at: datetime
     size_bytes: int
+
+
+class ReferenceImageInfo(BaseModel):
+    id: str
+    sha256: str
+    size_bytes: int
+    content_type: str
+    updated_at: datetime

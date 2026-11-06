@@ -13,6 +13,7 @@ from app.models.ingredient import Ingredient
 from app.models.order import Expense, Order
 from app.models.presentation import Presentation, PriceRecord
 from app.models.recipe import Recipe
+from app.models.reference_image import ReferenceImage
 from app.models.revoked_token import RevokedToken
 from app.models.supplier import Supplier
 from app.models.unit import Unit
@@ -37,6 +38,7 @@ DOCUMENT_MODELS = [
     Order,
     Expense,
     Backup,
+    ReferenceImage,
 ]
 
 

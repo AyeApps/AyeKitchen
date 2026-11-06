@@ -5,13 +5,21 @@ from fastapi import APIRouter, Query, Request, Response, status
 
 from app.core.deps import CurrentWorkspace
 from app.models.backup import Backup
-from app.schemas.backup import BackupInfo
+from app.models.reference_image import ReferenceImage
+from app.schemas.backup import BackupInfo, ReferenceImageInfo
 from app.services.backup_service import (
     get_latest_backup,
     list_backups,
     upload_backup,
 )
 from app.services.export_service import export_workspace_data
+from app.services.reference_service import (
+    ReferenceProjection,
+    delete_reference_image,
+    get_reference_image,
+    list_reference_images,
+    save_reference_image,
+)
 
 router = APIRouter()
 
@@ -25,6 +33,69 @@ def _serialize_backup_info(b: Backup) -> BackupInfo:
         created_at=b.created_at,
         size_bytes=b.size_bytes,
     )
+
+
+def _serialize_reference_image_info(
+    img: ReferenceImage | ReferenceProjection,
+) -> ReferenceImageInfo:
+    return ReferenceImageInfo(
+        id=img.ref_id,
+        sha256=img.sha256,
+        size_bytes=img.size_bytes,
+        content_type=img.content_type,
+        updated_at=img.updated_at,
+    )
+
+
+@router.get("/references/", response_model=list[ReferenceImageInfo])
+@router.get("/references", response_model=list[ReferenceImageInfo], include_in_schema=False)
+async def list_references_endpoint(
+    workspace: CurrentWorkspace,
+) -> list[ReferenceImageInfo]:
+    images = await list_reference_images(str(workspace.id))
+    return [_serialize_reference_image_info(img) for img in images]
+
+
+@router.put("/references/{id}", response_model=ReferenceImageInfo)
+async def upload_reference_endpoint(
+    id: str,
+    request: Request,
+    workspace: CurrentWorkspace,
+    response: Response,
+    sha256: str | None = Query(None),
+) -> ReferenceImageInfo:
+    content_type = request.headers.get("content-type")
+    body = await request.body()
+    image, created = await save_reference_image(
+        workspace_id=str(workspace.id),
+        ref_id=id,
+        content_type=content_type,
+        raw_body=body,
+        sha256=sha256,
+    )
+    if created:
+        response.status_code = status.HTTP_201_CREATED
+    else:
+        response.status_code = status.HTTP_200_OK
+    return _serialize_reference_image_info(image)
+
+
+@router.get("/references/{id}")
+async def get_reference_endpoint(
+    id: str,
+    workspace: CurrentWorkspace,
+) -> Response:
+    image = await get_reference_image(str(workspace.id), id)
+    return Response(content=image.data, media_type=image.content_type)
+
+
+@router.delete("/references/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_reference_endpoint(
+    id: str,
+    workspace: CurrentWorkspace,
+) -> Response:
+    await delete_reference_image(str(workspace.id), id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/latest")
