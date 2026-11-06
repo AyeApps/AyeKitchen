@@ -35,6 +35,7 @@ struct OrderStatusChip: View {
 
 /// Lista de pedidos (Bloque I18 local-first).
 struct OrdersView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var model: OrdersModel
     @State private var showingNewOrder = false
     @State private var showingCustomers = false
@@ -57,7 +58,13 @@ struct OrdersView: View {
                         Button {
                             showingCustomers = true
                         } label: {
-                            Image(systemName: "person.2")
+                            if dynamicTypeSize.isAccessibilitySize {
+                                Image(systemName: "person.2")
+                                    .accessibilityLabel("Clientes")
+                            } else {
+                                Label("Clientes", systemImage: "person.2")
+                                    .labelStyle(.titleAndIcon)
+                            }
                         }
                         .accessibilityLabel("Clientes")
                     }
