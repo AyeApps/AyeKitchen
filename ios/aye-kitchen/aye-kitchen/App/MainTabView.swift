@@ -16,6 +16,9 @@ struct MainTabView: View {
             Tab("Catálogo", systemImage: "square.grid.2x2") {
                 CatalogView()
             }
+            Tab("Finanzas", systemImage: "chart.bar") {
+                FinanceView()
+            }
         }
     }
 }
