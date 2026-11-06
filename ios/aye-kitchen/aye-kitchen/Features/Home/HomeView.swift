@@ -1,18 +1,21 @@
 import SwiftUI
+import KitchenDomain
 
 /// Inicio (artboard "Inicio — iPhone"). No muestra dinero: eso es de Finanzas.
 struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.scenePhase) private var scenePhase
 
     @State private var model: HomeModel
     @State private var showingNewOrder = false
-    @State private var isVisible = false
 
     @ScaledMetric(relativeTo: .headline) private var warningIconSize: CGFloat = 36
 
-    init(model: HomeModel = HomeModel()) {
+    init(store: LocalStore = .shared) {
+        self._model = State(initialValue: HomeModel(store: store))
+    }
+
+    init(model: HomeModel) {
         self._model = State(initialValue: model)
     }
 
@@ -22,32 +25,22 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: Spacing.section) {
                     header
 
-                    if let errorMessage = model.errorMessage {
-                        ErrorStateView(message: errorMessage) {
-                            Task { await model.load() }
-                        }
-                        .padding(.vertical, Spacing.lg)
-                    } else {
-                        if !model.overdueOrders.isEmpty {
-                            overdueBanner
-                        }
+                    if !model.overdueOrders.isEmpty {
+                        overdueBanner
+                    }
 
-                        nextOrderCard
+                    nextOrderCard
 
-                        thisWeekSection
+                    thisWeekSection
 
-                        if model.hasReviewItems {
-                            toReviewSection
-                        }
+                    if model.hasReviewItems {
+                        toReviewSection
                     }
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.bottom, Spacing.xxl)
             }
             .background(.canvasBackground)
-            .refreshable {
-                await model.refresh()
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     AccountMenu()
@@ -59,26 +52,10 @@ struct HomeView: View {
                 }
             }
             .sheet(isPresented: $showingNewOrder) {
-                OrderFormView(.create) { _ in
-                    Task {
-                        await model.refresh()
-                    }
-                }
+                OrderFormView(.create, store: model.store)
             }
-            .task {
-                await model.load()
-            }
-            .onAppear {
-                isVisible = true
-            }
-            .onDisappear {
-                isVisible = false
-            }
-            .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .active, isVisible else { return }
-                Task {
-                    await model.reloadIfStale()
-                }
+            .task(id: model.store.revision) {
+                model.recalculateIfNeeded()
             }
         }
     }
@@ -148,7 +125,7 @@ struct HomeView: View {
                         Text("Lo que sigue")
                             .font(.subheadline.weight(.heavy))
                             .foregroundStyle(.accentTextDeep)
-                        StatusChip(status: order.status)
+                        OrderStatusChip(status: order.status)
                     }
                 } else {
                     HStack {
@@ -156,7 +133,7 @@ struct HomeView: View {
                             .font(.subheadline.weight(.heavy))
                             .foregroundStyle(.accentTextDeep)
                         Spacer()
-                        StatusChip(status: order.status)
+                        OrderStatusChip(status: order.status)
                     }
                 }
 
@@ -179,7 +156,7 @@ struct HomeView: View {
                 }
 
                 NavigationLink {
-                    OrderDetailView(orderId: order.id)
+                    OrderDetailView(orderId: order.id, store: model.store)
                 } label: {
                     Text("Ver pedido")
                         .font(.body.weight(.heavy))
@@ -246,9 +223,9 @@ struct HomeView: View {
                 RowGroup {
                     ForEach(model.remainingWeekOrders) { order in
                         NavigationLink {
-                            OrderDetailView(orderId: order.id)
+                            OrderDetailView(orderId: order.id, store: model.store)
                         } label: {
-                            OrderRow(orderId: order.id)
+                            OrderRow(orderId: order.id, store: model.store)
                         }
                         .buttonStyle(.plain)
                     }
@@ -267,7 +244,7 @@ struct HomeView: View {
             RowGroup {
                 ForEach(model.incompleteRecipes.prefix(3)) { item in
                     NavigationLink {
-                        RecipeDetailView(recipeId: item.id)
+                        RecipeDetailView(recipeId: item.id, store: model.store)
                     } label: {
                         HStack(spacing: Spacing.md) {
                             warningIconSquare
@@ -294,7 +271,7 @@ struct HomeView: View {
 
                 ForEach(model.stalePresentations.prefix(3)) { stale in
                     NavigationLink {
-                        BrandDetailView(presentationId: stale.presentation.id)
+                        BrandDetailView(presentationId: stale.presentation.id, store: model.store)
                     } label: {
                         HStack(spacing: Spacing.md) {
                             warningIconSquare
@@ -394,127 +371,44 @@ private struct AccountMenu: View {
 // MARK: - Previews
 
 #if DEBUG
-private func makeMockOrder(
-    id: String,
-    customer: String,
-    date: Date,
-    status: RemoteOrderStatus,
-    recipe: String,
-    quantity: String
-) -> RemoteOrder {
-    RemoteOrder(
-        id: id,
-        customerName: customer,
-        customerPhone: nil,
-        deliveryAt: date,
-        status: status,
-        notes: nil,
-        items: [
-            RemoteOrderItem(recipeId: "r_1", recipeName: recipe, quantity: quantity, unitPriceCents: 0, unitCostCentsSnapshot: 0)
-        ],
-        payments: [],
-        totalCents: 0,
-        paidCents: 0,
-        balanceCents: 0,
-        costCents: 0,
-        profitCents: 0,
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-}
-
-private func makeMockRecipeListItem(id: String, name: String, complete: Bool) -> RemoteRecipeListItem {
-    let json = """
-    {
-        "id": "\(id)",
-        "name": "\(name)",
-        "description": null,
-        "items": [],
-        "extra_costs": [],
-        "yield_quantity": "1",
-        "yield_unit": "pz",
-        "servings": 12,
-        "margin_percent": 30,
-        "created_at": "2026-10-01T12:00:00Z",
-        "updated_at": "2026-10-01T12:00:00Z",
-        "complete": \(complete)
-    }
-    """.data(using: .utf8)!
-    return try! JSONCoding.decode(RemoteRecipeListItem.self, from: json)
-}
-
-private func makeMockStalePresentation(id: String, ingredient: String, brand: String, days: Int) -> StalePresentation {
-    let json = """
-    {
-        "id": "\(id)",
-        "ingredient_id": "ing_\(id)",
-        "ingredient_name": "\(ingredient)",
-        "brand": "\(brand)",
-        "package_quantity": "1000",
-        "base_unit": "g",
-        "is_current": true,
-        "price_age_days": \(days),
-        "price_is_stale": true,
-        "used_in_recipes": 1,
-        "created_at": "2026-10-01T12:00:00Z",
-        "updated_at": "2026-10-01T12:00:00Z"
-    }
-    """.data(using: .utf8)!
-    return try! JSONCoding.decode(StalePresentation.self, from: json)
-}
-
-private let previewTomorrow = Calendar.current.date(byAdding: .day, value: 1, to: Date())!
-private let previewIn3Days = Calendar.current.date(byAdding: .day, value: 3, to: Date())!
-private let previewYesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
-
-private let mockHomeModelWithData = HomeModel(
-    pendingOrders: [
-        makeMockOrder(id: "o_1", customer: "María López", date: previewTomorrow, status: .pending, recipe: "Pastel de chocolate", quantity: "1"),
-        makeMockOrder(id: "o_2", customer: "Carlos Ruiz", date: previewIn3Days, status: .pending, recipe: "Tres leches", quantity: "2")
-    ],
-    inProgressOrders: [],
-    recipes: [
-        makeMockRecipeListItem(id: "r_1", name: "Pastel de zanahoria", complete: false)
-    ],
-    stalePresentations: [
-        makeMockStalePresentation(id: "sp_1", ingredient: "Harina de trigo", brand: "Selecta", days: 45)
-    ]
-)
-
-private let mockHomeModelEmpty = HomeModel(
-    pendingOrders: [],
-    inProgressOrders: [],
-    recipes: [],
-    stalePresentations: []
-)
-
-private let mockHomeModelOverdue = HomeModel(
-    pendingOrders: [
-        makeMockOrder(id: "o_overdue", customer: "Ana Gómez", date: previewYesterday, status: .pending, recipe: "Pay de limón", quantity: "1"),
-        makeMockOrder(id: "o_1", customer: "María López", date: previewTomorrow, status: .pending, recipe: "Pastel de chocolate", quantity: "1")
-    ],
-    inProgressOrders: [],
-    recipes: [],
-    stalePresentations: []
-)
-
 #Preview("Con pedidos y por revisar - Claro") {
-    HomeView(model: mockHomeModelWithData)
+    HomeView(store: .preview())
         .environment(SessionStore())
 }
 
 #Preview("Sin pedidos - Claro") {
-    HomeView(model: mockHomeModelEmpty)
+    HomeView(store: .preview(KitchenData.empty(deviceId: "preview")))
         .environment(SessionStore())
 }
 
 #Preview("Con atrasados - Claro") {
-    HomeView(model: mockHomeModelOverdue)
+    let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: Date())!
+    var data = KitchenData.previewSample
+    data.orders.append(
+        Order(
+            id: "ord-overdue",
+            customerName: "Ana Gómez",
+            deliveryAt: yesterday,
+            items: [
+                OrderItem(
+                    recipeId: "rec-pastel",
+                    recipeName: "Pastel de vainilla",
+                    quantity: "1",
+                    unitPriceCents: 15000,
+                    unitCostCentsSnapshot: 10000
+                )
+            ],
+            status: .pendiente,
+            createdAt: yesterday,
+            updatedAt: yesterday
+        )
+    )
+    return HomeView(store: .preview(data))
         .environment(SessionStore())
 }
 
 #Preview("Letra AX3") {
-    HomeView(model: mockHomeModelWithData)
+    HomeView(store: .preview())
         .environment(SessionStore())
         .dynamicTypeSize(.accessibility3)
 }
