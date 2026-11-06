@@ -49,6 +49,18 @@ actor NetworkService {
         try await perform(method, AppConfig.apiBaseURL, path, query: query, body: json.map(RawJSONBody.init), authorized: true)
     }
 
+    /// Bytes crudos con Content-Type personalizado para subir o bajar imágenes de referencia (/backup/references).
+    func requestRawData(
+        _ method: HTTPMethod,
+        _ path: String,
+        query: [URLQueryItem] = [],
+        data: Data? = nil,
+        contentType: String? = nil
+    ) async throws -> Data {
+        let body = data.map { RawDataBody(data: $0, contentType: contentType ?? "application/octet-stream") }
+        return try await perform(method, AppConfig.apiBaseURL, path, query: query, body: body, accept: "*/*", authorized: true)
+    }
+
     /// Guarda la cuenta en la caché como si viniera de `GET /me/`, una vez elegida la carpeta de
     /// esa cuenta (así abre sin red la próxima vez).
     func cacheMe(_ me: Me) async {
@@ -116,6 +128,7 @@ actor NetworkService {
         _ path: String,
         query: [URLQueryItem] = [],
         body: (any Encodable & Sendable)? = nil,
+        accept: String = "application/json",
         authorized: Bool,
         isRetry: Bool = false
     ) async throws -> Data {
@@ -131,8 +144,11 @@ actor NetworkService {
 
         var request = URLRequest(url: url)
         request.httpMethod = method.rawValue
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        if let raw = body as? RawJSONBody {
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        if let raw = body as? RawDataBody {
+            request.httpBody = raw.data
+            request.setValue(raw.contentType, forHTTPHeaderField: "Content-Type")
+        } else if let raw = body as? RawJSONBody {
             request.httpBody = raw.data
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         } else if let body {
@@ -162,7 +178,7 @@ actor NetworkService {
             return data
         case 401 where authorized && !isRetry:
             try await refreshTokens()
-            return try await perform(method, base, path, query: query, body: body, authorized: true, isRetry: true)
+            return try await perform(method, base, path, query: query, body: body, accept: accept, authorized: true, isRetry: true)
         case 401 where authorized:
             throw await expireSession()
         default:
@@ -247,6 +263,17 @@ nonisolated struct RawJSONBody: Encodable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         // Nunca se codifica: `perform` reconoce el tipo y usa `data` directo.
+        var container = encoder.singleValueContainer()
+        try container.encodeNil()
+    }
+}
+
+/// Cuerpo de bytes crudos con Content-Type propio: `perform` lo manda tal cual.
+nonisolated struct RawDataBody: Encodable, Sendable {
+    let data: Data
+    let contentType: String
+
+    func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
         try container.encodeNil()
     }

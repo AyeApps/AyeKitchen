@@ -29,6 +29,7 @@ final class LocalBootstrap {
     func prepare(accountId: String) async {
         let store = LocalStore.shared
         BackupService.shared.useAccount(accountId)
+        ReferenceStore.shared.open(accountId: accountId)
         store.onChange = { BackupScheduler.shared.noteChange() }
         store.open(accountId: accountId)
 
@@ -56,6 +57,7 @@ final class LocalBootstrap {
 
     func reset() {
         state = .idle
+        ReferenceStore.shared.close()
     }
 }
 

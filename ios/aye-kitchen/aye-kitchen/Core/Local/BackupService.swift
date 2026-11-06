@@ -30,6 +30,7 @@ final class BackupService {
     private(set) var lastError: BackupError?
 
     private var accountId: String?
+    private var isSyncingReferences = false
 
     private init() {}
 
@@ -73,6 +74,7 @@ final class BackupService {
             lastError = failed
             throw failed
         }
+        await syncReferences()
     }
 
     /// Baja el último respaldo de la cuenta. `nil` si nunca se ha respaldado.
@@ -98,7 +100,79 @@ final class BackupService {
         if let info = try? await latestInfo() {
             remember(info)
         }
+        await syncReferences()
         return true
+    }
+
+    /// Sincroniza las imágenes de referencia con el servidor:
+    /// - Pide `GET /backup/references/`.
+    /// - Sube (`PUT`) las referencias activas que el servidor no tiene o tiene con otra huella.
+    /// - Borra en el servidor (`DELETE`) las de `deletedReferenceIds()`.
+    /// - Baja las activas que faltan como archivo local.
+    /// Una a la vez, sin detener todo si una falla.
+    func syncReferences() async {
+        guard !isSyncingReferences else { return }
+        let store = LocalStore.shared
+        guard store.state == .ready else { return }
+        isSyncingReferences = true
+        defer { isSyncingReferences = false }
+
+        let serverList: [RemoteReferenceInfo]
+        do {
+            serverList = try await NetworkService.shared.request(.get, "/backup/references/")
+        } catch {
+            return
+        }
+
+        let serverMap = Dictionary(uniqueKeysWithValues: serverList.map { ($0.id, $0) })
+        let activeRefs = store.data.activeReferences()
+        let refStore = ReferenceStore.shared
+
+        // Sube referencias activas que falten en el servidor o tengan huella distinta
+        for ref in activeRefs {
+            let serverRef = serverMap[ref.id]
+            if serverRef == nil || serverRef?.sha256 != ref.sha256 {
+                guard let url = refStore.fileURL(for: ref.id),
+                      let data = try? Data(contentsOf: url) else {
+                    continue
+                }
+                do {
+                    let query = [URLQueryItem(name: "sha256", value: ref.sha256)]
+                    _ = try await NetworkService.shared.requestRawData(
+                        .put,
+                        "/backup/references/\(ref.id)",
+                        query: query,
+                        data: data,
+                        contentType: ref.contentType
+                    )
+                } catch {
+                    // Continúa si falla una
+                }
+            }
+        }
+
+        // Borra en el servidor las referencias eliminadas
+        for deletedId in store.data.deletedReferenceIds() {
+            refStore.deleteLocalFile(for: deletedId)
+            guard serverMap[deletedId] != nil else { continue }
+            do {
+                try await NetworkService.shared.requestNoContent(.delete, "/backup/references/\(deletedId)")
+            } catch {
+                // Continúa si falla una
+            }
+        }
+
+        // Baja las referencias activas que falten como archivo local
+        for ref in activeRefs {
+            guard !refStore.hasLocalFile(ref.id) else { continue }
+            guard serverMap[ref.id] != nil else { continue }
+            do {
+                let data = try await NetworkService.shared.requestRawData(.get, "/backup/references/\(ref.id)")
+                try refStore.saveDownloaded(id: ref.id, data: data, contentType: ref.contentType)
+            } catch {
+                // Continúa si falla una
+            }
+        }
     }
 
     func latestInfo() async throws -> BackupInfo? {
@@ -131,4 +205,13 @@ nonisolated struct BackupInfo: Decodable, Sendable, Hashable {
     let exportedAt: Date
     let createdAt: Date
     let sizeBytes: Int
+}
+
+/// `ReferenceImageInfo` del contrato para /backup/references/.
+nonisolated struct RemoteReferenceInfo: Decodable, Sendable, Hashable {
+    let id: String
+    let sha256: String
+    let sizeBytes: Int
+    let contentType: String
+    let updatedAt: Date
 }
