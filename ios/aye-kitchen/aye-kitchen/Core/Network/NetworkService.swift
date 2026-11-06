@@ -120,6 +120,14 @@ actor NetworkService {
         KeychainStore.clear()
     }
 
+    /// Borra la cuenta Aye en aye-auth (`DELETE /me`): deja de poder entrar a TODAS las apps Aye.
+    /// Antes hay que borrar lo de Kitchen (`DELETE /me/` del backend de Kitchen, B13), porque
+    /// después el token ya no sirve. Al terminar limpia los tokens del llavero.
+    func deleteAyeAccount() async throws {
+        _ = try await perform(.delete, AppConfig.authBaseURL, "/me", authorized: true)
+        KeychainStore.clear()
+    }
+
     // MARK: Internos
 
     private func perform(

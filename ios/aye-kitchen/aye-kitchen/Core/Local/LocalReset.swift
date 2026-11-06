@@ -19,4 +19,14 @@ enum LocalReset {
         KitchenTips.requestResetOnNextLaunch()
         BackupScheduler.shared.noteChange()
     }
+
+    /// Después de eliminar la cuenta: no queda nada de ella en el teléfono (datos, fotos, marcas).
+    /// La carpeta de imágenes vive dentro de la de la cuenta, así que se va con ella.
+    /// Luego hay que llamar `SessionStore.signOut()` para volver a Entrar.
+    static func forgetAccountOnThisPhone(accountId: String) {
+        ReferenceStore.shared.deleteAllLocalFiles()
+        ReferenceStore.shared.close()
+        LocalStore.shared.discardAccount()
+        OnboardingFlags.resetBusinessSetup(accountId: accountId)
+    }
 }

@@ -93,6 +93,20 @@ final class LocalStore {
         revision = 0
     }
 
+    /// Cierra sin guardar y borra la carpeta de esta cuenta y su marca de respaldo (al eliminar la cuenta).
+    func discardAccount() {
+        saveTask?.cancel()
+        UserDefaults.standard.removeObject(forKey: unbackedKey)
+        if let folder = fileURL?.deletingLastPathComponent() {
+            try? FileManager.default.removeItem(at: folder)
+        }
+        accountId = nil
+        data = KitchenData.empty(deviceId: Self.deviceId)
+        state = .idle
+        revision = 0
+        hasUnbackedChanges = false
+    }
+
     // MARK: Escribir
 
     /// Aplica una regla de KitchenKit sobre una copia; si no lanza, la copia pasa a ser los datos,

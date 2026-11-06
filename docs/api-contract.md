@@ -46,6 +46,8 @@ Base: `http://localhost:8006/api/v1` (local) · `https://api-kitchen.ayeapps.com
 |---|---|---|
 | GET | `/me/` | `{id, email, name, avatar_url, workspace: {id, name, currency, default_margin_percent, price_stale_days}}` |
 | GET | `/me/changes` | `{home, orders, recipes, catalog, customers}`: datetime o `null` por sección (B8). Ver abajo |
+| DELETE | `/me/data` | 204. **Borrar mis datos de AyeKitchen** (B13). Borra para siempre (no soft delete) todo lo del workspace del usuario en el servidor: respaldos (`backups`), imágenes de referencia (`reference_images`) y los documentos de las colecciones de negocio (unidades propias —nunca las del sistema, `workspace_id = null`—, ingredientes, proveedores, marcas, precios, recetas, versiones de costeo, clientes, pedidos y gastos). El workspace se queda con sus ajustes de fábrica (`name` "Mi cocina", moneda, zona, margen y días de precio viejo por defecto). Idempotente: sin nada que borrar también 204 |
+| DELETE | `/me/` | 204. **Eliminar cuenta** (B13). Hace lo mismo que `DELETE /me/data` y además borra el workspace y el usuario de Kitchen. La app llama después `DELETE /me` de aye-auth, que borra la cuenta Aye (todas las apps) y revoca el token |
 
 `/me/` está implementado en el esqueleto.
 
