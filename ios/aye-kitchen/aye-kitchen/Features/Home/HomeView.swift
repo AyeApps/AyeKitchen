@@ -333,11 +333,15 @@ struct HomeView: View {
 /// Cuenta y cerrar sesión.
 private struct AccountMenu: View {
     @Environment(SessionStore.self) private var session
+    @State private var showingBackup = false
 
     var body: some View {
         Menu {
             if let me = session.me {
                 Text(me.email)
+            }
+            Button("Respaldo", systemImage: "icloud.and.arrow.up") {
+                showingBackup = true
             }
             #if DEBUG
             Button("Copiar sesión (DEBUG)", systemImage: "doc.on.clipboard") {
@@ -345,13 +349,22 @@ private struct AccountMenu: View {
             }
             #endif
             Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                Task { await session.signOut() }
+                Task {
+                    // Antes de salir, sube lo que falte; los datos se quedan en el teléfono.
+                    if LocalStore.shared.hasUnbackedChanges {
+                        try? await BackupService.shared.backupNow()
+                    }
+                    await session.signOut()
+                }
             }
         } label: {
             Image(systemName: "person.crop.circle")
                 .font(.title3)
         }
         .accessibilityLabel("Tu cuenta")
+        .sheet(isPresented: $showingBackup) {
+            BackupView()
+        }
     }
 
     #if DEBUG

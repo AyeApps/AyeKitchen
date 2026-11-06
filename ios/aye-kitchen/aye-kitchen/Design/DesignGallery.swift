@@ -1,4 +1,5 @@
 #if DEBUG
+import KitchenDomain
 import SwiftUI
 
 /// Muestrario de los componentes para revisarlos en el Canvas de Xcode (claro, oscuro y letra grande).
@@ -23,7 +24,7 @@ private struct DesignGallery: View {
                 VStack(alignment: .leading, spacing: Spacing.md) {
                     Text("Esta semana").sectionTitleStyle()
                     RowGroup {
-                        ForEach(RemoteOrderStatus.allCases, id: \.self) { status in
+                        ForEach(OrderStatus.allCases, id: \.self) { status in
                             HStack {
                                 Text("Pedido de ejemplo").font(.headline)
                                 Spacer()

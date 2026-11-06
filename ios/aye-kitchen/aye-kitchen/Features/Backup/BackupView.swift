@@ -204,6 +204,7 @@ struct BackupView: View {
 
 // MARK: Previews
 
+#if DEBUG
 #Preview("Todo respaldado") {
     BackupView(model: .preview(
         lastBackupAt: Date(),
@@ -254,3 +255,4 @@ struct BackupView: View {
     ))
     .dynamicTypeSize(.accessibility3)
 }
+#endif

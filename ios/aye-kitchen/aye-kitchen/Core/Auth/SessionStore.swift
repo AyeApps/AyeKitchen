@@ -92,13 +92,11 @@ final class SessionStore {
             UserDefaults.standard.set(id, forKey: Self.lastAccountKey)
         }
         await ResponseCache.shared.useAccount(id)
-        ChangeTracker.shared.useAccount(id)
     }
 
     private func forgetLocalData() async {
         UserDefaults.standard.removeObject(forKey: Self.lastAccountKey)
         await ResponseCache.shared.clearAll()
         await ResponseCache.shared.useAccount(nil)
-        ChangeTracker.shared.reset()
     }
 }

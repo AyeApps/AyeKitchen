@@ -38,19 +38,6 @@ actor NetworkService {
         return try JSONCoding.decode(T.self, from: data)
     }
 
-    /// GET que además guarda la respuesta en la caché en disco de la cuenta, para que
-    /// `cached(_:query:)` la devuelva al abrir la app o sin conexión. Solo para las listas de las
-    /// pestañas (bloque I13), no para detalles ni para POST/PATCH.
-    func requestCaching<T: Decodable & Sendable>(
-        _ path: String,
-        query: [URLQueryItem] = []
-    ) async throws -> T {
-        let data = try await perform(.get, AppConfig.apiBaseURL, path, query: query, body: nil, authorized: true)
-        let decoded = try JSONCoding.decode(T.self, from: data)
-        await ResponseCache.shared.save(data, for: ResponseCache.key(path: path, query: query))
-        return decoded
-    }
-
     /// JSON crudo de ida y vuelta, sin convertir llaves ni fechas: para el respaldo, que ya viene
     /// codificado por `KitchenCoding` y debe llegar al servidor y volver byte por byte.
     func requestRawJSON(
@@ -69,7 +56,7 @@ actor NetworkService {
         await ResponseCache.shared.save(data, for: ResponseCache.key(path: "/me/", query: []))
     }
 
-    /// La última respuesta guardada por `requestCaching` para la misma ruta y query, o `nil`.
+    /// La última respuesta guardada en la caché para la misma ruta y query (hoy solo `/me/`), o `nil`.
     /// No toca la red. Si el formato cambió y ya no decodifica, devuelve `nil`.
     func cached<T: Decodable & Sendable>(
         _ path: String,

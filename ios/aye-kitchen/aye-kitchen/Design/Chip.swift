@@ -1,3 +1,4 @@
+import KitchenDomain
 import SwiftUI
 
 enum ChipTone {
@@ -56,7 +57,7 @@ struct Chip: View {
 }
 
 struct StatusChip: View {
-    let status: RemoteOrderStatus
+    let status: OrderStatus
 
     var body: some View {
         Chip(status.label, tone: tone)
@@ -65,9 +66,9 @@ struct StatusChip: View {
 
     private var tone: ChipTone {
         switch status {
-        case .pending, .cancelled: .neutral
-        case .inProgress: .inProgress
-        case .delivered: .success
+        case .pendiente, .cancelado: .neutral
+        case .enProceso: .inProgress
+        case .entregado: .success
         }
     }
 }
