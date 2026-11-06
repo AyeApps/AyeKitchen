@@ -72,6 +72,9 @@ struct ExpenseFormView: View {
                         dateSection
                         categorySection
                         supplierSection
+                        if let expenseId {
+                            ReferencesSection(owner: .expense(expenseId), store: store)
+                        }
                     }
 
                     if let generalError {

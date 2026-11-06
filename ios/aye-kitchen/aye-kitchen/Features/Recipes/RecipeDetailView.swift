@@ -151,6 +151,7 @@ struct RecipeDetailView: View {
                     creamCostCard(recipe: recipe, cost: cost)
                     warningsSection(cost: cost)
                     costBreakdownSection(recipe: recipe, cost: cost)
+                    ReferencesSection(owner: .recipe(recipe.id), store: store)
                 }
                 .padding(.horizontal, Spacing.xl)
                 .padding(.top, Spacing.sm)

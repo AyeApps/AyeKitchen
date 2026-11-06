@@ -57,6 +57,10 @@ struct IngredientDetailView: View {
                                 .foregroundStyle(.inkPrimary)
                         }
                     }
+
+                    Section("Referencias") {
+                        ReferencesSection(owner: .ingredient(ingredient.id), showsTitle: false, store: store)
+                    }
                 }
                 .navigationTitle(ingredient.name)
             } else {

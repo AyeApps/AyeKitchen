@@ -30,6 +30,7 @@ struct BrandDetailView: View {
                         priceCard(for: presentation)
                         registerPriceButton
                         priceHistorySection
+                        ReferencesSection(owner: .presentation(presentation.id), store: store)
                     }
                     .padding(.horizontal, Spacing.xl)
                     .padding(.top, Spacing.sm)

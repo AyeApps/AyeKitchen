@@ -50,6 +50,7 @@ struct OrderDetailView: View {
                         financialSummaryCard(order: order)
                         paymentsSection(order: order)
                         notesSection(order: order)
+                        ReferencesSection(owner: .order(order.id), store: model.store)
                     }
                     .padding(.horizontal, Spacing.xl)
                     .padding(.top, Spacing.sm)
