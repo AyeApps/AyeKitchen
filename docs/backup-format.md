@@ -29,7 +29,10 @@ El archivo local de la app y el respaldo son **el mismo documento JSON**. El có
   recipes:        [{id, name, description,
                     items: [{kind: "ingredient"|"recipe", ref_id, quantity, unit_id, pinned_presentation_id}],
                     extra_costs: [{name, cost_cents}],
-                    yield_quantity, yield_unit, servings, margin_percent, reference_ids, ...}],
+                    yield_quantity, yield_unit, servings, margin_percent, reference_ids,
+                    sale_price_cents, sale_price_sold_by, ...}],
+  # sale_price_cents / sale_price_sold_by (K5, opcionales): "Tu precio" de la receta, por tanda ("batch")
+  # o por unidad de rendimiento ("unit"); nulos = sin precio propio (se usa el sugerido).
   cost_versions:  [{id, recipe_id, name, choices: [{ingredient_id, presentation_id}], ...}],
   customers:      [{id, name, phone, notes, ...}],
   orders:         [{id, customer_id, customer_name, customer_phone, delivery_at, status, notes, reference_ids,
