@@ -9,6 +9,7 @@ import KitchenDomain
 
     private(set) var incompleteRecipes: [RecipeListItem] = []
     private(set) var stalePresentations: [CatalogStalePresentation] = []
+    private(set) var isFirstStepsDismissed: Bool = false
     private var lastRevision: Int = -1
 
     private var calendar: Calendar { Calendar.current }
@@ -20,6 +21,29 @@ import KitchenDomain
     init(store: LocalStore = .shared) {
         self.store = store
         recalculate(force: true)
+    }
+
+    // MARK: - Primeros pasos (Bloque I24)
+
+    /// Los 4 pasos de inicio.
+    var firstSteps: [FirstSteps.Step] {
+        FirstSteps.steps(for: store.data)
+    }
+
+    /// Cantidad de pasos completados.
+    var completedFirstStepsCount: Int {
+        firstSteps.filter(\.isDone).count
+    }
+
+    /// Mostrar la tarjeta si no se ha descartado y faltan pasos por completar.
+    var shouldShowFirstSteps: Bool {
+        !isFirstStepsDismissed && FirstSteps.shouldShow(for: store.data)
+    }
+
+    /// Descartar la tarjeta y recordar la elección.
+    func dismissFirstSteps() {
+        FirstSteps.dismiss()
+        isFirstStepsDismissed = true
     }
 
     /// Todos los pedidos activos (pendientes y en proceso), ordenados por fecha de entrega.

@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var showingNewOrder = false
 
     @ScaledMetric(relativeTo: .headline) private var warningIconSize: CGFloat = 36
+    @ScaledMetric(relativeTo: .body) private var stepIconSize: CGFloat = 20
 
     init(store: LocalStore = .shared) {
         self._model = State(initialValue: HomeModel(store: store))
@@ -27,6 +28,10 @@ struct HomeView: View {
 
                     if !model.overdueOrders.isEmpty {
                         overdueBanner
+                    }
+
+                    if model.shouldShowFirstSteps {
+                        firstStepsCard
                     }
 
                     nextOrderCard
@@ -112,6 +117,123 @@ struct HomeView: View {
                     Spacer()
                 }
             }
+        }
+    }
+
+    // MARK: - "Primeros pasos" (Bloque I24)
+
+    private var firstStepsCard: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            firstStepsHeader
+
+            FirstStepsProgressBar(
+                completed: model.completedFirstStepsCount,
+                total: model.firstSteps.count
+            )
+
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                ForEach(model.firstSteps) { step in
+                    firstStepRow(step)
+                }
+            }
+        }
+        .softCard()
+    }
+
+    @ViewBuilder
+    private var firstStepsHeader: some View {
+        let countText = "\(model.completedFirstStepsCount) de \(model.firstSteps.count)"
+
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("Primeros pasos")
+                    .font(.subheadline.weight(.heavy))
+                    .foregroundStyle(.accentTextDeep)
+
+                Text(countText)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.inkMuted)
+
+                Button("Cerrar") {
+                    withAnimation {
+                        model.dismissFirstSteps()
+                    }
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.tint)
+                .buttonStyle(.plain)
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Primeros pasos")
+                    .font(.subheadline.weight(.heavy))
+                    .foregroundStyle(.accentTextDeep)
+
+                Spacer()
+
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.md) {
+                    Text(countText)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.inkMuted)
+
+                    Button("Cerrar") {
+                        withAnimation {
+                            model.dismissFirstSteps()
+                        }
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func firstStepRow(_ step: FirstSteps.Step) -> some View {
+        if step.isDone {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.md) {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(.tint)
+                    .frame(width: stepIconSize)
+                    .accessibilityHidden(true)
+
+                Text(step.title)
+                    .font(.body)
+                    .foregroundStyle(.inkMuted)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, Spacing.xs)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(step.title), hecho")
+        } else {
+            Button {
+                AppRouter.shared.selectedTab = step.tab
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.md) {
+                    Image(systemName: "circle")
+                        .font(.body)
+                        .foregroundStyle(.inkMuted)
+                        .frame(width: stepIconSize)
+                        .accessibilityHidden(true)
+
+                    Text(step.title)
+                        .font(.body)
+                        .foregroundStyle(.inkPrimary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, Spacing.xs)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(step.title), pendiente")
         }
     }
 
@@ -328,6 +450,31 @@ struct HomeView: View {
     }
 }
 
+// MARK: - Barra de progreso de Primeros pasos
+
+/// Barra de progreso horizontal para "Primeros pasos" con tokens de diseño.
+private struct FirstStepsProgressBar: View {
+    let completed: Int
+    let total: Int
+
+    var body: some View {
+        GeometryReader { proxy in
+            let progress = total > 0 ? CGFloat(completed) / CGFloat(total) : 0
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(.accentSoftTrack)
+                    .frame(height: 6)
+
+                Capsule()
+                    .fill(.tint)
+                    .frame(width: max(0, min(proxy.size.width, proxy.size.width * progress)), height: 6)
+            }
+        }
+        .frame(height: 6)
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Botón de Cuenta
 
 /// Botón que abre Cuenta y ajustes (Bloque I21).
@@ -357,8 +504,24 @@ private struct AccountMenu: View {
         .environment(SessionStore())
 }
 
-#Preview("Sin pedidos - Claro") {
+#Preview("Primeros pasos — Negocio vacío") {
     HomeView(store: .preview(KitchenData.empty(deviceId: "preview")))
+        .environment(SessionStore())
+}
+
+#Preview("Datos de ejemplo — Sin tarjeta") {
+    var data = KitchenData.previewSample
+    data.expenses = [
+        Expense(
+            id: "exp-preview",
+            description: "Renta del taller",
+            amountCents: 500000,
+            spentAt: Date(),
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    ]
+    return HomeView(store: .preview(data))
         .environment(SessionStore())
 }
 
@@ -388,8 +551,8 @@ private struct AccountMenu: View {
         .environment(SessionStore())
 }
 
-#Preview("Letra AX3") {
-    HomeView(store: .preview())
+#Preview("Primeros pasos — Letra AX3") {
+    HomeView(store: .preview(KitchenData.empty(deviceId: "preview")))
         .environment(SessionStore())
         .dynamicTypeSize(.accessibility3)
 }
