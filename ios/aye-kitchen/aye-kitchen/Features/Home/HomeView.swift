@@ -43,7 +43,7 @@ struct HomeView: View {
             .background(.canvasBackground)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    AccountMenu()
+                    AccountMenu(store: model.store)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     AddToolbarButton(label: "Nuevo pedido") {
@@ -328,57 +328,25 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Menú de Cuenta (Conservado)
+// MARK: - Botón de Cuenta
 
-/// Cuenta y cerrar sesión.
+/// Botón que abre Cuenta y ajustes (Bloque I21).
 private struct AccountMenu: View {
-    @Environment(SessionStore.self) private var session
-    @State private var showingBackup = false
+    var store: LocalStore = .shared
+    @State private var showingSettings = false
 
     var body: some View {
-        Menu {
-            if let me = session.me {
-                Text(me.email)
-            }
-            Button("Respaldo", systemImage: "icloud.and.arrow.up") {
-                showingBackup = true
-            }
-            #if DEBUG
-            Button("Copiar sesión (DEBUG)", systemImage: "doc.on.clipboard") {
-                copySessionForScripts()
-            }
-            #endif
-            Button("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
-                Task {
-                    // Antes de salir, sube lo que falte; los datos se quedan en el teléfono.
-                    if LocalStore.shared.hasUnbackedChanges {
-                        try? await BackupService.shared.backupNow()
-                    }
-                    await session.signOut()
-                }
-            }
+        Button {
+            showingSettings = true
         } label: {
             Image(systemName: "person.crop.circle")
                 .font(.title3)
         }
         .accessibilityLabel("Tu cuenta")
-        .sheet(isPresented: $showingBackup) {
-            BackupView()
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(store: store)
         }
     }
-
-    #if DEBUG
-    /// Solo desarrollo: copia los tokens de la sesión como JSON (`access_token`, `refresh_token`)
-    /// para que los scripts de prueba llamen a la API con esta cuenta. Con el portapapeles
-    /// universal llega directo a la Mac (`pbpaste`). Nunca existe en builds de release.
-    private func copySessionForScripts() {
-        guard let tokens = KeychainStore.load() else { return }
-        let payload = ["access_token": tokens.accessToken, "refresh_token": tokens.refreshToken]
-        guard let data = try? JSONSerialization.data(withJSONObject: payload),
-              let json = String(data: data, encoding: .utf8) else { return }
-        UIPasteboard.general.string = json
-    }
-    #endif
 }
 
 // MARK: - Previews
