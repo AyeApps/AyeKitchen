@@ -51,7 +51,7 @@ extension KitchenData {
 
     /// Agrega una imagen de referencia a un dueño activo.
     /// - El dueño debe existir y estar activo (`notFound` si no).
-    /// - Máximo 5 referencias activas por dueño (`invalidValue` con "Puedes guardar hasta 5 referencias").
+    /// - Máximo 5 referencias activas por dueño (`invalidValue` con "Puedes guardar hasta 5 fotos").
     /// - `image.id` no puede existir ya (`invalidValue`).
     /// - Agrega la imagen a `references` (con `createdAt`/`updatedAt` de `ctx`) y su id al final de
     ///   `referenceIds` del dueño (creando la lista si era nula); actualiza `updatedAt` del dueño.
@@ -68,7 +68,7 @@ extension KitchenData {
         // 2. Máximo 5 referencias activas por dueño
         let currentActive = references(of: owner)
         guard currentActive.count < 5 else {
-            throw DomainError.invalidValue(detail: "Puedes guardar hasta 5 referencias")
+            throw DomainError.invalidValue(detail: "Puedes guardar hasta 5 fotos")
         }
 
         // 3. image.id no puede existir ya

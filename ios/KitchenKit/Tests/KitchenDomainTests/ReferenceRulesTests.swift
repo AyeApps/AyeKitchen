@@ -164,7 +164,7 @@ struct ReferenceRulesTests {
 
         // Intentar agregar la sexta
         let sixth = makeSampleImage(id: "ref-6")
-        #expect(throws: DomainError.invalidValue(detail: "Puedes guardar hasta 5 referencias")) {
+        #expect(throws: DomainError.invalidValue(detail: "Puedes guardar hasta 5 fotos")) {
             try data.addReference(sixth, to: owner, ctx)
         }
 

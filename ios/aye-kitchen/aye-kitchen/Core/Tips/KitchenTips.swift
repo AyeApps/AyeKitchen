@@ -55,7 +55,59 @@ struct IngredientCurrentBrandTip: Tip {
     }
 }
 
+/// Sección "Equivalencias" del formulario de ingrediente (I30).
+struct IngredientConversionsTip: Tip {
+    var title: Text { Text("¿Cuánto pesa una taza?") }
+    var message: Text? {
+        Text("Si tus recetas dicen tazas o cucharadas, dinos cuánto pesa una de este ingrediente. Ejemplo: 1 taza de harina = 125 g.")
+    }
+    var image: Image? { Image(systemName: "scalemass") }
+}
+
+/// Tamaño del paquete al agregar una marca (I30).
+struct BrandPackageSizeTip: Tip {
+    var title: Text { Text("Lo que trae el paquete") }
+    var message: Text? {
+        Text("Pon lo que dice la etiqueta: 1 kg, 900 ml o 12 piezas. Con el precio sabemos cuánto te cuesta cada gramo.")
+    }
+    var image: Image? { Image(systemName: "shippingbox") }
+}
+
+/// Botón de Tiendas en el Catálogo (I30).
+struct CatalogStoresTip: Tip {
+    var title: Text { Text("Tus tiendas") }
+    var message: Text? { Text("Aquí agregas, cambias de nombre o borras las tiendas donde compras.") }
+    var image: Image? { Image(systemName: "storefront") }
+}
+
 // MARK: - Recetas
+
+/// "¿Cuánto rinde?" en el editor de recetas (I30).
+struct RecipeYieldTip: Tip {
+    var title: Text { Text("Cuánto sale") }
+    var message: Text? {
+        Text("Cuántas piezas o porciones te salen. Con esto te decimos cuánto cuesta cada una.")
+    }
+    var image: Image? { Image(systemName: "square.grid.2x2") }
+}
+
+/// "Costos fijos" en el editor de recetas (I30).
+struct RecipeFixedCostsTip: Tip {
+    var title: Text { Text("Lo que no es ingrediente") }
+    var message: Text? {
+        Text("Agrega la caja, el gas o la luz que gasta esta receta. Se suman a lo que te cuesta.")
+    }
+    var image: Image? { Image(systemName: "flame") }
+}
+
+/// Selector de ingredientes de una receta, donde también salen otras recetas (I30).
+struct RecipeSubrecipeTip: Tip {
+    var title: Text { Text("Una receta dentro de otra") }
+    var message: Text? {
+        Text("El betún o el relleno pueden ser recetas propias. Agrégalas a tu pastel como si fueran un ingrediente.")
+    }
+    var image: Image? { Image(systemName: "square.on.square") }
+}
 
 /// Desglose de costo en el detalle de una receta.
 struct RecipeChangeBrandTip: Tip {
