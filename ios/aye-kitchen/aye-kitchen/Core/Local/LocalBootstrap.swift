@@ -39,6 +39,13 @@ final class LocalBootstrap {
         case .unreadable(let message):
             state = .failed(message)
         case .needsData, .idle:
+            #if DEBUG
+            if accountId == DebugAccount.id {
+                store.replaceAll(with: KitchenData.empty(deviceId: LocalStore.deviceId), backedUp: true)
+                state = .ready
+                return
+            }
+            #endif
             state = .downloading
             do {
                 if try await BackupService.shared.restoreLatest() {

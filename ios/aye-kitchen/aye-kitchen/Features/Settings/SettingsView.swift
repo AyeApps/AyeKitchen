@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var model: SettingsModel
     @State private var showingSignOutConfirmation = false
     @State private var showingTipsResetAlert = false
+    @State private var showingEraseConfirmation = false
     #if DEBUG
     @State private var showingCopiedToast = false
     #endif
@@ -31,6 +32,8 @@ struct SettingsView: View {
                 helpSection
                 signOutSection
                 #if DEBUG
+                // Para producción: sacar eraseDataSection de este #if.
+                eraseDataSection
                 debugSection
                 #endif
             }
@@ -203,6 +206,34 @@ struct SettingsView: View {
                 }
             }
             .disabled(model.isSigningOut)
+        }
+    }
+
+    // 5. Borrar todos los datos (lista para producción; hoy solo en DEBUG)
+    private var eraseDataSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showingEraseConfirmation = true
+            } label: {
+                Text("Borrar todos los datos")
+                    .foregroundStyle(.warningText)
+            }
+            .confirmationDialog(
+                "¿Borrar todos tus datos?",
+                isPresented: $showingEraseConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Borrar todo", role: .destructive) {
+                    guard let accountId = session.me?.id else { return }
+                    dismiss()
+                    LocalReset.eraseAllData(accountId: accountId)
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Se borran tus ingredientes, recetas, pedidos, clientes, gastos y fotos de referencia, y tu negocio vuelve a empezar. No se puede deshacer.")
+            }
+        } footer: {
+            Text("Tu cuenta Aye se queda; solo se vacía AyeKitchen.")
         }
     }
 

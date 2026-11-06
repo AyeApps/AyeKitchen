@@ -16,7 +16,10 @@ struct LoginView: View {
     @ScaledMetric(relativeTo: .body) private var appleButtonHeight: CGFloat = 54
 
     private var canSubmit: Bool {
-        email.contains("@") && !password.isEmpty && !isWorking
+        #if DEBUG
+        if DebugAccount.matches(email: email, password: password) { return !isWorking }
+        #endif
+        return email.contains("@") && !password.isEmpty && !isWorking
     }
 
     var body: some View {

@@ -23,6 +23,11 @@ enum OnboardingFlags {
         UserDefaults.standard.set(true, forKey: setupKey(accountId))
     }
 
+    /// Al borrar todos los datos, la cuenta vuelve a ver "Tu negocio".
+    static func resetBusinessSetup(accountId: String) {
+        UserDefaults.standard.removeObject(forKey: setupKey(accountId))
+    }
+
     /// Cuenta nueva: sin nada capturado y con el nombre de fábrica.
     static func looksNew(_ data: KitchenData) -> Bool {
         data.settings.name == KitchenSettings().name

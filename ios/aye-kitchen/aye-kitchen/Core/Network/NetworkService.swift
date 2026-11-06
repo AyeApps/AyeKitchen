@@ -155,6 +155,12 @@ actor NetworkService {
             request.httpBody = try JSONCoding.encode(body)
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
+        #if DEBUG
+        // La cuenta de prueba no tiene tokens: se comporta como sin internet y no cierra la sesión.
+        if authorized && DebugAccount.isActive {
+            throw APIError.network(URLError(.notConnectedToInternet))
+        }
+        #endif
         if authorized {
             guard let tokens = KeychainStore.load() else {
                 throw await expireSession()

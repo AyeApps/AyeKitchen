@@ -36,6 +36,13 @@ final class SessionStore {
     }
 
     func signIn(email: String, password: String) async throws {
+        #if DEBUG
+        if DebugAccount.matches(email: email, password: password) {
+            DebugAccount.isActive = true
+            state = .signedIn(DebugAccount.me)
+            return
+        }
+        #endif
         try await NetworkService.shared.login(email: email, password: password)
         await loadMe()
     }
@@ -60,6 +67,13 @@ final class SessionStore {
     }
 
     func signOut() async {
+        #if DEBUG
+        if DebugAccount.isActive {
+            DebugAccount.isActive = false
+            state = .signedOut
+            return
+        }
+        #endif
         await NetworkService.shared.logout()
         await forgetLocalData()
         state = .signedOut

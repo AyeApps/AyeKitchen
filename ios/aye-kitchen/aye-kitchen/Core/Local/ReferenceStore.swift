@@ -170,6 +170,14 @@ final class ReferenceStore {
         imageCache.removeObject(forKey: id as NSString)
     }
 
+    /// Borra todas las imágenes de la cuenta abierta (al borrar todos los datos).
+    func deleteAllLocalFiles() {
+        if let dir = referencesDirectoryURL {
+            try? FileManager.default.removeItem(at: dir)
+        }
+        imageCache.removeAllObjects()
+    }
+
     // MARK: - Privados
 
     private var referencesDirectoryURL: URL? {
