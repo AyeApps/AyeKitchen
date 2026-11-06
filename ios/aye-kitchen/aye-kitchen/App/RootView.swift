@@ -4,6 +4,9 @@ import SwiftUI
 struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(OnboardingFlags.welcomeSeenKey) private var welcomeSeen = false
+    /// Cuenta que ya terminó "Tu negocio" en esta sesión (para redibujar sin esperar a UserDefaults).
+    @State private var setupFinishedFor: String?
 
     private var bootstrap: LocalBootstrap { .shared }
 
@@ -14,7 +17,11 @@ struct RootView: View {
                 ProgressView()
                     .controlSize(.large)
             case .signedOut:
-                LoginView()
+                if welcomeSeen {
+                    LoginView()
+                } else {
+                    WelcomeView { welcomeSeen = true }
+                }
             case .signedIn(let me):
                 localContent
                     .task(id: me.id) {
@@ -46,7 +53,20 @@ struct RootView: View {
     private var localContent: some View {
         switch bootstrap.state {
         case .ready:
-            MainTabView()
+            if let me = session.me, needsBusinessSetup(accountId: me.id) {
+                BusinessSetupView(store: .shared) {
+                    OnboardingFlags.markBusinessSetupDone(accountId: me.id)
+                    setupFinishedFor = me.id
+                }
+            } else {
+                MainTabView()
+                    .onAppear {
+                        // Una cuenta que llega con datos no ve "Tu negocio" nunca.
+                        if let me = session.me {
+                            OnboardingFlags.markBusinessSetupDone(accountId: me.id)
+                        }
+                    }
+            }
         case .idle, .downloading:
             VStack(spacing: Spacing.lg) {
                 ProgressView()
@@ -67,6 +87,13 @@ struct RootView: View {
                 }
             }
         }
+    }
+
+    /// Primero la marca (no lee los datos, así no se redibuja con cada cambio) y luego si la cuenta llega vacía.
+    private func needsBusinessSetup(accountId: String) -> Bool {
+        guard setupFinishedFor != accountId,
+              !OnboardingFlags.isBusinessSetupDone(accountId: accountId) else { return false }
+        return OnboardingFlags.looksNew(LocalStore.shared.data)
     }
 
     private func unavailable(title: String, message: String, retry: @escaping () -> Void) -> some View {
