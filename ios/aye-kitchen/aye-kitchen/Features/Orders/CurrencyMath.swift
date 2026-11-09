@@ -61,7 +61,7 @@ nonisolated enum CurrencyMath {
 nonisolated enum OrderDateFormatter {
     private static let mxLocale = Locale(identifier: "es_MX")
 
-    private nonisolated(unsafe) static let dayHeaderFormatter: DateFormatter = {
+    private static let dayHeaderFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -69,7 +69,7 @@ nonisolated enum OrderDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let dayAbbreviationFormatter: DateFormatter = {
+    private static let dayAbbreviationFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -77,7 +77,7 @@ nonisolated enum OrderDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let dayNumberFormatter: DateFormatter = {
+    private static let dayNumberFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -85,7 +85,7 @@ nonisolated enum OrderDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let timeFormatter: DateFormatter = {
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -93,7 +93,7 @@ nonisolated enum OrderDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let fullDateTimeFormatter: DateFormatter = {
+    private static let fullDateTimeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -101,7 +101,7 @@ nonisolated enum OrderDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let paymentDateFormatter: DateFormatter = {
+    private static let paymentDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current

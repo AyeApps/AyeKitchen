@@ -12,10 +12,10 @@ struct SettingsView: View {
     @State private var showingSuppliers = false
     @State private var showingSignOutConfirmation = false
     @State private var showingTipsResetAlert = false
-    #if DEBUG
     @State private var deletionModel = DataDeletionModel()
     @State private var showingEraseConfirmation = false
     @State private var showingEraseErrorAlert = false
+    #if DEBUG
     @State private var showingCopiedToast = false
     #endif
 
@@ -35,8 +35,8 @@ struct SettingsView: View {
                 helpSection
                 signOutSection
                 deleteAccountSection
-                #if DEBUG
                 eraseDataSection
+                #if DEBUG
                 debugSection
                 #endif
             }
@@ -70,7 +70,6 @@ struct SettingsView: View {
             } message: {
                 Text("Tus datos se quedan en este teléfono. Si tienes cambios sin respaldar, se guardarán antes de salir.")
             }
-            #if DEBUG
             .alert(
                 "No se pudieron borrar tus datos",
                 isPresented: $showingEraseErrorAlert
@@ -83,7 +82,6 @@ struct SettingsView: View {
                     Text(message)
                 }
             }
-            #endif
         }
     }
 
@@ -264,8 +262,7 @@ struct SettingsView: View {
         }
     }
 
-    #if DEBUG
-    // 6. Borrar mis datos de AyeKitchen (solo en DEBUG por ahora)
+    // 6. Borrar mis datos de AyeKitchen
     private var eraseDataSection: some View {
         Section {
             Button(role: .destructive) {
@@ -308,7 +305,6 @@ struct SettingsView: View {
             Text("Tu cuenta Aye se queda; solo se vacía AyeKitchen.")
         }
     }
-    #endif
 
     // 4. Sección de desarrollo (DEBUG)
     #if DEBUG

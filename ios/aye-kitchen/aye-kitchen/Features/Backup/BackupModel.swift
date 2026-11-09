@@ -6,7 +6,7 @@ import SwiftUI
 nonisolated enum BackupDateFormatter {
     private static let mxLocale = Locale(identifier: "es_MX")
 
-    private nonisolated(unsafe) static let timeFormatter: DateFormatter = {
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -14,7 +14,7 @@ nonisolated enum BackupDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let dayMonthFormatter: DateFormatter = {
+    private static let dayMonthFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current
@@ -22,7 +22,7 @@ nonisolated enum BackupDateFormatter {
         return formatter
     }()
 
-    private nonisolated(unsafe) static let fullDateFormatter: DateFormatter = {
+    private static let fullDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = mxLocale
         formatter.timeZone = .current

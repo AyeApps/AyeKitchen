@@ -3,7 +3,7 @@ import TipKit
 import KitchenDomain
 
 /// Extensión para identificar líneas de costo en sheets.
-extension RecipeCostLine: Identifiable {
+extension RecipeCostLine: @retroactive Identifiable {
     public var id: String { "\(kind.rawValue)_\(refId)_\(presentationId ?? "")" }
 }
 

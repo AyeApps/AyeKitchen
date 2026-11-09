@@ -307,7 +307,7 @@ struct HomeView: View {
         .softCard()
     }
 
-    private nonisolated(unsafe) static let deliveryMomentFormatter: DateFormatter = {
+    private static let deliveryMomentFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "es_MX")
         formatter.timeZone = .current

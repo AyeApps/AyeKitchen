@@ -9,8 +9,7 @@ import KitchenDomain
 ///   ya no los trae de vuelta. El servidor conserva los últimos 5 respaldos (B11) hasta que se
 ///   reemplazan; borrar también esos es parte de "Eliminar cuenta", no de esto.
 ///
-/// Hoy el botón vive en la sección de Desarrollo (DEBUG). Para producción basta con mover
-/// `SettingsView.eraseDataSection` fuera del `#if DEBUG`: la lógica ya es la definitiva.
+/// El botón es `SettingsView.eraseDataSection` ("Borrar mis datos de AyeKitchen" en Ajustes).
 enum LocalReset {
     static func eraseAllData(accountId: String) {
         LocalStore.shared.replaceAll(with: KitchenData.empty(deviceId: LocalStore.deviceId), backedUp: false)
