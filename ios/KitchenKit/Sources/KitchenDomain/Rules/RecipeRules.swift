@@ -91,6 +91,8 @@ extension KitchenData {
         yieldUnit: BaseUnit? = nil,
         servings: Int?? = nil,
         marginPercent: Int?? = nil,
+        salePriceCents: Int?? = nil,
+        salePriceSoldBy: OrderSoldBy?? = nil,
         ctx: MutationContext
     ) throws -> Recipe {
         guard let idx = recipes.activeIndex(of: id) else {
@@ -141,6 +143,11 @@ extension KitchenData {
         if let m = marginPercent, let marginVal = m, marginVal < 0 || marginVal > 1000 {
             throw DomainError.invalidValue(detail: "El margen debe estar entre 0 y 1000")
         }
+        if let p = salePriceCents, let price = p {
+            guard price > 0 && price <= 100_000_000 else {
+                throw DomainError.invalidValue(detail: "El precio debe ser mayor a $0")
+            }
+        }
 
         // --- Todas las validaciones pasaron, aplicar mutaciones ---
 
@@ -165,6 +172,23 @@ extension KitchenData {
         }
         if let m = marginPercent {
             recipe.marginPercent = m
+        }
+        if let wrappedPrice = salePriceCents {
+            if let price = wrappedPrice {
+                recipe.salePriceCents = price
+                if let wrappedSoldBy = salePriceSoldBy {
+                    recipe.salePriceSoldBy = wrappedSoldBy ?? .batch
+                } else if recipe.salePriceSoldBy == nil {
+                    recipe.salePriceSoldBy = .batch
+                }
+            } else {
+                recipe.salePriceCents = nil
+                recipe.salePriceSoldBy = nil
+            }
+        } else if let wrappedSoldBy = salePriceSoldBy {
+            if recipe.salePriceCents != nil {
+                recipe.salePriceSoldBy = wrappedSoldBy ?? .batch
+            }
         }
         if let extraCosts = extraCosts {
             recipe.extraCosts = extraCosts.map {

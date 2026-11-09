@@ -16,6 +16,12 @@ public struct OrderTotals: Sendable, Hashable {
     public var costCents: Int
     public var profitCents: Int
 
+    public var profitPercent: Int? {
+        guard costCents != 0 else { return nil }
+        let unrounded = (Decimal(profitCents) / Decimal(costCents)) * Decimal(100)
+        return CostingMath.roundToCents(unrounded)
+    }
+
     public init(totalCents: Int, paidCents: Int, balanceCents: Int, costCents: Int, profitCents: Int) {
         self.totalCents = totalCents
         self.paidCents = paidCents
@@ -269,12 +275,13 @@ extension KitchenData {
             let snapshot: Int
             let unitLabel: BaseUnit?
 
+            let defaultPrice = clone.defaultLinePriceCents(recipeId: it.recipeId, soldBy: it.soldBy, cost: costInfo)
+            unitPrice = it.unitPriceCents ?? defaultPrice
+
             if it.soldBy == .unit {
-                unitPrice = it.unitPriceCents ?? costInfo.suggestedPricePerYieldUnitCents
                 snapshot = CostingMath.roundToCents(Qty.decimal(costInfo.costPerYieldUnit) ?? Decimal(0))
                 unitLabel = rec.yieldUnit
             } else {
-                unitPrice = it.unitPriceCents ?? costInfo.suggestedPriceCents
                 snapshot = costInfo.batchCostCents
                 unitLabel = nil
             }
@@ -444,12 +451,13 @@ extension KitchenData {
                     let snapshot: Int
                     let unitLabel: BaseUnit?
 
+                    let defaultPrice = clone.defaultLinePriceCents(recipeId: it.recipeId, soldBy: it.soldBy, cost: costInfo)
+                    unitPrice = it.unitPriceCents ?? defaultPrice
+
                     if it.soldBy == .unit {
-                        unitPrice = it.unitPriceCents ?? costInfo.suggestedPricePerYieldUnitCents
                         snapshot = CostingMath.roundToCents(Qty.decimal(costInfo.costPerYieldUnit) ?? Decimal(0))
                         unitLabel = rec.yieldUnit
                     } else {
-                        unitPrice = it.unitPriceCents ?? costInfo.suggestedPriceCents
                         snapshot = costInfo.batchCostCents
                         unitLabel = nil
                     }

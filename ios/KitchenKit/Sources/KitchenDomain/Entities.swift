@@ -195,6 +195,10 @@ public struct Recipe: Codable, Sendable, Hashable, Identifiable {
     public var servings: Int?
     /// Nulo = el margen del negocio (`KitchenSettings.defaultMarginPercent`).
     public var marginPercent: Int?
+    /// "Tu precio" de la receta (bloque K5). Nulo = sin precio propio (usa el sugerido).
+    public var salePriceCents: Int?
+    /// Forma de venta de "Tu precio": por tanda (.batch) o por unidad de rendimiento (.unit).
+    public var salePriceSoldBy: OrderSoldBy?
     /// Imágenes de referencia opcionales (ids de `KitchenData.references`), hasta 5. Nulo = ninguna.
     public var referenceIds: [String]?
     public var createdAt: Date
@@ -203,6 +207,7 @@ public struct Recipe: Codable, Sendable, Hashable, Identifiable {
 
     public init(id: String, name: String, description: String? = nil, items: [RecipeItem] = [], extraCosts: [ExtraCost] = [],
                 yieldQuantity: String, yieldUnit: BaseUnit, servings: Int? = nil, marginPercent: Int? = nil,
+                salePriceCents: Int? = nil, salePriceSoldBy: OrderSoldBy? = nil,
                 referenceIds: [String]? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.name = name
@@ -213,6 +218,8 @@ public struct Recipe: Codable, Sendable, Hashable, Identifiable {
         self.yieldUnit = yieldUnit
         self.servings = servings
         self.marginPercent = marginPercent
+        self.salePriceCents = salePriceCents
+        self.salePriceSoldBy = salePriceSoldBy
         self.referenceIds = referenceIds
         self.createdAt = createdAt
         self.updatedAt = updatedAt
