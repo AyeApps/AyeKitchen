@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Hoja para seleccionar un ingrediente o una subreceta para la receta (Bloque I3b / I17 local-first).
@@ -127,6 +128,9 @@ struct RecipeItemPicker: View {
                 if model.usableSubrecipes.isEmpty {
                     emptyState(text: "No hay subrecetas disponibles.")
                 } else {
+                    TipView(RecipeSubrecipeTip())
+                        .tipBackground(.surfaceCard)
+
                     ForEach(model.usableSubrecipes) { subrecipe in
                         Button {
                             selectedTarget = .subrecipe(

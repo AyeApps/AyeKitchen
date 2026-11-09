@@ -13,7 +13,7 @@ Bloque I31. Rama `local-first`. Va **después de K5 y de I30** (usa lo de K5 y t
 - `Recipes/SalePriceSheet.swift` (nuevo)
 
 1. **Detalle del pedido, sección nueva "Para este pedido"**, entre "Productos" y la tarjeta de dinero, con una fila por cada `BatchNeed` de `batchNeeds(for: order)`. Nada de esto se guarda; se calcula al vuelo.
-   - Si `exactBatches` es entero: "Haz 2 tandas de Pastel de vainilla" (singular "1 tanda").
+   - Si no sobra nada (`leftoverUnits` es cero; **no** lo decidas por `exactBatches`, que viene redondeado a 2 decimales): "Haz 2 tandas de Pastel de vainilla" con `wholeBatches` (singular "1 tanda").
    - Si no: renglón principal "Necesitas 1.5 tandas de Galletas", y debajo, en texto secundario, "Si haces 2, te sobran 5 piezas para vender (unos $75.00)" usando `wholeBatches`, `leftoverUnits` con su unidad en palabras (pieza/piezas, g, ml; mira cómo ya se escribe la unidad en `RecipeDetailView`, "Rinde 1 pieza") y `leftoverValueCents`. Sin valor (nulo), sin el paréntesis.
    - Ícono a la izquierda (como las filas de "De dónde sale el costo"), números con `monospacedDigit()`. Si el pedido no tiene necesidades (todas las recetas borradas), la sección no aparece.
 2. **Tarjeta de dinero del pedido:**

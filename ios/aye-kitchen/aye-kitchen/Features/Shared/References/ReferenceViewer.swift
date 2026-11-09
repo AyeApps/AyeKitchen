@@ -56,9 +56,9 @@ struct ReferenceViewer: View {
 
                 if references.isEmpty {
                     ContentUnavailableView(
-                        "Sin referencias",
+                        "Sin fotos",
                         systemImage: "photo.on.rectangle",
-                        description: Text("Ya no quedan referencias para este elemento.")
+                        description: Text("Ya no quedan fotos.")
                     )
                 } else {
                     TabView(selection: $selectedId) {
@@ -68,7 +68,7 @@ struct ReferenceViewer: View {
                                 image: resolveImage(for: ref.id)
                             )
                             .tag(ref.id)
-                            .accessibilityLabel("Referencia \(index + 1) de \(references.count)")
+                            .accessibilityLabel("Foto \(index + 1) de \(references.count)")
                         }
                     }
                     .tabViewStyle(.page(indexDisplayMode: references.count > 1 ? .always : .never))
@@ -91,7 +91,7 @@ struct ReferenceViewer: View {
                         Button(role: .destructive) {
                             showingDeleteConfirmation = true
                         } label: {
-                            Label("Quitar referencia", systemImage: "trash")
+                            Label("Quitar foto", systemImage: "trash")
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
@@ -99,21 +99,21 @@ struct ReferenceViewer: View {
                             .foregroundStyle(.tint)
                     }
                     .disabled(references.isEmpty)
-                    .accessibilityLabel("Opciones de la referencia")
+                    .accessibilityLabel("Opciones de la foto")
                 }
             }
             .confirmationDialog(
-                "¿Quitar esta referencia? No cambia nada más.",
+                "¿Quitar esta foto? No cambia nada más.",
                 isPresented: $showingDeleteConfirmation,
                 titleVisibility: .visible
             ) {
-                Button("Quitar referencia", role: .destructive) {
+                Button("Quitar foto", role: .destructive) {
                     deleteCurrentReference()
                 }
                 Button("Cancelar", role: .cancel) {}
             }
             .alert(
-                "No se pudo quitar la referencia",
+                "No se pudo quitar la foto",
                 isPresented: Binding(
                     get: { deleteErrorMessage != nil },
                     set: { if !$0 { deleteErrorMessage = nil } }
@@ -150,7 +150,7 @@ struct ReferenceViewer: View {
                 dismiss()
             }
         } catch {
-            deleteErrorMessage = "No se pudo quitar la referencia. Intenta de nuevo."
+            deleteErrorMessage = "No se pudo quitar la foto. Intenta de nuevo."
         }
     }
 }
@@ -324,7 +324,7 @@ private func makeViewerSampleImage(text: String, color: UIColor) -> UIImage {
     }
 }
 
-#Preview("Visor con 3 referencias") {
+#Preview("Visor con 3 fotos") {
     ReferenceViewer(
         owner: .ingredient("ing-harina"),
         initialReferenceId: "sample-ref-1",

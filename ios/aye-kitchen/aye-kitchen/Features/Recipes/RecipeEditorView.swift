@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Editor de receta (crear y editar) según Bloque I3b / I17 local-first.
@@ -13,6 +14,7 @@ struct RecipeEditorView: View {
     @State private var showingDiscardAlert = false
     @State private var showingItemPicker = false
     @State private var showingAddExtraCost = false
+    @State private var showingFixedCostsHelp = false
 
     @State private var editingTarget: LineTarget?
     @State private var editingExistingLine: RecipeEditorLine?
@@ -97,6 +99,9 @@ struct RecipeEditorView: View {
                         model.addExtraCost(cost)
                     }
                 }
+                .sheet(isPresented: $showingFixedCostsHelp) {
+                    FixedCostsHelpSheet()
+                }
                 .sheet(item: $editingTarget) { target in
                     RecipeLineSheet(
                         target: target,
@@ -168,6 +173,9 @@ struct RecipeEditorView: View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             Text("¿Cuánto rinde?")
                 .sectionTitleStyle()
+
+            TipView(RecipeYieldTip())
+                .tipBackground(.surfaceCard)
 
             HStack(spacing: Spacing.md) {
                 TextField("", text: $model.yieldQuantity)
@@ -346,8 +354,10 @@ struct RecipeEditorView: View {
 
     private var extraCostsSection: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
-            Text("Costos fijos")
-                .sectionTitleStyle()
+            extraCostsHeader
+
+            TipView(RecipeFixedCostsTip())
+                .tipBackground(.surfaceCard)
 
             if !model.extraCosts.isEmpty {
                 RowGroup {
@@ -367,6 +377,47 @@ struct RecipeEditorView: View {
                 .font(.body.weight(.bold))
                 .foregroundStyle(.tint)
                 .frame(minHeight: 44)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var extraCostsHeader: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("Costos fijos")
+                    .sectionTitleStyle()
+
+                Button {
+                    showingFixedCostsHelp = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "questionmark.circle")
+                        Text("¿Qué es esto?")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+            }
+        } else {
+            HStack {
+                Text("Costos fijos")
+                    .sectionTitleStyle()
+
+                Spacer()
+
+                Button {
+                    showingFixedCostsHelp = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "questionmark.circle")
+                        Text("¿Qué es esto?")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

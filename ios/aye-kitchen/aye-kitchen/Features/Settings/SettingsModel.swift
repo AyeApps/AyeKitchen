@@ -26,6 +26,10 @@ final class SettingsModel {
         store.data.units.filter { $0.isActive }.count
     }
 
+    var suppliersCount: Int {
+        store.data.activeSuppliers().count
+    }
+
     var hasUnbackedChanges: Bool {
         #if DEBUG
         if let previewHasUnbackedChanges {

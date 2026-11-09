@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: SettingsModel
+    @State private var showingSuppliers = false
     @State private var showingSignOutConfirmation = false
     @State private var showingTipsResetAlert = false
     #if DEBUG
@@ -50,6 +51,9 @@ struct SettingsView: View {
                     .font(.body.weight(.semibold))
                     .foregroundStyle(.tint)
                 }
+            }
+            .sheet(isPresented: $showingSuppliers) {
+                SuppliersView(store: model.store)
             }
             .confirmationDialog(
                 "¿Cerrar sesión?",
@@ -178,6 +182,29 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Button {
+                showingSuppliers = true
+            } label: {
+                if dynamicTypeSize.isAccessibilitySize {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        Label("Tus tiendas", systemImage: "storefront")
+                            .foregroundStyle(.inkPrimary)
+                        Text("\(model.suppliersCount)")
+                            .font(.subheadline)
+                            .foregroundStyle(.inkMuted)
+                    }
+                } else {
+                    HStack(alignment: .center) {
+                        Label("Tus tiendas", systemImage: "storefront")
+                            .foregroundStyle(.inkPrimary)
+                        Spacer()
+                        Text("\(model.suppliersCount)")
+                            .font(.subheadline)
+                            .foregroundStyle(.inkMuted)
+                    }
+                }
+            }
         }
     }
 
@@ -275,7 +302,7 @@ struct SettingsView: View {
                 }
                 Button("Cancelar", role: .cancel) {}
             } message: {
-                Text("Se borran de este teléfono y de tus respaldos: ingredientes, recetas, pedidos, clientes, gastos y fotos de referencia. Tu cuenta Aye se queda. No se puede deshacer.")
+                Text("Se borran de este teléfono y de tus respaldos: ingredientes, recetas, pedidos, clientes, gastos y fotos. Tu cuenta Aye se queda. No se puede deshacer.")
             }
         } footer: {
             Text("Tu cuenta Aye se queda; solo se vacía AyeKitchen.")

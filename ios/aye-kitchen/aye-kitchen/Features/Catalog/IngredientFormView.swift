@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 /// Modo del formulario de ingrediente.
@@ -27,7 +28,7 @@ struct FormConversion: Identifiable, Hashable, Sendable {
 
 @Observable final class IngredientFormModel {
     let mode: IngredientFormMode
-    private let store: LocalStore
+    let store: LocalStore
 
     var name: String = ""
     var baseUnit: BaseUnit = .g
@@ -38,7 +39,8 @@ struct FormConversion: Identifiable, Hashable, Sendable {
 
     // Campos para la sección "Primera marca" en modo .create
     var brandText: String = ""
-    var packageQuantityText: String = "1"
+    var selectedSupplier: SupplierSelection = .none
+    var packageQuantityText: String = ""
     var selectedPackageUnit: KitchenUnit?
     var priceText: String = ""
     var isPackageQuantityInvalid: Bool = false
@@ -58,6 +60,8 @@ struct FormConversion: Identifiable, Hashable, Sendable {
         case .create:
             self.name = initialName
             self.baseUnit = .g
+            self.selectedSupplier = .none
+            self.packageQuantityText = ""
         case .edit(let ingredientId):
             if let ingredient = store.data.ingredients.first(where: { $0.id == ingredientId && $0.isActive }) {
                 self.name = ingredient.name
@@ -174,15 +178,19 @@ struct FormConversion: Identifiable, Hashable, Sendable {
             return nil
         }
 
+        let trimmedBrand = brandText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedQty = packageQuantityText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedPrice = priceText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasPrice = !trimmedPrice.isEmpty
-        let shouldCreatePresentation = isCreateMode && hasPrice
+        let hasSupplier = selectedSupplier.supplierId != nil
+
+        let hasAnyBrandInput = !trimmedBrand.isEmpty || !trimmedQty.isEmpty || !trimmedPrice.isEmpty || hasSupplier
+        let shouldCreatePresentation = isCreateMode && hasAnyBrandInput
         var presentationPriceCents: Int? = nil
         var presentationPackageQuantity: String = ""
 
         if shouldCreatePresentation {
-            let parsedCents = RecordPriceModel.parsePriceCents(priceText)
-            let parsedQty = Quantity.parse(packageQuantityText)
+            let parsedCents = RecordPriceModel.parsePriceCents(trimmedPrice)
+            let parsedQty = Quantity.parse(trimmedQty)
 
             let priceValid = parsedCents != nil
             let qtyValid = parsedQty != nil
@@ -235,7 +243,7 @@ struct FormConversion: Identifiable, Hashable, Sendable {
                             try data.createPresentation(
                                 ingredientId: createdIngredient.id,
                                 brand: finalBrand,
-                                supplierId: nil,
+                                supplierId: selectedSupplier.supplierId,
                                 packageQuantity: presentationPackageQuantity,
                                 packageUnitId: selectedPackageUnit?.id,
                                 barcode: nil,
@@ -301,6 +309,7 @@ struct IngredientFormView: View {
 
     @State private var showingUnitPicker = false
     @State private var showingBaseUnitHelp = false
+    @State private var showingConversionsHelp = false
 
     init(
         mode: IngredientFormMode,
@@ -350,6 +359,17 @@ struct IngredientFormView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
 
+                        storePickerField
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+
+                        TipView(BrandPackageSizeTip())
+                            .tipBackground(.surfaceCard)
+                            .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+
                         packageSizeField
                             .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
                             .listRowBackground(Color.clear)
@@ -362,11 +382,14 @@ struct IngredientFormView: View {
                     } header: {
                         Text("Primera marca")
                     } footer: {
-                        Text("Opcional. El ingrediente es general, como harina de trigo; aquí va la marca que compras. Puedes agregar más marcas después y elegir cuál usar en cada receta.")
+                        Text("Opcional. El ingrediente es general, como harina de trigo; aquí va la marca que compras, dónde y a cuánto. Puedes agregar más marcas después.")
                     }
                 }
 
-                Section("Equivalencias") {
+                Section {
+                    TipView(IngredientConversionsTip())
+                        .tipBackground(.surfaceCard)
+
                     if model.conversions.isEmpty {
                         Text("Aún no agregas equivalencias.")
                             .font(.subheadline)
@@ -395,6 +418,8 @@ struct IngredientFormView: View {
                         .foregroundStyle(Color.accentColor)
                     }
                     .disabled(model.availableUnits.isEmpty)
+                } header: {
+                    equivalenciasHeader
                 }
 
                 Section {
@@ -444,6 +469,9 @@ struct IngredientFormView: View {
             .sheet(isPresented: $showingBaseUnitHelp) {
                 BaseUnitHelpSheet()
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $showingConversionsHelp) {
+                ConversionsHelpSheet()
             }
         }
     }
@@ -529,6 +557,44 @@ struct IngredientFormView: View {
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var equivalenciasHeader: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                Text("Equivalencias")
+                Button {
+                    showingConversionsHelp = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "questionmark.circle")
+                        Text("¿Qué es esto?")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+            }
+            .textCase(nil)
+        } else {
+            HStack {
+                Text("Equivalencias")
+                Spacer()
+                Button {
+                    showingConversionsHelp = true
+                } label: {
+                    HStack(spacing: Spacing.xs) {
+                        Image(systemName: "questionmark.circle")
+                        Text("¿Qué es esto?")
+                    }
+                    .font(.subheadline)
+                    .foregroundStyle(.tint)
+                }
+                .buttonStyle(.plain)
+            }
+            .textCase(nil)
         }
     }
 
@@ -623,6 +689,14 @@ struct IngredientFormView: View {
                 .foregroundStyle(.inkMuted)
                 .padding(.horizontal, Spacing.xs)
         }
+    }
+
+    private var storePickerField: some View {
+        StorePickerField(
+            selection: $model.selectedSupplier,
+            store: model.store,
+            onError: { model.errorMessage = $0 }
+        )
     }
 
     private var packageSizeField: some View {

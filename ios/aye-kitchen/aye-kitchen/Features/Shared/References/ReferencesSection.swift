@@ -50,7 +50,7 @@ struct ReferencesSection: View {
         Group {
             if showsTitle {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
-                    Text("Referencias")
+                    Text("Fotos")
                         .sectionTitleStyle()
                     sectionBody
                 }
@@ -88,7 +88,7 @@ struct ReferencesSection: View {
             )
         }
         .alert(
-            "No se pudo guardar la referencia",
+            "No se pudo guardar la foto",
             isPresented: Binding(
                 get: { errorMessage != nil },
                 set: { if !$0 { errorMessage = nil } }
@@ -120,14 +120,14 @@ struct ReferencesSection: View {
             HStack(spacing: Spacing.sm) {
                 Image(systemName: "plus.circle.fill")
                     .font(.body.weight(.semibold))
-                Text("Agregar referencia")
+                Text("Agregar foto")
                     .font(.body.weight(.semibold))
             }
             .foregroundStyle(.tint)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .accessibilityLabel("Agregar referencia")
+        .accessibilityLabel("Agregar foto")
     }
 
     // MARK: - Fila de miniaturas
@@ -142,7 +142,7 @@ struct ReferencesSection: View {
                         thumbnailView(for: ref)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Referencia \(index + 1) de \(references.count)")
+                    .accessibilityLabel("Foto \(index + 1) de \(references.count)")
                 }
 
                 ForEach(0..<pendingCount, id: \.self) { _ in
@@ -219,7 +219,7 @@ struct ReferencesSection: View {
                 }
                 .frame(width: thumbnailSize, height: thumbnailSize)
         }
-        .accessibilityLabel("Agregar referencia")
+        .accessibilityLabel("Agregar foto")
     }
 
     // MARK: - Menú de adición
@@ -256,7 +256,7 @@ struct ReferencesSection: View {
                 } catch let error as DomainError {
                     errorMessage = error.detail
                 } catch {
-                    errorMessage = "No se pudo guardar la referencia. Intenta de nuevo."
+                    errorMessage = "No se pudo guardar la foto. Intenta de nuevo."
                 }
                 pendingCount -= 1
             }
@@ -276,7 +276,7 @@ struct ReferencesSection: View {
             } catch let error as DomainError {
                 errorMessage = error.detail
             } catch {
-                errorMessage = "No se pudo guardar la referencia. Intenta de nuevo."
+                errorMessage = "No se pudo guardar la foto. Intenta de nuevo."
             }
         }
     }
@@ -337,7 +337,7 @@ private func makeSectionSampleImage(text: String, color: UIColor) -> UIImage {
     }
 }
 
-#Preview("Sin referencias") {
+#Preview("Sin fotos") {
     NavigationStack {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
@@ -351,7 +351,7 @@ private func makeSectionSampleImage(text: String, color: UIColor) -> UIImage {
     }
 }
 
-#Preview("Con 3 referencias") {
+#Preview("Con 3 fotos") {
     NavigationStack {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
@@ -368,7 +368,7 @@ private func makeSectionSampleImage(text: String, color: UIColor) -> UIImage {
     }
 }
 
-#Preview("Con 5 referencias (máximo)") {
+#Preview("Con 5 fotos (máximo)") {
     NavigationStack {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {
@@ -385,7 +385,7 @@ private func makeSectionSampleImage(text: String, color: UIColor) -> UIImage {
     }
 }
 
-#Preview("Con referencias AX3") {
+#Preview("Con fotos AX3") {
     NavigationStack {
         ScrollView {
             VStack(alignment: .leading, spacing: Spacing.section) {

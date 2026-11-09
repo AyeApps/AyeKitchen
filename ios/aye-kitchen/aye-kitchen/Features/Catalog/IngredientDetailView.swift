@@ -58,7 +58,7 @@ struct IngredientDetailView: View {
                         }
                     }
 
-                    Section("Referencias") {
+                    Section("Fotos") {
                         ReferencesSection(owner: .ingredient(ingredient.id), showsTitle: false, store: store)
                     }
                 }

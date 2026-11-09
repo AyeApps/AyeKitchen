@@ -38,6 +38,7 @@ struct CatalogView: View {
                             Image(systemName: "storefront")
                         }
                         .accessibilityLabel("Tiendas")
+                        .popoverTip(CatalogStoresTip(), arrowEdge: .top)
                     }
 
                     ToolbarItem(placement: .topBarTrailing) {

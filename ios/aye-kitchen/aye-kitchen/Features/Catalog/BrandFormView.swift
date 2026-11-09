@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import KitchenDomain
 
 // MARK: - Modos del formulario
@@ -15,32 +16,11 @@ enum BrandFormMode: Sendable, Equatable {
     }
 }
 
-// MARK: - Selección de Tienda
-
-enum SupplierSelection: Hashable {
-    case none
-    case existing(id: String, name: String)
-
-    var displayName: String {
-        switch self {
-        case .none: "Sin tienda"
-        case .existing(_, let name): name
-        }
-    }
-
-    var supplierId: String? {
-        switch self {
-        case .none: nil
-        case .existing(let id, _): id
-        }
-    }
-}
-
 // MARK: - Modelo de Formulario
 
 @Observable final class BrandFormModel {
     let mode: BrandFormMode
-    private let store: LocalStore
+    let store: LocalStore
 
     var brandText: String = ""
     var selectedSupplier: SupplierSelection = .none
@@ -108,12 +88,20 @@ enum SupplierSelection: Hashable {
         let quantityValid = Quantity.parse(packageQuantityText) != nil
         let unitValid = selectedUnit != nil
         let priceValid: Bool
-        if isCreateMode && !priceText.trimmingCharacters(in: .whitespaces).isEmpty {
-            priceValid = RecordPriceModel.parsePriceCents(priceText) != nil
+        if isCreateMode {
+            let trimmed = priceText.trimmingCharacters(in: .whitespaces)
+            priceValid = !trimmed.isEmpty && RecordPriceModel.parsePriceCents(trimmed) != nil
         } else {
             priceValid = true
         }
         return brandValid && quantityValid && unitValid && priceValid
+    }
+
+    var isPriceFormatInvalid: Bool {
+        guard isCreateMode else { return false }
+        let trimmed = priceText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+        return RecordPriceModel.parsePriceCents(trimmed) == nil
     }
 
     func createSupplier(name: String) -> Supplier? {
@@ -146,11 +134,9 @@ enum SupplierSelection: Hashable {
         do {
             switch mode {
             case .create(let ingredientId):
-                let priceCents: Int?
-                if !priceText.trimmingCharacters(in: .whitespaces).isEmpty {
-                    priceCents = RecordPriceModel.parsePriceCents(priceText)
-                } else {
-                    priceCents = nil
+                let trimmedPrice = priceText.trimmingCharacters(in: .whitespaces)
+                guard let priceCents = RecordPriceModel.parsePriceCents(trimmedPrice) else {
+                    return nil
                 }
 
                 let created = try store.mutate { data, ctx in
@@ -203,8 +189,6 @@ struct BrandFormView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var model: BrandFormModel
-    @State private var showingNewSupplierAlert = false
-    @State private var newSupplierName = ""
 
     var onSave: ((Presentation) -> Void)?
 
@@ -223,6 +207,10 @@ struct BrandFormView: View {
                 VStack(alignment: .leading, spacing: Spacing.xl) {
                     brandField
                     storePickerField
+                    if model.isCreateMode {
+                        TipView(BrandPackageSizeTip())
+                            .tipBackground(.surfaceCard)
+                    }
                     packageSizeField
                     if model.isCreateMode {
                         priceField
@@ -260,16 +248,6 @@ struct BrandFormView: View {
                     }
                 }
             }
-            .alert("Nueva tienda", isPresented: $showingNewSupplierAlert) {
-                TextField("Nombre de la tienda", text: $newSupplierName)
-                Button("Guardar") {
-                    _ = model.createSupplier(name: newSupplierName)
-                    newSupplierName = ""
-                }
-                Button("Cancelar", role: .cancel) {
-                    newSupplierName = ""
-                }
-            }
         }
     }
 
@@ -281,45 +259,11 @@ struct BrandFormView: View {
     }
 
     private var storePickerField: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Tienda")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.inkPrimary)
-
-            Menu {
-                Button("Sin tienda") {
-                    model.selectedSupplier = .none
-                }
-                ForEach(model.suppliers) { supplier in
-                    Button(supplier.name) {
-                        model.selectedSupplier = .existing(id: supplier.id, name: supplier.name)
-                    }
-                }
-                Divider()
-                Button("Nueva tienda…") {
-                    newSupplierName = ""
-                    showingNewSupplierAlert = true
-                }
-            } label: {
-                HStack {
-                    Text(model.selectedSupplier.displayName)
-                        .font(.body)
-                        .foregroundStyle(.inkPrimary)
-                    Spacer()
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.inkMuted)
-                }
-                .padding(.horizontal, 18)
-                .frame(minHeight: 56)
-                .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
-                .overlay {
-                    RoundedRectangle(cornerRadius: Radius.card)
-                        .strokeBorder(.borderInput, lineWidth: 1.5)
-                }
-            }
-            .accessibilityLabel("Tienda: \(model.selectedSupplier.displayName)")
-        }
+        StorePickerField(
+            selection: $model.selectedSupplier,
+            store: model.store,
+            onError: { model.errorMessage = $0 }
+        )
     }
 
     private var packageSizeField: some View {
@@ -387,11 +331,19 @@ struct BrandFormView: View {
     }
 
     private var priceField: some View {
-        KitchenTextField(
-            label: "Precio (opcional)",
-            text: $model.priceText,
-            keyboard: .decimalPad
-        )
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            KitchenTextField(
+                label: "Precio",
+                text: $model.priceText,
+                keyboard: .decimalPad
+            )
+            if model.isPriceFormatInvalid {
+                Text("Escribe el precio que pagaste, por ejemplo 32.50")
+                    .font(.footnote)
+                    .foregroundStyle(.warningText)
+                    .padding(.horizontal, Spacing.xs)
+            }
+        }
     }
 }
 
