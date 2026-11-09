@@ -19,6 +19,12 @@ final class OrderDetailModel {
         try? store.data.order(id: orderId)
     }
 
+    /// Tandas necesarias y sobrante calculados para este pedido.
+    var batchNeeds: [BatchNeed] {
+        guard let order else { return [] }
+        return store.data.batchNeeds(for: order)
+    }
+
     /// Cambia el estado del pedido.
     func updateStatus(_ newStatus: OrderStatus) {
         isWorking = true

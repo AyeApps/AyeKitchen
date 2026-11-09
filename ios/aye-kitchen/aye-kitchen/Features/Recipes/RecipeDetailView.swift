@@ -18,6 +18,7 @@ struct RecipeDetailView: View {
     @State private var showingCreateVersionSheet = false
     @State private var showingRenameVersionSheet = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingSalePriceSheet = false
     @State private var selectedLineForBrandChoice: RecipeCostLine? = nil
 
     private let marginOptions = [20, 30, 40, 60]
@@ -93,6 +94,11 @@ struct RecipeDetailView: View {
                         model.openIngredientLine(line)
                     }
                 )
+            }
+            .sheet(isPresented: $showingSalePriceSheet) {
+                if let recipe = model.recipe, let cost = model.cost {
+                    SalePriceSheet(recipe: recipe, cost: cost, store: store)
+                }
             }
             .alert(
                 "¿Borrar la versión \(model.selectedVersionName ?? "")? La receta no cambia.",
@@ -318,6 +324,12 @@ struct RecipeDetailView: View {
                 .frame(height: 1)
 
             marginControlSection(cost: cost)
+
+            Rectangle()
+                .fill(.dividerLine)
+                .frame(height: 1)
+
+            customPriceSection(recipe: recipe, cost: cost)
         }
         .softCard()
     }
@@ -343,7 +355,7 @@ struct RecipeDetailView: View {
     }
 
     private func suggestedColumn(cost: RecipeCost) -> some View {
-        let profit = cost.suggestedPriceCents - cost.batchCostCents
+        let profit = suggestedProfit(cost: cost)
 
         return VStack(alignment: .leading, spacing: Spacing.xs) {
             Text("Te sugerimos cobrar")
@@ -355,10 +367,145 @@ struct RecipeDetailView: View {
                 .monospacedDigit()
                 .foregroundStyle(.tint)
 
-            Text("Ganas \(Money.format(cents: profit))")
+            let profitText: String = {
+                if let pct = profit.percent {
+                    return "Ganas \(Money.format(cents: profit.profitCents)) (\(pct) %)"
+                } else {
+                    return "Ganas \(Money.format(cents: profit.profitCents))"
+                }
+            }()
+
+            Text(profitText)
                 .font(.subheadline)
                 .foregroundStyle(.inkMuted)
                 .monospacedDigit()
+        }
+    }
+
+    // MARK: - Bloque "Tu precio"
+
+    @ViewBuilder
+    private func customPriceSection(recipe: Recipe, cost: RecipeCost) -> some View {
+        if let customPrice = salePrice(of: recipe, cost: cost) {
+            customPriceConfiguredView(recipe: recipe, customPrice: customPrice)
+        } else {
+            customPriceEmptyView
+        }
+    }
+
+    private var customPriceEmptyView: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Button("Poner mi precio") {
+                showingSalePriceSheet = true
+            }
+            .buttonStyle(.kitchenSecondary)
+
+            Text("¿Ya cobras otra cosa? Ponla y te decimos cuánto ganas.")
+                .font(.subheadline)
+                .foregroundStyle(.inkMuted)
+        }
+    }
+
+    private func customPriceConfiguredView(recipe: Recipe, customPrice: RecipeSalePrice) -> some View {
+        let isBatch = customPrice.soldBy == .batch
+        let activeProfit = isBatch ? customPrice.batch : customPrice.perUnit
+        let activeUnitLabel = isBatch ? "por tanda" : unitPhrase(for: recipe.yieldUnit)
+
+        let yieldDecimal = Qty.decimal(recipe.yieldQuantity) ?? 1
+        let yieldsMultiple = yieldDecimal > 1
+
+        let otherProfit = isBatch ? customPrice.perUnit : customPrice.batch
+        let otherUnitLabel = isBatch ? unitPhrase(for: recipe.yieldUnit) : "por tanda"
+
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    customPriceInfo(
+                        activeProfit: activeProfit,
+                        activeUnitLabel: activeUnitLabel,
+                        yieldsMultiple: yieldsMultiple,
+                        otherProfit: otherProfit,
+                        otherUnitLabel: otherUnitLabel
+                    )
+
+                    Button("Cambiar") {
+                        showingSalePriceSheet = true
+                    }
+                    .buttonStyle(.kitchenSecondary)
+                }
+            } else {
+                HStack(alignment: .top) {
+                    customPriceInfo(
+                        activeProfit: activeProfit,
+                        activeUnitLabel: activeUnitLabel,
+                        yieldsMultiple: yieldsMultiple,
+                        otherProfit: otherProfit,
+                        otherUnitLabel: otherUnitLabel
+                    )
+
+                    Spacer()
+
+                    Button("Cambiar") {
+                        showingSalePriceSheet = true
+                    }
+                    .buttonStyle(.kitchenSecondary)
+                }
+            }
+        }
+    }
+
+    private func customPriceInfo(
+        activeProfit: Profit,
+        activeUnitLabel: String,
+        yieldsMultiple: Bool,
+        otherProfit: Profit,
+        otherUnitLabel: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            Text("Tu precio \(Money.format(cents: activeProfit.priceCents)) \(activeUnitLabel)")
+                .font(.body.weight(.bold))
+                .foregroundStyle(.inkPrimary)
+                .monospacedDigit()
+
+            if activeProfit.profitCents < 0 {
+                Text("Con este precio pierdes \(Money.format(cents: abs(activeProfit.profitCents)))")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.warningText)
+                    .monospacedDigit()
+            } else if let pct = activeProfit.percent {
+                Text("Ganas \(Money.format(cents: activeProfit.profitCents)) (\(pct) %)")
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
+                    .monospacedDigit()
+            } else {
+                Text("Ganas \(Money.format(cents: activeProfit.profitCents))")
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
+                    .monospacedDigit()
+            }
+
+            if yieldsMultiple {
+                let otherGainText: String = {
+                    if otherProfit.profitCents < 0 {
+                        return "pierdes \(Money.format(cents: abs(otherProfit.profitCents)))"
+                    } else {
+                        return "ganas \(Money.format(cents: otherProfit.profitCents))"
+                    }
+                }()
+
+                Text("\(Money.format(cents: otherProfit.priceCents)) \(otherUnitLabel) · \(otherGainText)")
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    private func unitPhrase(for unit: BaseUnit) -> String {
+        switch unit {
+        case .pz: "por pieza"
+        case .g: "por g"
+        case .ml: "por ml"
         }
     }
 
@@ -697,25 +844,59 @@ struct ExtraCostRow: View {
 }
 
 #if DEBUG
-#Preview("Pastel de vainilla — Claro") {
-    let previewStore = LocalStore.preview()
-    NavigationStack {
-        RecipeDetailView(recipeId: "rec-pastel", store: previewStore)
+private enum PreviewRecipeScenario {
+    case withoutCustomPrice
+    case withCustomPrice
+    case withLoss
+}
+
+private func makeRecipePreviewStore(scenario: PreviewRecipeScenario) -> (String, LocalStore) {
+    var data = KitchenData.previewSample
+
+    switch scenario {
+    case .withoutCustomPrice:
+        return ("rec-pastel", LocalStore.preview(data))
+    case .withCustomPrice:
+        if let idx = data.recipes.firstIndex(where: { $0.id == "rec-galletas" }) {
+            data.recipes[idx].salePriceCents = 1500
+            data.recipes[idx].salePriceSoldBy = .batch
+        }
+        return ("rec-galletas", LocalStore.preview(data))
+    case .withLoss:
+        if let idx = data.recipes.firstIndex(where: { $0.id == "rec-pastel" }) {
+            data.recipes[idx].salePriceCents = 5000
+            data.recipes[idx].salePriceSoldBy = .batch
+        }
+        return ("rec-pastel", LocalStore.preview(data))
     }
 }
 
-#Preview("Pastel de vainilla — Letra AX3") {
-    let previewStore = LocalStore.preview()
+#Preview("Receta sin precio propio") {
+    let (recipeId, store) = makeRecipePreviewStore(scenario: .withoutCustomPrice)
     NavigationStack {
-        RecipeDetailView(recipeId: "rec-pastel", store: previewStore)
+        RecipeDetailView(recipeId: recipeId, store: store)
+    }
+}
+
+#Preview("Receta con precio propio") {
+    let (recipeId, store) = makeRecipePreviewStore(scenario: .withCustomPrice)
+    NavigationStack {
+        RecipeDetailView(recipeId: recipeId, store: store)
+    }
+}
+
+#Preview("Receta con pérdida") {
+    let (recipeId, store) = makeRecipePreviewStore(scenario: .withLoss)
+    NavigationStack {
+        RecipeDetailView(recipeId: recipeId, store: store)
+    }
+}
+
+#Preview("Receta con precio propio AX3") {
+    let (recipeId, store) = makeRecipePreviewStore(scenario: .withCustomPrice)
+    NavigationStack {
+        RecipeDetailView(recipeId: recipeId, store: store)
     }
     .dynamicTypeSize(.accessibility3)
-}
-
-#Preview("Galletas con chispas") {
-    let previewStore = LocalStore.preview()
-    NavigationStack {
-        RecipeDetailView(recipeId: "rec-galletas", store: previewStore)
-    }
 }
 #endif

@@ -5,6 +5,7 @@ import KitchenDomain
 struct OrderDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .body) private var iconBoxSize: CGFloat = 40
 
     @State private var model: OrderDetailModel
     @State private var showingEditSheet = false
@@ -47,6 +48,7 @@ struct OrderDetailView: View {
                     VStack(alignment: .leading, spacing: Spacing.section) {
                         headerSection(order: order)
                         productsSection(order: order)
+                        batchNeedsSection(order: order)
                         financialSummaryCard(order: order)
                         paymentsSection(order: order)
                         notesSection(order: order)
@@ -290,6 +292,145 @@ struct OrderDetailView: View {
         }
     }
 
+    // MARK: - Para este pedido
+
+    @ViewBuilder
+    private func batchNeedsSection(order: Order) -> some View {
+        let needs = model.batchNeeds
+        if !needs.isEmpty {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                Text("Para este pedido")
+                    .sectionTitleStyle()
+
+                RowGroup {
+                    ForEach(needs) { need in
+                        batchNeedRow(need: need)
+                    }
+                }
+            }
+        }
+    }
+
+    private func batchNeedRow(need: BatchNeed) -> some View {
+        let leftoverDec = Qty.decimal(need.leftoverUnits) ?? 0
+        let isZeroLeftover = (leftoverDec == 0)
+
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    HStack(spacing: Spacing.sm) {
+                        batchNeedIcon
+                        Text(need.recipeName)
+                            .font(.body.weight(.bold))
+                            .foregroundStyle(.inkPrimary)
+                    }
+
+                    if isZeroLeftover {
+                        let batchWord = need.wholeBatches == 1 ? "tanda" : "tandas"
+                        Text("Haz \(need.wholeBatches) \(batchWord)")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.inkPrimary)
+                            .monospacedDigit()
+                    } else {
+                        let exactFormatted = Quantity.format(need.exactBatches)
+                        let batchWord = (need.exactBatches == "1" || need.exactBatches == "1.0") ? "tanda" : "tandas"
+                        Text("Necesitas \(exactFormatted) \(batchWord)")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.inkPrimary)
+                            .monospacedDigit()
+
+                        Text(leftoverDescription(for: need))
+                            .font(.subheadline)
+                            .foregroundStyle(.inkMuted)
+                            .monospacedDigit()
+                    }
+                }
+            } else {
+                HStack(alignment: .center, spacing: Spacing.md) {
+                    batchNeedIcon
+
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        if isZeroLeftover {
+                            let batchWord = need.wholeBatches == 1 ? "tanda" : "tandas"
+                            Text("Haz \(need.wholeBatches) \(batchWord) de \(need.recipeName)")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.inkPrimary)
+                                .monospacedDigit()
+                        } else {
+                            let exactFormatted = Quantity.format(need.exactBatches)
+                            let batchWord = (need.exactBatches == "1" || need.exactBatches == "1.0") ? "tanda" : "tandas"
+                            Text("Necesitas \(exactFormatted) \(batchWord) de \(need.recipeName)")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.inkPrimary)
+                                .monospacedDigit()
+
+                            Text(leftoverDescription(for: need))
+                                .font(.subheadline)
+                                .foregroundStyle(.inkMuted)
+                                .monospacedDigit()
+                        }
+                    }
+                }
+            }
+        }
+        .padding(Spacing.lg)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(batchNeedAccessibilityLabel(for: need, isZeroLeftover: isZeroLeftover))
+    }
+
+    private var batchNeedIcon: some View {
+        Image(systemName: "fork.knife")
+            .font(.body.weight(.bold))
+            .foregroundStyle(.accentTextDeep)
+            .frame(width: iconBoxSize, height: iconBoxSize)
+            .background(Color.accentSoftStrong, in: .rect(cornerRadius: Radius.control))
+            .accessibilityHidden(true)
+    }
+
+    private func leftoverDescription(for need: BatchNeed) -> String {
+        let unitWord = leftoverUnitWord(for: need)
+        let formattedLeftover = Quantity.format(need.leftoverUnits)
+        let valueText: String
+        if let cents = need.leftoverValueCents {
+            valueText = " (unos \(Money.format(cents: cents)))"
+        } else {
+            valueText = ""
+        }
+        return "Si haces \(need.wholeBatches), te sobran \(formattedLeftover) \(unitWord) para vender\(valueText)"
+    }
+
+    private func leftoverUnitWord(for need: BatchNeed) -> String {
+        let clean = need.leftoverUnits.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ",", with: ".")
+        let isSingular = (clean == "1" || clean == "1.0" || clean == "1.00" || clean == "1.000")
+        switch need.yieldUnit {
+        case .pz:
+            return isSingular ? "pieza" : "piezas"
+        case .g:
+            return "g"
+        case .ml:
+            return "ml"
+        }
+    }
+
+    private func batchNeedAccessibilityLabel(for need: BatchNeed, isZeroLeftover: Bool) -> String {
+        if isZeroLeftover {
+            let batchWord = need.wholeBatches == 1 ? "tanda" : "tandas"
+            return "Haz \(need.wholeBatches) \(batchWord) de \(need.recipeName)"
+        } else {
+            let exactFormatted = Quantity.format(need.exactBatches)
+            let batchWord = (need.exactBatches == "1" || need.exactBatches == "1.0") ? "tanda" : "tandas"
+            let unitWord = leftoverUnitWord(for: need)
+            let formattedLeftover = Quantity.format(need.leftoverUnits)
+            let valueText: String
+            if let cents = need.leftoverValueCents {
+                valueText = ", unos \(Money.format(cents: cents))"
+            } else {
+                valueText = ""
+            }
+            return "Necesitas \(exactFormatted) \(batchWord) de \(need.recipeName). Si haces \(need.wholeBatches), te sobran \(formattedLeftover) \(unitWord) para vender\(valueText)"
+        }
+    }
+
     // MARK: - Tarjeta de balance y costo
 
     private func financialSummaryCard(order: Order) -> some View {
@@ -304,6 +445,8 @@ struct OrderDetailView: View {
                         Text(Money.format(cents: totals.totalCents))
                             .font(.title2.weight(.heavy))
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .foregroundStyle(.inkPrimary)
                     }
 
@@ -314,6 +457,8 @@ struct OrderDetailView: View {
                         Text(Money.format(cents: totals.paidCents))
                             .font(.title3.weight(.bold))
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .foregroundStyle(.inkPrimary)
                     }
 
@@ -324,43 +469,95 @@ struct OrderDetailView: View {
                         Text(Money.format(cents: totals.balanceCents))
                             .font(.title2.weight(.heavy))
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                             .foregroundStyle(totals.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
                     }
                 }
             } else {
-                HStack(alignment: .top, spacing: Spacing.md) {
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("Total")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: totals.totalCents))
-                            .font(.title3.weight(.heavy))
-                            .monospacedDigit()
-                            .foregroundStyle(.inkPrimary)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: Spacing.md) {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Total")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.inkMuted)
+                            Text(Money.format(cents: totals.totalCents))
+                                .font(.title3.weight(.heavy))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(.inkPrimary)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Ya te pagaron")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.inkMuted)
+                            Text(Money.format(cents: totals.paidCents))
+                                .font(.body.weight(.bold))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(.inkPrimary)
+                        }
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: Spacing.xs) {
+                            Text("Te falta cobrar")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.inkMuted)
+                            Text(Money.format(cents: totals.balanceCents))
+                                .font(.title3.weight(.heavy))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(totals.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
+                        }
                     }
 
-                    Spacer()
+                    VStack(alignment: .leading, spacing: Spacing.md) {
+                        VStack(alignment: .leading, spacing: Spacing.xs) {
+                            Text("Total")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.inkMuted)
+                            Text(Money.format(cents: totals.totalCents))
+                                .font(.title2.weight(.heavy))
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .foregroundStyle(.inkPrimary)
+                        }
 
-                    VStack(alignment: .leading, spacing: Spacing.xs) {
-                        Text("Ya te pagaron")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: totals.paidCents))
-                            .font(.body.weight(.bold))
-                            .monospacedDigit()
-                            .foregroundStyle(.inkPrimary)
-                    }
+                        HStack(alignment: .top, spacing: Spacing.md) {
+                            VStack(alignment: .leading, spacing: Spacing.xs) {
+                                Text("Ya te pagaron")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.inkMuted)
+                                Text(Money.format(cents: totals.paidCents))
+                                    .font(.body.weight(.bold))
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .foregroundStyle(.inkPrimary)
+                            }
 
-                    Spacer()
+                            Spacer()
 
-                    VStack(alignment: .trailing, spacing: Spacing.xs) {
-                        Text("Te falta cobrar")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.inkMuted)
-                        Text(Money.format(cents: totals.balanceCents))
-                            .font(.title3.weight(.heavy))
-                            .monospacedDigit()
-                            .foregroundStyle(totals.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
+                            VStack(alignment: .trailing, spacing: Spacing.xs) {
+                                Text("Te falta cobrar")
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.inkMuted)
+                                Text(Money.format(cents: totals.balanceCents))
+                                    .font(.title3.weight(.heavy))
+                                    .monospacedDigit()
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.8)
+                                    .foregroundStyle(totals.balanceCents > 0 ? Color.accentColor : Color.inkPrimary)
+                            }
+                        }
                     }
                 }
             }
@@ -369,9 +566,22 @@ struct OrderDetailView: View {
                 .fill(.dividerLine)
                 .frame(height: 1)
 
-            Text("Te cuesta \(Money.format(cents: totals.costCents)) · Ganas \(Money.format(cents: totals.profitCents))")
-                .font(.subheadline)
-                .foregroundStyle(.inkMuted)
+            if totals.profitCents < 0 {
+                Text("Te cuesta \(Money.format(cents: totals.costCents)) · Pierdes \(Money.format(cents: abs(totals.profitCents)))")
+                    .font(.subheadline)
+                    .foregroundStyle(.warningText)
+                    .monospacedDigit()
+            } else if let pct = totals.profitPercent {
+                Text("Te cuesta \(Money.format(cents: totals.costCents)) · Ganas \(Money.format(cents: totals.profitCents)) (\(pct) %)")
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
+                    .monospacedDigit()
+            } else {
+                Text("Te cuesta \(Money.format(cents: totals.costCents)) · Ganas \(Money.format(cents: totals.profitCents))")
+                    .font(.subheadline)
+                    .foregroundStyle(.inkMuted)
+                    .monospacedDigit()
+            }
         }
         .softCard()
     }
@@ -476,27 +686,124 @@ struct OrderDetailView: View {
 // MARK: - Previews
 
 #if DEBUG
+private enum PreviewOrderScenario {
+    case onePointFiveBatches
+    case exactBatches
+    case loss
+}
+
+private func makeOrderPreviewStore(scenario: PreviewOrderScenario) -> LocalStore {
+    var data = KitchenData.previewSample
+
+    switch scenario {
+    case .onePointFiveBatches:
+        let recipe10 = Recipe(
+            id: "rec-preview-10",
+            name: "Galletas de avena",
+            items: [RecipeItem(kind: .ingredient, refId: "ing-harina", quantity: "200")],
+            yieldQuantity: "10",
+            yieldUnit: .pz,
+            servings: 10,
+            salePriceCents: 1500,
+            salePriceSoldBy: .unit,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        let order15 = Order(
+            id: "ord-preview-1-5",
+            customerId: "cus-ana",
+            customerName: "Ana López",
+            deliveryAt: Date().addingTimeInterval(86400),
+            items: [
+                OrderItem(
+                    recipeId: recipe10.id,
+                    recipeName: recipe10.name,
+                    soldBy: .unit,
+                    unitLabel: .pz,
+                    quantity: "15",
+                    unitPriceCents: 1500,
+                    unitCostCentsSnapshot: 990
+                )
+            ],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        data.recipes.append(recipe10)
+        data.orders.append(order15)
+
+    case .exactBatches:
+        let order18 = Order(
+            id: "ord-preview-18",
+            customerId: "cus-ana",
+            customerName: "Ana López",
+            deliveryAt: Date().addingTimeInterval(86400),
+            items: [
+                OrderItem(
+                    recipeId: "rec-pastel",
+                    recipeName: "Pastel de vainilla",
+                    soldBy: .batch,
+                    quantity: "18",
+                    unitPriceCents: 16618,
+                    unitCostCentsSnapshot: 11870
+                )
+            ],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        data.orders.append(order18)
+
+    case .loss:
+        let orderLoss = Order(
+            id: "ord-preview-loss",
+            customerId: "cus-ana",
+            customerName: "Ana López",
+            deliveryAt: Date().addingTimeInterval(86400),
+            items: [
+                OrderItem(
+                    recipeId: "rec-pastel",
+                    recipeName: "Pastel de vainilla",
+                    soldBy: .batch,
+                    quantity: "1",
+                    unitPriceCents: 5000,
+                    unitCostCentsSnapshot: 11870
+                )
+            ],
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        data.orders.append(orderLoss)
+    }
+
+    return LocalStore.preview(data)
+}
+
+#Preview("Pedido con 1.5 tandas") {
+    NavigationStack {
+        OrderDetailView(orderId: "ord-preview-1-5", store: makeOrderPreviewStore(scenario: .onePointFiveBatches))
+    }
+}
+
+#Preview("Pedido con tandas exactas") {
+    NavigationStack {
+        OrderDetailView(orderId: "ord-preview-18", store: makeOrderPreviewStore(scenario: .exactBatches))
+    }
+}
+
+#Preview("Pedido con pérdida") {
+    NavigationStack {
+        OrderDetailView(orderId: "ord-preview-loss", store: makeOrderPreviewStore(scenario: .loss))
+    }
+}
+
 #Preview("Detalle con pago parcial — ord-1") {
     NavigationStack {
         OrderDetailView(orderId: "ord-1", store: .preview())
     }
 }
 
-#Preview("Detalle por pieza — ord-2") {
+#Preview("Detalle AX3 (1.5 tandas)") {
     NavigationStack {
-        OrderDetailView(orderId: "ord-2", store: .preview())
-    }
-}
-
-#Preview("Detalle entregado — ord-3") {
-    NavigationStack {
-        OrderDetailView(orderId: "ord-3", store: .preview())
-    }
-}
-
-#Preview("Detalle AX3") {
-    NavigationStack {
-        OrderDetailView(orderId: "ord-1", store: .preview())
+        OrderDetailView(orderId: "ord-preview-1-5", store: makeOrderPreviewStore(scenario: .onePointFiveBatches))
     }
     .dynamicTypeSize(.accessibility3)
 }

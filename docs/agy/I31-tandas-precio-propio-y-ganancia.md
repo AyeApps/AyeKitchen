@@ -8,7 +8,7 @@ Bloque I31. Rama `local-first`. Va **después de K5 y de I30** (usa lo de K5 y t
 
 **Alcance, solo dentro de `ios/aye-kitchen/aye-kitchen/Features/`:**
 - `Orders/OrderDetailView.swift` (y `OrderDetailModel.swift` si hace falta)
-- `Orders/OrderFormModel.swift` (solo el precio inicial de una línea)
+- `Orders/OrderFormModel.swift` (solo el precio inicial de una línea) y `Orders/OrderFormView.swift` (solo el rótulo "Tu precio"/"Sugerido" de ese precio)
 - `Recipes/RecipeDetailView.swift` (y `RecipeDetailModel.swift`)
 - `Recipes/SalePriceSheet.swift` (nuevo)
 

@@ -15,6 +15,7 @@ struct DraftOrderItem: Identifiable, Hashable {
     var unitPriceText: String
     var suggestedPriceBatchCents: Int?
     var suggestedPriceUnitCents: Int?
+    var hasCustomPrice: Bool
     var costCalculationFailed: Bool
 
     init(
@@ -28,6 +29,7 @@ struct DraftOrderItem: Identifiable, Hashable {
         unitPriceText: String = "",
         suggestedPriceBatchCents: Int? = nil,
         suggestedPriceUnitCents: Int? = nil,
+        hasCustomPrice: Bool = false,
         costCalculationFailed: Bool = false
     ) {
         self.id = id
@@ -40,6 +42,7 @@ struct DraftOrderItem: Identifiable, Hashable {
         self.unitPriceText = unitPriceText
         self.suggestedPriceBatchCents = suggestedPriceBatchCents
         self.suggestedPriceUnitCents = suggestedPriceUnitCents
+        self.hasCustomPrice = hasCustomPrice
         self.costCalculationFailed = costCalculationFailed
     }
 
@@ -109,6 +112,16 @@ struct DraftOrderItem: Identifiable, Hashable {
             return suggestedPriceUnitCents
         case .batch:
             return suggestedPriceBatchCents
+        }
+    }
+
+    /// Texto de ayuda debajo del campo de precio ("Tu precio $15.00" o "Te sugerimos cobrar $15.00").
+    var priceHelperText: String? {
+        guard let price = currentSuggestedPriceCents else { return nil }
+        if hasCustomPrice {
+            return "Tu precio \(Money.format(cents: price))"
+        } else {
+            return "Te sugerimos cobrar \(Money.format(cents: price))"
         }
     }
 
@@ -264,12 +277,14 @@ final class OrderFormModel {
                     let yieldDec = rec.flatMap { Decimal(string: $0.yieldQuantity, locale: Locale(identifier: "en_US_POSIX")) }
                     let yieldUnit = rec?.yieldUnit ?? (item.unitLabel ?? .pz)
 
-                    var batchCost: Int? = nil
-                    var unitCost: Int? = nil
+                    var batchPrice: Int? = nil
+                    var unitPrice: Int? = nil
+                    var hasCustomPrice = false
                     if let rec {
                         if let cost = try? costing.calculateRecipeCost(recipe: rec, version: nil, now: Date()) {
-                            batchCost = cost.suggestedPriceCents
-                            unitCost = cost.suggestedPricePerYieldUnitCents
+                            hasCustomPrice = (rec.salePriceCents != nil)
+                            batchPrice = store.data.defaultLinePriceCents(recipeId: rec.id, soldBy: .batch, cost: cost)
+                            unitPrice = store.data.defaultLinePriceCents(recipeId: rec.id, soldBy: .unit, cost: cost)
                         }
                     }
 
@@ -281,8 +296,9 @@ final class OrderFormModel {
                         yieldUnit: yieldUnit,
                         quantityText: item.quantity,
                         unitPriceText: CurrencyMath.formatForInput(cents: item.unitPriceCents),
-                        suggestedPriceBatchCents: batchCost,
-                        suggestedPriceUnitCents: unitCost,
+                        suggestedPriceBatchCents: batchPrice,
+                        suggestedPriceUnitCents: unitPrice,
+                        hasCustomPrice: hasCustomPrice,
                         costCalculationFailed: false
                     )
                 }
@@ -317,7 +333,11 @@ final class OrderFormModel {
         let costing = store.data.costingIndex()
         let cost = try? costing.calculateRecipeCost(recipe: recipe, version: nil, now: Date())
 
-        let initialPriceCents = startsAsUnit ? cost?.suggestedPricePerYieldUnitCents : cost?.suggestedPriceCents
+        let hasCustomPrice = (cost != nil && recipe.salePriceCents != nil)
+        let batchPrice = cost.map { store.data.defaultLinePriceCents(recipeId: recipe.id, soldBy: .batch, cost: $0) }
+        let unitPrice = cost.map { store.data.defaultLinePriceCents(recipeId: recipe.id, soldBy: .unit, cost: $0) }
+
+        let initialPriceCents = startsAsUnit ? unitPrice : batchPrice
         let initialPriceText: String
         if let cents = initialPriceCents {
             initialPriceText = CurrencyMath.formatForInput(cents: cents)
@@ -333,8 +353,9 @@ final class OrderFormModel {
             yieldUnit: recipe.yieldUnit,
             quantityText: initialQuantityText,
             unitPriceText: initialPriceText,
-            suggestedPriceBatchCents: cost?.suggestedPriceCents,
-            suggestedPriceUnitCents: cost?.suggestedPricePerYieldUnitCents,
+            suggestedPriceBatchCents: batchPrice,
+            suggestedPriceUnitCents: unitPrice,
+            hasCustomPrice: hasCustomPrice,
             costCalculationFailed: cost == nil
         )
         items.append(draft)

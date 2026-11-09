@@ -345,8 +345,8 @@ struct OrderFormView: View {
                     keyboard: .decimalPad
                 )
 
-                if let suggested = item.wrappedValue.currentSuggestedPriceCents {
-                    Text("Te sugerimos cobrar \(Money.format(cents: suggested))")
+                if let helper = item.wrappedValue.priceHelperText {
+                    Text(helper)
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tint)
                 } else if item.wrappedValue.costCalculationFailed {
