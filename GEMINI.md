@@ -25,6 +25,17 @@ Costeo de recetas, ingredientes, clientes y pedidos para negocios de comida de c
 10. **No dejes scripts auxiliares** (`fix_*.py`, `update_*.sh`…) en el repo; si usas uno, bórralo al terminar.
 11. **Alcance cerrado.** Si algo choca con el alcance (un test, el linter, un tipo), detente y pregunta; no modifiques código fuera del alcance del prompt para satisfacerlo.
 
+## Integridad de los datos (hay personas usando la app con datos reales)
+
+Esta sección manda sobre cualquier spec. Cada persona tiene sus datos en su teléfono (un archivo JSON con el formato de `docs/backup-format.md`) y en sus respaldos del servidor. Nada de lo que hagas puede perder, cambiar ni volver ilegible un dato ya guardado.
+
+1. **El formato solo crece.** En `ios/KitchenKit/Sources/KitchenDomain/Entities.swift`, `KitchenData.swift` y `docs/backup-format.md` solo se permite agregar un campo opcional (nulo por defecto) o una lista que, si falta, se lee vacía. Prohibido: renombrar, quitar o cambiar el tipo o el significado de un campo, agregar un campo obligatorio, cambiar `CodingKeys` o la estrategia de llaves o fechas, cambiar ids (`sys.*` incluidos) o subir `schema_version`. Si el bloque lo necesita, detente y pregunta.
+2. **Respaldos congelados.** Los archivos `ios/KitchenKit/Tests/KitchenDomainTests/Fixtures/backup_*.json` son copias del formato que tienen los usuarios. Nunca se editan ni se borran, y `FrozenBackupTests` debe seguir pasando. Si tu cambio la rompe, tu cambio está mal: detente y pregunta.
+3. **Escrituras solo por reglas.** Los datos se cambian solo con las reglas de KitchenKit dentro de `LocalStore.shared.mutate`. Una regla trabaja sobre una copia y, si falla, no deja nada a medias. Nada se borra físicamente (soft delete con `deletedAt`).
+4. **No tocar lo que el usuario no tocó.** Ninguna regla ni pantalla reescribe, recalcula o "limpia" registros guardados por su cuenta (por ejemplo, al abrir una pantalla o al cambiar una fórmula). Lo guardado del pasado se queda como está: los pedidos conservan su precio y su costo del momento; un cálculo nuevo aplica a lo que se guarde después. Si el spec pide cambiar datos existentes, detente y pregunta.
+5. **Pruebas viejas intactas.** No cambies una prueba existente para que pase. Toda prueba que agregues usa datos armados en la prueba, nunca datos reales.
+6. **Servidor y respaldos.** No toques `/backup` ni su almacenamiento, no borres ni limites respaldos, no escribas migraciones que borren o reescriban documentos, y nunca corras nada contra la base de producción ni con cuentas reales. Borrar datos o la cuenta solo ocurre con la confirmación explícita del usuario en la pantalla que ya existe.
+
 ## Reglas de iOS (`ios/aye-kitchen/`)
 
 Las reglas 1, 10 y 11 de arriba también aplican aquí. Antes de tocar una pantalla lee `DESIGN.md` y `PRODUCT.md`; la referencia visual es el lienzo aprobado (https://claude.ai/artifact/4Vuy4h8YH51rTsEiiVhwia).

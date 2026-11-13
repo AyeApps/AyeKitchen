@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "exported_at": "2026-11-13T18:00:00.000Z",
+  "device_id": "device-congelado",
+  "settings": {"name": "Cocina de prueba", "currency": "MXN", "timezone": "America/Mexico_City", "default_margin_percent": 40, "price_stale_days": 60},
+  "units": [
+    {"id": "u-bote", "name": "bote", "abbreviation": "bt", "base_unit": "pz", "factor_to_base": "1", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "u-vieja", "name": "cubeta", "abbreviation": "cb", "base_unit": "ml", "factor_to_base": "19000", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-02T10:00:00.000Z", "deleted_at": "2026-10-02T10:00:00.000Z"}
+  ],
+  "ingredients": [
+    {"id": "ing-leche", "name": "Leche entera", "base_unit": "ml", "group": "Lácteos", "notes": "La de Costco", "conversions": [{"unit_id": "sys.pz", "quantity_in_base": "900"}], "reference_ids": ["ref-1"], "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-05T10:00:00.000Z"},
+    {"id": "ing-harina", "name": "Harina de trigo", "base_unit": "g", "conversions": [{"unit_id": "sys.tz", "quantity_in_base": "125"}], "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "ing-huevo", "name": "Huevo", "base_unit": "pz", "conversions": [], "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "ing-borrado", "name": "Nuez", "base_unit": "g", "conversions": [], "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-03T10:00:00.000Z", "deleted_at": "2026-10-03T10:00:00.000Z"}
+  ],
+  "suppliers": [
+    {"id": "sup-costco", "name": "Costco", "notes": "Membresía", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "sup-walmart", "name": "Walmart", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"}
+  ],
+  "presentations": [
+    {"id": "pres-kirkland", "ingredient_id": "ing-leche", "brand": "Kirkland", "supplier_id": "sup-costco", "package_quantity": "21600", "pack_count": 24, "pack_item_quantity": "900", "barcode": "0096619", "reference_ids": ["ref-1"], "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "pres-lala", "ingredient_id": "ing-leche", "brand": "Lala", "supplier_id": "sup-walmart", "package_quantity": "1000", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "pres-selecta", "ingredient_id": "ing-harina", "brand": "Selecta", "package_quantity": "1000.5", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"},
+    {"id": "pres-sanjuan", "ingredient_id": "ing-huevo", "brand": "San Juan", "package_quantity": "30", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"}
+  ],
+  "price_records": [
+    {"id": "price-1", "presentation_id": "pres-kirkland", "price_cents": 38900, "recorded_at": "2026-11-01T10:00:00.000Z", "note": "Oferta", "created_at": "2026-11-01T10:00:00.000Z", "updated_at": "2026-11-01T10:00:00.000Z"},
+    {"id": "price-2", "presentation_id": "pres-lala", "price_cents": 2800, "recorded_at": "2026-08-01T10:00:00.000Z", "created_at": "2026-08-01T10:00:00.000Z", "updated_at": "2026-08-01T10:00:00.000Z"},
+    {"id": "price-3", "presentation_id": "pres-selecta", "price_cents": 2350, "recorded_at": "2026-10-20T10:00:00.000Z", "created_at": "2026-10-20T10:00:00.000Z", "updated_at": "2026-10-20T10:00:00.000Z"},
+    {"id": "price-4", "presentation_id": "pres-sanjuan", "price_cents": 8900, "recorded_at": "2026-10-20T10:00:00.000Z", "created_at": "2026-10-20T10:00:00.000Z", "updated_at": "2026-10-20T10:00:00.000Z"}
+  ],
+  "recipes": [
+    {"id": "rec-pastel", "name": "Pastel de tres leches", "description": "Para 12", "items": [
+        {"kind": "ingredient", "ref_id": "ing-leche", "quantity": "1.5", "unit_id": "sys.l", "pinned_presentation_id": "pres-kirkland"},
+        {"kind": "ingredient", "ref_id": "ing-harina", "quantity": "2", "unit_id": "sys.tz"},
+        {"kind": "ingredient", "ref_id": "ing-huevo", "quantity": "6"}
+      ], "extra_costs": [{"name": "Gas", "cost_cents": 1500}], "yield_quantity": "12", "yield_unit": "pz", "servings": 12, "margin_percent": 50, "sale_price_cents": 45000, "sale_price_sold_by": "batch", "reference_ids": ["ref-1"], "created_at": "2026-10-02T10:00:00.000Z", "updated_at": "2026-11-02T10:00:00.000Z"},
+    {"id": "rec-caja", "name": "Caja de 3 pasteles", "items": [{"kind": "recipe", "ref_id": "rec-pastel", "quantity": "3", "unit_id": "sys.pz"}], "extra_costs": [], "yield_quantity": "1", "yield_unit": "pz", "created_at": "2026-10-02T10:00:00.000Z", "updated_at": "2026-10-02T10:00:00.000Z"}
+  ],
+  "cost_versions": [
+    {"id": "cv-1", "recipe_id": "rec-pastel", "name": "Con Lala", "choices": [{"ingredient_id": "ing-leche", "presentation_id": "pres-lala"}], "created_at": "2026-10-03T10:00:00.000Z", "updated_at": "2026-10-03T10:00:00.000Z"}
+  ],
+  "customers": [
+    {"id": "cus-ana", "name": "Ana López", "phone": "5512345678", "notes": "Sin nuez", "created_at": "2026-10-04T10:00:00.000Z", "updated_at": "2026-10-04T10:00:00.000Z"}
+  ],
+  "orders": [
+    {"id": "ord-1", "customer_id": "cus-ana", "customer_name": "Ana López", "customer_phone": "5512345678", "delivery_at": "2026-11-20T18:30:00.000Z", "status": "en_proceso", "notes": "Entregar en la tarde", "reference_ids": ["ref-1"],
+     "items": [
+       {"recipe_id": "rec-pastel", "recipe_name": "Pastel de tres leches", "sold_by": "batch", "quantity": "1.5", "unit_price_cents": 45000, "unit_cost_cents_snapshot": 21075},
+       {"recipe_id": "rec-pastel", "recipe_name": "Pastel de tres leches", "sold_by": "unit", "unit_label": "pz", "quantity": "4", "unit_price_cents": 3750, "unit_cost_cents_snapshot": 1756}
+     ],
+     "payments": [{"id": "pay-1", "amount_cents": 20000, "paid_at": "2026-11-10T12:00:00.000Z", "method": "transferencia"}],
+     "created_at": "2026-11-10T12:00:00.000Z", "updated_at": "2026-11-10T12:00:00.000Z"}
+  ],
+  "expenses": [
+    {"id": "exp-1", "description": "Gas del mes", "amount_cents": 45000, "spent_at": "2026-11-01T10:00:00.000Z", "category": "Servicios", "supplier_id": "sup-walmart", "reference_ids": ["ref-1"], "created_at": "2026-11-01T10:00:00.000Z", "updated_at": "2026-11-01T10:00:00.000Z"}
+  ],
+  "references": [
+    {"id": "ref-1", "content_type": "image/jpeg", "size_bytes": 182344, "width": 1600, "height": 1200, "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", "created_at": "2026-10-01T10:00:00.000Z", "updated_at": "2026-10-01T10:00:00.000Z"}
+  ]
+}
