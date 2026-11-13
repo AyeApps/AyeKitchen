@@ -86,6 +86,9 @@ public struct CatalogPresentation: Sendable, Hashable, Identifiable {
     public var supplierId: String? { presentation.supplierId }
     public var supplierName: String?
     public var packageQuantity: String { presentation.packageQuantity }
+    /// Paquete grande (K6): piezas que trae y lo que trae cada una (en base_unit). Nulos = paquete simple.
+    public var packCount: Int? { presentation.packCount }
+    public var packItemQuantity: String? { presentation.packItemQuantity }
     public var baseUnit: BaseUnit
     public var barcode: String? { presentation.barcode }
     public var latestPriceCents: Int?

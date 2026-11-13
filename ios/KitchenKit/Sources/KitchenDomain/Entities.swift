@@ -102,6 +102,11 @@ public struct Presentation: Codable, Sendable, Hashable, Identifiable {
     public var supplierId: String?
     /// En la base_unit del ingrediente.
     public var packageQuantity: String
+    /// Paquete grande (K6, opcional): cuántas piezas trae (una reja de 24 botes = 24). Nulo = paquete simple.
+    /// Si existe, `packageQuantity` == `packCount` × `packItemQuantity` (lo calcula la regla).
+    public var packCount: Int?
+    /// Paquete grande (K6, opcional): lo que trae cada pieza, en la base_unit del ingrediente (un bote de 900 ml = "900").
+    public var packItemQuantity: String?
     public var barcode: String?
     /// Imágenes de referencia opcionales (ids de `KitchenData.references`), hasta 5. Nulo = ninguna.
     public var referenceIds: [String]?
@@ -110,12 +115,15 @@ public struct Presentation: Codable, Sendable, Hashable, Identifiable {
     public var deletedAt: Date?
 
     public init(id: String, ingredientId: String, brand: String, supplierId: String? = nil, packageQuantity: String,
+                packCount: Int? = nil, packItemQuantity: String? = nil,
                 barcode: String? = nil, referenceIds: [String]? = nil, createdAt: Date, updatedAt: Date, deletedAt: Date? = nil) {
         self.id = id
         self.ingredientId = ingredientId
         self.brand = brand
         self.supplierId = supplierId
         self.packageQuantity = packageQuantity
+        self.packCount = packCount
+        self.packItemQuantity = packItemQuantity
         self.barcode = barcode
         self.referenceIds = referenceIds
         self.createdAt = createdAt

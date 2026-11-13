@@ -496,10 +496,14 @@ extension KitchenData {
         supplierId: String? = nil,
         packageQuantity: String,
         packageUnitId: String? = nil,
+        packCount: Int? = nil,
+        packItemQuantity: String? = nil,
+        packItemUnitId: String? = nil,
         barcode: String? = nil,
         priceCents: Int? = nil,
         ctx: MutationContext = MutationContext()
     ) throws -> Presentation {
+        // ESQUELETO K6: packCount / packItemQuantity / packItemUnitId aún no se usan (los implementa K6).
         var copy = self
 
         guard let ingredient = copy.ingredients.first(where: { $0.id == ingredientId && $0.isActive }) else {
@@ -589,9 +593,13 @@ extension KitchenData {
         supplierId: String?? = nil,
         packageQuantity: String? = nil,
         packageUnitId: String? = nil,
+        packCount: Int?? = nil,
+        packItemQuantity: String? = nil,
+        packItemUnitId: String? = nil,
         barcode: String?? = nil,
         ctx: MutationContext = MutationContext()
     ) throws -> Presentation {
+        // ESQUELETO K6: packCount / packItemQuantity / packItemUnitId aún no se usan (los implementa K6).
         var copy = self
 
         guard let idx = copy.presentations.firstIndex(where: { $0.id == id && $0.isActive }) else {

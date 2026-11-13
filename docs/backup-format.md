@@ -25,6 +25,9 @@ El archivo local de la app y el respaldo son **el mismo documento JSON**. El có
   ingredients:    [{id, name, base_unit, group, notes, conversions: [{unit_id, quantity_in_base}], reference_ids, ...}],
   suppliers:      [{id, name, notes, ...}],
   presentations:  [{id, ingredient_id, brand, supplier_id, package_quantity, barcode, reference_ids, ...}],
+  # pack_count / pack_item_quantity (K6, opcionales): paquete grande, p. ej. una reja de 24 botes de 900 ml =
+  # pack_count 24, pack_item_quantity "900" (en la base_unit del ingrediente); package_quantity sigue siendo
+  # el total (24 × 900 = "21600") y es lo único que usa el costeo. Nulos = paquete simple.
   price_records:  [{id, presentation_id, price_cents, recorded_at, note, ...}],
   recipes:        [{id, name, description,
                     items: [{kind: "ingredient"|"recipe", ref_id, quantity, unit_id, pinned_presentation_id}],
