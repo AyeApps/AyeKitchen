@@ -270,9 +270,21 @@ extension KitchenData {
         guard let ingredient = ingredients.first(where: { $0.id == ingredientId && $0.isActive }) else {
             throw DomainError.notFound(detail: "Ingrediente no encontrado")
         }
+        return catalogPresentations(of: ingredient,
+                                    among: presentations.filter { $0.isActive && $0.ingredientId == ingredientId },
+                                    index: costingIndex(), now: now)
+    }
 
-        let index = costingIndex()
-        var presList = presentations.filter { $0.isActive && $0.ingredientId == ingredientId }
+    /// Lo mismo que `presentations(forIngredient:)` con el índice ya calculado y las marcas activas del
+    /// ingrediente ya separadas, para listas que lo piden por muchos ingredientes (`catalogList`).
+    func catalogPresentations(
+        of ingredient: Ingredient,
+        among activePresentations: [Presentation],
+        index: CostingIndex,
+        now: Date
+    ) -> [CatalogPresentation] {
+        let ingredientId = ingredient.id
+        var presList = activePresentations
 
         presList.sort { a, b in
             let priceA = index.latestPrice(for: a.id)

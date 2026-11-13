@@ -80,14 +80,223 @@ public struct CatalogListItem: Sendable, Hashable, Identifiable {
 
 extension KitchenData {
     /// Lista del catálogo con búsqueda, filtros y orden.
-    /// ESQUELETO K7: hoy solo busca por nombre (como `activeIngredients(q:)`); K7 implementa el resto.
     public func catalogList(_ filter: CatalogFilter, now: Date = Date()) -> [CatalogListItem] {
-        activeIngredients(q: filter.query, now: now).map { CatalogListItem(ingredient: $0) }
+        let base = activeIngredients(now: now)
+        let trimmedQuery = filter.query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGroup = filter.group?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var result: [CatalogListItem] = []
+        let index = costingIndex()
+        let presentationsByIngredient = Dictionary(grouping: presentations.filter { $0.isActive }, by: \.ingredientId)
+
+        for catIng in base {
+            // 5. Filtro por grupo (exacto, sin espacios a los lados)
+            if let targetGroup = trimmedGroup, !targetGroup.isEmpty {
+                let ingGroup = catIng.group?.trimmingCharacters(in: .whitespacesAndNewlines)
+                if ingGroup != targetGroup {
+                    continue
+                }
+            }
+
+            // Marcas activas del ingrediente en el orden de presentations(forIngredient:now:)
+            let allPres = catalogPresentations(of: catIng.ingredient,
+                                               among: presentationsByIngredient[catIng.id] ?? [],
+                                               index: index, now: now)
+
+            // 2. Marcas candidatas según tienda
+            var candidates: [CatalogPresentation]
+            switch filter.store {
+            case .all:
+                candidates = allPres
+            case .store(let storeId):
+                candidates = allPres.filter { $0.supplierId == storeId }
+            case .noStore:
+                candidates = allPres.filter { $0.supplierId == nil }
+            }
+
+            // Si el filtro es de tienda y no hay candidatas, el ingrediente no sale
+            if filter.store != .all && candidates.isEmpty {
+                continue
+            }
+
+            // 3. Búsqueda
+            var matchedOnlyByBrandOrStore = false
+            if !trimmedQuery.isEmpty {
+                let matchesName = catIng.name.localizedStandardContains(trimmedQuery)
+                let matchesGroup = catIng.group?.localizedStandardContains(trimmedQuery) == true
+
+                let matchingCandidates = candidates.filter { candidate in
+                    candidate.brand.localizedStandardContains(trimmedQuery) ||
+                    (candidate.supplierName?.localizedStandardContains(trimmedQuery) == true)
+                }
+                let matchesBrandOrStore = !matchingCandidates.isEmpty
+
+                if !matchesName && !matchesGroup && !matchesBrandOrStore {
+                    continue
+                }
+
+                if matchesName || matchesGroup {
+                    matchedOnlyByBrandOrStore = false
+                } else {
+                    matchedOnlyByBrandOrStore = true
+                    candidates = matchingCandidates
+                }
+            }
+
+            // 4. Marca mostrada (shownBrand)
+            let shownBrand: CatalogPresentation?
+            if candidates.isEmpty {
+                shownBrand = nil
+            } else if let current = candidates.first(where: { $0.isCurrent }) {
+                shownBrand = current
+            } else if let withPrice = candidates.first(where: { $0.latestPriceCents != nil }) {
+                shownBrand = withPrice
+            } else {
+                shownBrand = candidates.first
+            }
+
+            // 6. Filtro por precio (sobre la marca mostrada)
+            switch filter.price {
+            case .all:
+                break
+
+            case .withoutPrice:
+                if let shown = shownBrand, shown.latestPriceCents != nil {
+                    continue
+                }
+
+            case .stale:
+                guard let shown = shownBrand, shown.latestPriceCents != nil, shown.priceIsStale else {
+                    continue
+                }
+
+            case .range(let minCents, let maxCents):
+                guard let shown = shownBrand, let priceCents = shown.latestPriceCents else {
+                    continue
+                }
+                var lower = minCents
+                var upper = maxCents
+                if let min = lower, let max = upper, min > max {
+                    lower = max
+                    upper = min
+                }
+                if let lower = lower, priceCents < lower {
+                    continue
+                }
+                if let upper = upper, priceCents > upper {
+                    continue
+                }
+            }
+
+            // 7. highlightsBrand
+            let isPriceSort: Bool = {
+                switch filter.sort {
+                case .priceLowToHigh, .priceHighToLow, .oldestPrice:
+                    return true
+                case .group, .name:
+                    return false
+                }
+            }()
+
+            let highlightsBrand = (shownBrand != nil) && (
+                filter.store != .all ||
+                filter.price != .all ||
+                isPriceSort ||
+                matchedOnlyByBrandOrStore
+            )
+
+            result.append(
+                CatalogListItem(
+                    ingredient: catIng,
+                    shownBrand: shownBrand,
+                    highlightsBrand: highlightsBrand
+                )
+            )
+        }
+
+        // 8. Orden
+        sortCatalogListItems(&result, by: filter.sort)
+
+        return result
     }
 
     /// Grupos de los ingredientes activos, sin repetir, ordenados por nombre. Vacíos no cuentan.
-    /// ESQUELETO K7: hoy devuelve vacío; K7 lo implementa.
     public func catalogGroups() -> [String] {
-        []
+        var seen = Set<String>()
+        for ing in ingredients where ing.isActive {
+            guard let group = ing.group else { continue }
+            let trimmed = group.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                seen.insert(trimmed)
+            }
+        }
+        return seen.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+}
+
+// MARK: - Helpers privados de orden
+
+private func sortCatalogListItems(
+    _ items: inout [CatalogListItem],
+    by sort: CatalogSort
+) {
+    items.sort { a, b in
+        switch sort {
+        case .group, .name:
+            return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+
+        case .priceLowToHigh:
+            let priceA = a.shownBrand?.latestPriceCents
+            let priceB = b.shownBrand?.latestPriceCents
+            switch (priceA, priceB) {
+            case let (.some(pA), .some(pB)):
+                if pA != pB {
+                    return pA < pB
+                }
+                return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+            }
+
+        case .priceHighToLow:
+            let priceA = a.shownBrand?.latestPriceCents
+            let priceB = b.shownBrand?.latestPriceCents
+            switch (priceA, priceB) {
+            case let (.some(pA), .some(pB)):
+                if pA != pB {
+                    return pA > pB
+                }
+                return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+            }
+
+        case .oldestPrice:
+            let priceA = a.shownBrand?.latestPriceCents
+            let priceB = b.shownBrand?.latestPriceCents
+            switch (priceA, priceB) {
+            case (.some, .some):
+                let dateA = a.shownBrand?.latestPriceAt ?? .distantPast
+                let dateB = b.shownBrand?.latestPriceAt ?? .distantPast
+                if dateA != dateB {
+                    return dateA < dateB
+                }
+                return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+            case (.some, .none):
+                return true
+            case (.none, .some):
+                return false
+            case (.none, .none):
+                return a.ingredient.name.localizedStandardCompare(b.ingredient.name) == .orderedAscending
+            }
+        }
     }
 }
