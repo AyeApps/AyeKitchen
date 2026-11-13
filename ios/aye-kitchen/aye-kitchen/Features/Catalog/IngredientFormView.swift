@@ -40,12 +40,18 @@ struct FormConversion: Identifiable, Hashable, Sendable {
     // Campos para la sección "Primera marca" en modo .create
     var brandText: String = ""
     var selectedSupplier: SupplierSelection = .none
-    var packageQuantityText: String = ""
-    var selectedPackageUnit: KitchenUnit?
+    var packageSize: PackageSizeInput
     var priceText: String = ""
     var isPackageQuantityInvalid: Bool = false
     var isPriceInvalid: Bool = false
     var hasSavedIngredientWithoutPrice: Bool = false
+
+    private var currentConversions: [IngredientConversion] {
+        conversions.compactMap { conv -> IngredientConversion? in
+            guard let qty = Quantity.parse(conv.quantityText) else { return nil }
+            return IngredientConversion(unitId: conv.unitId, quantityInBase: qty)
+        }
+    }
 
     var isCreateMode: Bool {
         if case .create = mode { return true }
@@ -61,7 +67,7 @@ struct FormConversion: Identifiable, Hashable, Sendable {
             self.name = initialName
             self.baseUnit = .g
             self.selectedSupplier = .none
-            self.packageQuantityText = ""
+            self.packageSize = PackageSizeInput(store: store, baseUnit: .g, conversions: [], quantityText: "")
         case .edit(let ingredientId):
             if let ingredient = store.data.ingredients.first(where: { $0.id == ingredientId && $0.isActive }) {
                 self.name = ingredient.name
@@ -79,10 +85,12 @@ struct FormConversion: Identifiable, Hashable, Sendable {
                         isInvalid: false
                     )
                 }
+                let currentConvs = ingredient.conversions
+                self.packageSize = PackageSizeInput(store: store, baseUnit: ingredient.baseUnit, conversions: currentConvs)
+            } else {
+                self.packageSize = PackageSizeInput(store: store, baseUnit: .g, conversions: [])
             }
         }
-
-        selectDefaultPackageUnit()
     }
 
     /// Solo unidades con baseUnit distinta a la del ingrediente y que aún no estén agregadas.
@@ -91,11 +99,6 @@ struct FormConversion: Identifiable, Hashable, Sendable {
         return store.data.availableKitchenUnits().filter { unit in
             unit.baseUnit != baseUnit && !usedIds.contains(unit.id)
         }
-    }
-
-    /// Unidades disponibles para el tamaño del paquete (con la misma unidad base que el ingrediente).
-    var packageAvailableUnits: [KitchenUnit] {
-        store.data.availableKitchenUnits().filter { $0.baseUnit == baseUnit }
     }
 
     var baseUnitHelpText: String {
@@ -123,20 +126,11 @@ struct FormConversion: Identifiable, Hashable, Sendable {
         return name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    func selectDefaultPackageUnit() {
-        let matching = packageAvailableUnits
-        if let unit1 = matching.first(where: { $0.factorToBase == "1" }) {
-            selectedPackageUnit = unit1
-        } else {
-            selectedPackageUnit = matching.first
-        }
-    }
-
     func onBaseUnitChanged(to newBaseUnit: BaseUnit) {
         self.baseUnit = newBaseUnit
         let matchingIds = Set(store.data.availableKitchenUnits().filter { $0.baseUnit == newBaseUnit }.map(\.id))
         conversions.removeAll { matchingIds.contains($0.unitId) }
-        selectDefaultPackageUnit()
+        packageSize.updateBaseUnit(newBaseUnit, conversions: currentConversions)
     }
 
     func addConversion(for unit: KitchenUnit) {
@@ -150,10 +144,12 @@ struct FormConversion: Identifiable, Hashable, Sendable {
                 isInvalid: false
             )
         )
+        packageSize.updateConversions(currentConversions)
     }
 
     func removeConversion(id: String) {
         conversions.removeAll { $0.id == id }
+        packageSize.updateConversions(currentConversions)
     }
 
     func save(onIngredientCreated: ((Ingredient) -> Void)? = nil) -> Ingredient? {
@@ -179,21 +175,18 @@ struct FormConversion: Identifiable, Hashable, Sendable {
         }
 
         let trimmedBrand = brandText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedQty = packageQuantityText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasPackageInput = !packageSize.quantityText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !packageSize.packItemQuantityText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let trimmedPrice = priceText.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasSupplier = selectedSupplier.supplierId != nil
 
-        let hasAnyBrandInput = !trimmedBrand.isEmpty || !trimmedQty.isEmpty || !trimmedPrice.isEmpty || hasSupplier
+        let hasAnyBrandInput = !trimmedBrand.isEmpty || hasPackageInput || !trimmedPrice.isEmpty || hasSupplier
         let shouldCreatePresentation = isCreateMode && hasAnyBrandInput
         var presentationPriceCents: Int? = nil
-        var presentationPackageQuantity: String = ""
 
         if shouldCreatePresentation {
             let parsedCents = RecordPriceModel.parsePriceCents(trimmedPrice)
-            let parsedQty = Quantity.parse(trimmedQty)
-
             let priceValid = parsedCents != nil
-            let qtyValid = parsedQty != nil
+            let qtyValid = packageSize.isValid
 
             isPriceInvalid = !priceValid
             isPackageQuantityInvalid = !qtyValid
@@ -204,7 +197,6 @@ struct FormConversion: Identifiable, Hashable, Sendable {
             }
 
             presentationPriceCents = parsedCents
-            presentationPackageQuantity = parsedQty!
         } else {
             isPriceInvalid = false
             isPackageQuantityInvalid = false
@@ -239,17 +231,46 @@ struct FormConversion: Identifiable, Hashable, Sendable {
                     let trimmedBrand = brandText.trimmingCharacters(in: .whitespacesAndNewlines)
                     let finalBrand = trimmedBrand.isEmpty ? "Sin marca" : trimmedBrand
                     do {
-                        try store.mutate { data, ctx in
-                            try data.createPresentation(
-                                ingredientId: createdIngredient.id,
-                                brand: finalBrand,
-                                supplierId: selectedSupplier.supplierId,
-                                packageQuantity: presentationPackageQuantity,
-                                packageUnitId: selectedPackageUnit?.id,
-                                barcode: nil,
-                                priceCents: presentationPriceCents,
-                                ctx: ctx
-                            )
+                        if packageSize.isPiecesMode {
+                            guard let pieces = packageSize.packCount,
+                                  let packItemQty = Quantity.parse(packageSize.packItemQuantityText) else {
+                                return nil
+                            }
+                            try store.mutate { data, ctx in
+                                try data.createPresentation(
+                                    ingredientId: createdIngredient.id,
+                                    brand: finalBrand,
+                                    supplierId: selectedSupplier.supplierId,
+                                    packageQuantity: "\(pieces)",
+                                    packageUnitId: nil,
+                                    packCount: pieces,
+                                    packItemQuantity: packItemQty,
+                                    packItemUnitId: packageSize.selectedPackItemUnit?.id,
+                                    barcode: nil,
+                                    priceCents: presentationPriceCents,
+                                    ctx: ctx
+                                )
+                            }
+                        } else {
+                            guard let parsedQty = Quantity.parse(packageSize.quantityText),
+                                  let unit = packageSize.selectedUnit else {
+                                return nil
+                            }
+                            try store.mutate { data, ctx in
+                                try data.createPresentation(
+                                    ingredientId: createdIngredient.id,
+                                    brand: finalBrand,
+                                    supplierId: selectedSupplier.supplierId,
+                                    packageQuantity: parsedQty,
+                                    packageUnitId: unit.id,
+                                    packCount: nil,
+                                    packItemQuantity: nil,
+                                    packItemUnitId: nil,
+                                    barcode: nil,
+                                    priceCents: presentationPriceCents,
+                                    ctx: ctx
+                                )
+                            }
                         }
                         return createdIngredient
                     } catch {
@@ -370,7 +391,7 @@ struct IngredientFormView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
 
-                        packageSizeField
+                        PackageSizeField(input: model.packageSize, isInvalid: model.isPackageQuantityInvalid)
                             .listRowInsets(EdgeInsets(top: Spacing.xs, leading: Spacing.lg, bottom: Spacing.xs, trailing: Spacing.lg))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -699,73 +720,6 @@ struct IngredientFormView: View {
         )
     }
 
-    private var packageSizeField: some View {
-        VStack(alignment: .leading, spacing: Spacing.sm) {
-            Text("Tamaño del paquete")
-                .font(.subheadline.weight(.bold))
-                .foregroundStyle(.inkPrimary)
-
-            if dynamicTypeSize.isAccessibilitySize {
-                VStack(spacing: Spacing.sm) {
-                    quantityInput
-                    unitMenu
-                }
-            } else {
-                HStack(spacing: Spacing.sm) {
-                    quantityInput
-                    unitMenu
-                        .frame(minWidth: 100)
-                }
-            }
-        }
-    }
-
-    private var quantityInput: some View {
-        TextField("1", text: $model.packageQuantityText)
-            .keyboardType(.decimalPad)
-            .font(.body)
-            .foregroundStyle(.inkPrimary)
-            .padding(.horizontal, 18)
-            .frame(minHeight: 56)
-            .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.card)
-                    .strokeBorder(
-                        model.isPackageQuantityInvalid ? Color.warningText : Color.borderInput,
-                        lineWidth: model.isPackageQuantityInvalid ? 2 : 1.5
-                    )
-            }
-            .accessibilityLabel("Cantidad del paquete")
-    }
-
-    private var unitMenu: some View {
-        Menu {
-            ForEach(model.packageAvailableUnits) { unit in
-                Button("\(unit.name) (\(unit.abbreviation))") {
-                    model.selectedPackageUnit = unit
-                }
-            }
-        } label: {
-            HStack(spacing: Spacing.xs) {
-                Text(model.selectedPackageUnit?.abbreviation ?? "Unidad")
-                    .font(.body.weight(.bold))
-                    .foregroundStyle(.inkPrimary)
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.inkMuted)
-            }
-            .padding(.horizontal, 14)
-            .frame(minHeight: 56)
-            .background(.surfaceInput, in: .rect(cornerRadius: Radius.card))
-            .overlay {
-                RoundedRectangle(cornerRadius: Radius.card)
-                    .strokeBorder(Color.borderInput, lineWidth: 1.5)
-            }
-        }
-        .accessibilityLabel("Unidad: \(model.selectedPackageUnit?.abbreviation ?? "")")
-    }
-
     private var priceField: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             Text("Precio")
@@ -794,6 +748,25 @@ struct IngredientFormView: View {
                         model.isPriceInvalid ? Color.warningText : Color.borderInput,
                         lineWidth: model.isPriceInvalid ? 2 : 1.5
                     )
+            }
+
+            if model.packageSize.isPiecesMode {
+                VStack(alignment: .leading, spacing: Spacing.xs) {
+                    Text("Es el precio de todo el paquete.")
+                        .font(.footnote)
+                        .foregroundStyle(.inkMuted)
+
+                    let trimmedPrice = model.priceText.trimmingCharacters(in: .whitespaces)
+                    if let parsedCents = RecordPriceModel.parsePriceCents(trimmedPrice),
+                       let pieces = model.packageSize.packCount,
+                       pieces > 0 {
+                        let perItemCents = CostingMath.roundToCents(Decimal(parsedCents) / Decimal(pieces))
+                        Text("Sale a \(Money.format(cents: perItemCents)) cada pieza")
+                            .font(.footnote)
+                            .foregroundStyle(.inkMuted)
+                    }
+                }
+                .padding(.horizontal, Spacing.xs)
             }
         }
     }

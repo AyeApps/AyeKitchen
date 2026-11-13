@@ -107,7 +107,7 @@ struct BrandDetailView: View {
 
     private func packageStoreAndAgeText(for presentation: CatalogPresentation) -> String {
         var parts: [String] = []
-        let pkg = "por \(Quantity.format(presentation.packageQuantity)) \(presentation.baseUnit.rawValue)"
+        let pkg = "por \(packageText(for: presentation))"
         parts.append(pkg)
 
         if let store = presentation.supplierName, !store.isEmpty {
@@ -118,12 +118,16 @@ struct BrandDetailView: View {
             parts.append(age)
         }
 
+        if let pricePerPiece = presentation.pricePerPackItemCents {
+            parts.append("\(Money.format(cents: pricePerPiece)) cada pieza")
+        }
+
         return parts.joined(separator: " · ")
     }
 
     private func packageAndStoreText(for presentation: CatalogPresentation) -> String {
         var parts: [String] = []
-        let pkg = "por \(Quantity.format(presentation.packageQuantity)) \(presentation.baseUnit.rawValue)"
+        let pkg = "por \(packageText(for: presentation))"
         parts.append(pkg)
 
         if let store = presentation.supplierName, !store.isEmpty {

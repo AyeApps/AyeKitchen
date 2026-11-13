@@ -270,10 +270,9 @@ final class RecipeLineModel {
     func presentationSubtitle(_ p: CatalogPresentation) -> String {
         if let cents = p.latestPriceCents {
             let priceFormatted = Money.format(cents: cents)
-            let qtyFormatted = Quantity.format(p.packageQuantity)
-            let unitStr = p.baseUnit.rawValue
+            let pkgStr = packageText(for: p)
             let label = (p.id == pinnedPresentationId) ? "marca fijada" : "el precio más reciente"
-            return "\(priceFormatted) por \(qtyFormatted) \(unitStr) · \(label)"
+            return "\(priceFormatted) por \(pkgStr) · \(label)"
         }
         return "Sin precio registrado"
     }

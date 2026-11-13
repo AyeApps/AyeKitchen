@@ -244,13 +244,12 @@ struct BrandChoiceSheet: View {
     }
 
     private func rowSubtitle(_ p: CatalogPresentation) -> some View {
-        let packageText: String = {
-            let pkgQty = Quantity.format(p.packageQuantity)
-            let unitStr = p.baseUnit.rawValue
+        let pkgStr = packageText(for: p)
+        let packageSummary: String = {
             if let cents = p.latestPriceCents {
-                return "\(Money.format(cents: cents)) por \(pkgQty) \(unitStr)"
+                return "\(Money.format(cents: cents)) por \(pkgStr)"
             } else {
-                return "Sin precio registrado por \(pkgQty) \(unitStr)"
+                return "Sin precio registrado por \(pkgStr)"
             }
         }()
 
@@ -261,9 +260,9 @@ struct BrandChoiceSheet: View {
 
         let fullSubtitle: String = {
             if let perUnitText {
-                return "\(packageText) · \(perUnitText)"
+                return "\(packageSummary) · \(perUnitText)"
             }
-            return packageText
+            return packageSummary
         }()
 
         return Text(fullSubtitle)

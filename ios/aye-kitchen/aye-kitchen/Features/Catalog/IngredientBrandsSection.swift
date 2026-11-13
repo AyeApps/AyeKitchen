@@ -110,7 +110,7 @@ struct IngredientBrandsSection: View {
         }()
 
         let subtitleText: String = {
-            let pkgStr = "\(Quantity.format(presentation.packageQuantity)) \(presentation.baseUnit.rawValue)"
+            let pkgStr = packageText(for: presentation)
             if let cents = presentation.latestPriceCents {
                 let price = Money.format(cents: cents)
                 let base: String = {
