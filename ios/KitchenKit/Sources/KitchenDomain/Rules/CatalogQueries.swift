@@ -89,6 +89,12 @@ public struct CatalogPresentation: Sendable, Hashable, Identifiable {
     /// Paquete grande (K6): piezas que trae y lo que trae cada una (en base_unit). Nulos = paquete simple.
     public var packCount: Int? { presentation.packCount }
     public var packItemQuantity: String? { presentation.packItemQuantity }
+    /// Precio por pieza de paquete grande (K6). Nulo si no hay paquete o no hay precio.
+    public var pricePerPackItemCents: Int? {
+        guard let packCount, packCount > 0, let latestPriceCents else { return nil }
+        let itemDecimal = Decimal(latestPriceCents) / Decimal(packCount)
+        return CostingMath.roundToCents(itemDecimal)
+    }
     public var baseUnit: BaseUnit
     public var barcode: String? { presentation.barcode }
     public var latestPriceCents: Int?

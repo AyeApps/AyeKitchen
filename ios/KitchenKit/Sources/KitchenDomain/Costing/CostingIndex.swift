@@ -465,10 +465,17 @@ public struct CostingIndex: Sendable {
                     let supplierName = pres.supplierId.flatMap { suppliersById[$0]?.name }
                     let baseUnitStr = ingredient.baseUnit.rawValue
 
-                    if let supplierName = supplierName {
-                        presentationLabel = "\(pres.brand) · \(supplierName) · \(pres.packageQuantity) \(baseUnitStr)"
+                    let qtyStr: String
+                    if let count = pres.packCount, let itemQty = pres.packItemQuantity {
+                        qtyStr = "\(count) × \(itemQty) \(baseUnitStr)"
                     } else {
-                        presentationLabel = "\(pres.brand) · \(pres.packageQuantity) \(baseUnitStr)"
+                        qtyStr = "\(pres.packageQuantity) \(baseUnitStr)"
+                    }
+
+                    if let supplierName = supplierName {
+                        presentationLabel = "\(pres.brand) · \(supplierName) · \(qtyStr)"
+                    } else {
+                        presentationLabel = "\(pres.brand) · \(qtyStr)"
                     }
                 }
 

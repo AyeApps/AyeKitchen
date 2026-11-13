@@ -503,7 +503,6 @@ extension KitchenData {
         priceCents: Int? = nil,
         ctx: MutationContext = MutationContext()
     ) throws -> Presentation {
-        // ESQUELETO K6: packCount / packItemQuantity / packItemUnitId aún no se usan (los implementa K6).
         var copy = self
 
         guard let ingredient = copy.ingredients.first(where: { $0.id == ingredientId && $0.isActive }) else {
@@ -524,23 +523,58 @@ extension KitchenData {
             }
         }
 
-        guard let rawQty = Qty.decimal(packageQuantity), rawQty > 0 else {
-            throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
-        }
+        let finalPackCount: Int?
+        let finalPackItemQuantity: String?
+        let finalPackageQuantity: String
 
-        let convertedQty: Decimal
-        if let pUnitId = packageUnitId, !pUnitId.isEmpty {
-            convertedQty = try copy.costingIndex().convertToBase(
-                quantity: rawQty,
-                unitId: pUnitId,
-                ingredient: ingredient
-            )
+        if let packCount {
+            guard packCount >= 1 && packCount <= 10_000 else {
+                throw DomainError.invalidValue(detail: "Las piezas del paquete deben ser entre 1 y 10,000")
+            }
+            guard let packItemQtyStr = packItemQuantity,
+                  let itemQty = Qty.decimal(packItemQtyStr),
+                  itemQty > 0 else {
+                throw DomainError.invalidValue(detail: "Indica cuánto trae cada pieza")
+            }
+            let convertedItemQty: Decimal
+            if let pUnitId = packItemUnitId, !pUnitId.isEmpty {
+                convertedItemQty = try copy.costingIndex().convertToBase(
+                    quantity: itemQty,
+                    unitId: pUnitId,
+                    ingredient: ingredient
+                )
+            } else {
+                convertedItemQty = itemQty
+            }
+            guard convertedItemQty > 0 else {
+                throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
+            }
+            finalPackCount = packCount
+            finalPackItemQuantity = Qty.text(convertedItemQty)
+            finalPackageQuantity = Qty.text(Decimal(packCount) * convertedItemQty)
         } else {
-            convertedQty = rawQty
-        }
+            guard let rawQty = Qty.decimal(packageQuantity), rawQty > 0 else {
+                throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
+            }
 
-        guard convertedQty > 0 else {
-            throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
+            let convertedQty: Decimal
+            if let pUnitId = packageUnitId, !pUnitId.isEmpty {
+                convertedQty = try copy.costingIndex().convertToBase(
+                    quantity: rawQty,
+                    unitId: pUnitId,
+                    ingredient: ingredient
+                )
+            } else {
+                convertedQty = rawQty
+            }
+
+            guard convertedQty > 0 else {
+                throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
+            }
+
+            finalPackCount = nil
+            finalPackItemQuantity = nil
+            finalPackageQuantity = Qty.text(convertedQty)
         }
 
         let trimmedBarcode = barcode?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -560,7 +594,9 @@ extension KitchenData {
             ingredientId: ingredient.id,
             brand: trimmedBrand,
             supplierId: (supplierId?.isEmpty == true) ? nil : supplierId,
-            packageQuantity: Qty.text(convertedQty),
+            packageQuantity: finalPackageQuantity,
+            packCount: finalPackCount,
+            packItemQuantity: finalPackItemQuantity,
             barcode: (trimmedBarcode?.isEmpty == true) ? nil : trimmedBarcode,
             referenceIds: nil,
             createdAt: ctx.now,
@@ -599,7 +635,6 @@ extension KitchenData {
         barcode: String?? = nil,
         ctx: MutationContext = MutationContext()
     ) throws -> Presentation {
-        // ESQUELETO K6: packCount / packItemQuantity / packItemUnitId aún no se usan (los implementa K6).
         var copy = self
 
         guard let idx = copy.presentations.firstIndex(where: { $0.id == id && $0.isActive }) else {
@@ -628,7 +663,7 @@ extension KitchenData {
             }
         }
 
-        if let newQtyStr = packageQuantity {
+        func applyPackageQuantity(_ newQtyStr: String) throws {
             guard let rawQty = Qty.decimal(newQtyStr), rawQty > 0 else {
                 throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
             }
@@ -649,6 +684,50 @@ extension KitchenData {
                 throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
             }
             presentation.packageQuantity = Qty.text(convertedQty)
+        }
+
+        if let packCountOpt = packCount {
+            if let n = packCountOpt {
+                guard n >= 1 && n <= 10_000 else {
+                    throw DomainError.invalidValue(detail: "Las piezas del paquete deben ser entre 1 y 10,000")
+                }
+                guard let packItemQtyStr = packItemQuantity,
+                      let itemQty = Qty.decimal(packItemQtyStr),
+                      itemQty > 0 else {
+                    throw DomainError.invalidValue(detail: "Indica cuánto trae cada pieza")
+                }
+                guard let ingredient = copy.ingredients.first(where: { $0.id == presentation.ingredientId && $0.isActive }) else {
+                    throw DomainError.notFound(detail: "Ingrediente no encontrado")
+                }
+                let convertedItemQty: Decimal
+                if let pUnitId = packItemUnitId, !pUnitId.isEmpty {
+                    convertedItemQty = try copy.costingIndex().convertToBase(
+                        quantity: itemQty,
+                        unitId: pUnitId,
+                        ingredient: ingredient
+                    )
+                } else {
+                    convertedItemQty = itemQty
+                }
+                guard convertedItemQty > 0 else {
+                    throw DomainError.invalidReference(detail: "La cantidad debe ser mayor que cero")
+                }
+                presentation.packCount = n
+                presentation.packItemQuantity = Qty.text(convertedItemQty)
+                presentation.packageQuantity = Qty.text(Decimal(n) * convertedItemQty)
+            } else {
+                presentation.packCount = nil
+                presentation.packItemQuantity = nil
+                if let newQtyStr = packageQuantity {
+                    try applyPackageQuantity(newQtyStr)
+                }
+            }
+        } else {
+            if let newQtyStr = packageQuantity {
+                try applyPackageQuantity(newQtyStr)
+                presentation.packCount = nil
+                presentation.packItemQuantity = nil
+            }
         }
 
         if let barcode {
