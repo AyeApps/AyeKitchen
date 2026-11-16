@@ -104,7 +104,7 @@ struct LoginView: View {
             } label: {
                 Text("¿No tienes cuenta? **Crear una**")
                     .font(.subheadline)
-                    .foregroundStyle(.accentInk)
+                    .foregroundStyle(.tint)
             }
             .disabled(isWorking)
         }
