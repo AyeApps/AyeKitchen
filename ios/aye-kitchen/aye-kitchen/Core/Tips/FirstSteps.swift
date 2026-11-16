@@ -42,6 +42,12 @@ enum FirstSteps {
         UserDefaults.standard.set(true, forKey: financeKey)
     }
 
+    /// "Borrar mis datos": la tarjeta vuelve a salir desde cero.
+    static func reset() {
+        UserDefaults.standard.removeObject(forKey: dismissedKey)
+        UserDefaults.standard.removeObject(forKey: financeKey)
+    }
+
     private static let dismissedKey = "FirstSteps.dismissed"
     private static let financeKey = "FirstSteps.financeVisited"
     private static var dismissed: Bool { UserDefaults.standard.bool(forKey: dismissedKey) }

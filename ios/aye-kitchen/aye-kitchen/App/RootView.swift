@@ -23,10 +23,16 @@ struct RootView: View {
                     WelcomeView { welcomeSeen = true }
                 }
             case .signedIn(let me):
-                localContent
-                    .task(id: me.id) {
-                        await bootstrap.prepare(accountId: me.id)
-                    }
+                if welcomeSeen {
+                    localContent
+                        .id(AppReset.shared.generation)
+                        .task(id: me.id) {
+                            await bootstrap.prepare(accountId: me.id)
+                        }
+                } else {
+                    // Solo pasa tras "Borrar mis datos": la app arranca de cero con sesión abierta.
+                    WelcomeView { welcomeSeen = true }
+                }
             case .unavailable(let message):
                 unavailable(title: "No pudimos conectarnos", message: message) {
                     Task { await session.start() }
@@ -41,6 +47,9 @@ struct RootView: View {
                 LocalStore.shared.close()
                 bootstrap.reset()
             }
+        }
+        .onChange(of: AppReset.shared.generation) {
+            setupFinishedFor = nil
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {

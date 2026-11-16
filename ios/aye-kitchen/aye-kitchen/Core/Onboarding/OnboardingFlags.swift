@@ -4,7 +4,8 @@ import KitchenDomain
 /// Cuándo se muestra el onboarding (Bloque I28). Lo mantiene Claude; las pantallas viven en
 /// `Features/Onboarding/`.
 ///
-/// - Bienvenida: una vez por instalación, antes de Entrar.
+/// - Bienvenida: una vez por instalación, antes de Entrar (y otra vez tras "Borrar mis datos",
+///   ya con sesión abierta).
 /// - "Tu negocio": una vez por cuenta, solo si la cuenta llega vacía (nueva). Una cuenta que ya
 ///   trae datos (restaurada o migrada) no la ve y queda marcada al llegar a la app.
 enum OnboardingFlags {
@@ -21,6 +22,12 @@ enum OnboardingFlags {
 
     static func markBusinessSetupDone(accountId: String) {
         UserDefaults.standard.set(true, forKey: setupKey(accountId))
+    }
+
+    /// Al borrar todos los datos se vuelve a ver la bienvenida (RootView la muestra también con
+    /// sesión abierta).
+    static func resetWelcome() {
+        UserDefaults.standard.removeObject(forKey: welcomeSeenKey)
     }
 
     /// Al borrar todos los datos, la cuenta vuelve a ver "Tu negocio".
